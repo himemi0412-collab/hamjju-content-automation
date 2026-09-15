@@ -9,7 +9,12 @@ def test_channels_are_separated():
     assert c['naver_blog'].publish_policy == 'draft_only'
     assert c['naver_blog'].excluded_formula_property == '목록 구분'
     assert c['naver_blog'].excluded_formula_value == '이전 주제 보관'
+    assert c['naver_blog'].required_select_values == {
+        '선별 상태': '추천',
+        '모델 확인': '공식 확인',
+    }
     assert c['ppojjugi_shorts'].excluded_formula_value is None
+    assert c['ppojjugi_shorts'].required_select_values is None
     assert c['japan_shorts'].youtube_privacy == 'private'
 
 

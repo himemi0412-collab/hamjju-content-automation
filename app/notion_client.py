@@ -32,6 +32,7 @@ class NotionClient:
         page_size: int = 10,
         excluded_formula_property: str | None = None,
         excluded_formula_value: str | None = None,
+        required_select_values: dict[str, str] | None = None,
     ) -> list[dict[str, Any]]:
         filters: list[dict[str, Any]] = [{'property': '상태', 'select': {'equals': status}}]
         if channel:
@@ -40,6 +41,11 @@ class NotionClient:
             filters.append({
                 'property': excluded_formula_property,
                 'formula': {'string': {'does_not_equal': excluded_formula_value}},
+            })
+        for property_name, expected_value in (required_select_values or {}).items():
+            filters.append({
+                'property': property_name,
+                'select': {'equals': expected_value},
             })
         body: dict[str, Any] = {
             'filter': filters[0] if len(filters) == 1 else {'and': filters},
@@ -201,6 +207,9 @@ def property_value(prop: dict[str, Any]) -> Any:
         return [x.get('name') for x in (value or [])]
     if typ == 'date':
         return value
+    if typ == 'formula':
+        formula_type = (value or {}).get('type')
+        return (value or {}).get(formula_type) if formula_type else None
     return None
 
 

@@ -34,3 +34,10 @@ def test_dry_run_does_not_print_notion_content():
     assert "'context': context" not in dry_run_branch
     assert "'content_loaded':" in dry_run_branch
     assert "'existing_page_text'" not in dry_run_branch
+
+
+def test_blog_success_requires_five_cards_and_notion_attachment():
+    pipeline = Path('app/pipeline.py').read_text(encoding='utf-8')
+    assert "if len(card_news) != 5:" in pipeline
+    assert "if len(cards) != 5:" in pipeline
+    assert "raise RuntimeError('Failed to attach all blog card-news images to Notion')" in pipeline

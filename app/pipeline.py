@@ -29,6 +29,7 @@ class Pipeline:
             page_size=limit or self.s.max_jobs_per_run,
             excluded_formula_property=cfg.excluded_formula_property,
             excluded_formula_value=cfg.excluded_formula_value,
+            required_select_values=cfg.required_select_values,
         )
         results = []
         for page in pages[: limit or self.s.max_jobs_per_run]:
@@ -40,6 +41,8 @@ class Pipeline:
         page = self.notion.retrieve_page(page_id)
         page_text = self.notion.read_page_text(page_id)
         context = compact_page_context(page, page_text)
+        if not page_is_eligible(cfg, context):
+            return {'page_id': page_id, 'status': 'skipped', 'reason': 'eligibility_changed'}
         key = f"{page_id}:{page.get('last_edited_time')}:{cfg.name}:v1"
         if self.state.succeeded(key):
             return {'page_id': page_id, 'status': 'skipped', 'reason': 'idempotency'}
@@ -76,15 +79,20 @@ class Pipeline:
 
             media: dict[str, Any] = {}
             if cfg.content_kind == 'blog' and passed:
-                cards = render_blog_cards(generated.get('card_news') or [], job_dir / 'cards', self.s.card_font_path)
+                card_news = generated.get('card_news') or []
+                if len(card_news) != 5:
+                    raise RuntimeError('Blog output did not contain exactly five card-news items')
+                cards = render_blog_cards(card_news, job_dir / 'cards', self.s.card_font_path)
+                if len(cards) != 5:
+                    raise RuntimeError('Blog card-news render did not produce exactly five images')
                 media['cards'] = [str(x) for x in cards]
-                if cards:
-                    try:
-                        self.notion.attach_files(page_id, '생성 이미지', cards)
-                        media['notion_cards_attached'] = True
-                    except Exception as exc:
-                        media['notion_cards_attached'] = False
-                        media['notion_cards_error'] = repr(exc)
+                try:
+                    self.notion.attach_files(page_id, '생성 이미지', cards)
+                    media['notion_cards_attached'] = True
+                except Exception as exc:
+                    media['notion_cards_attached'] = False
+                    media['notion_cards_error'] = repr(exc)
+                    raise RuntimeError('Failed to attach all blog card-news images to Notion') from exc
             elif cfg.content_kind == 'shorts' and passed and cfg.media_generation and self.s.enable_media_generation:
                 media = self._make_short_media(generated, job_dir)
                 if media.get('video'):
@@ -141,3 +149,21 @@ class Pipeline:
             description=str(meta.get('description') or ''),
             tags=list(meta.get('tags') or []),
         )
+
+
+def page_is_eligible(cfg: ChannelConfig, context: dict[str, Any]) -> bool:
+    properties = context.get('properties') or {}
+    if properties.get('상태') != cfg.ready_status:
+        return False
+    if cfg.notion_channel_value and properties.get('채널') != cfg.notion_channel_value:
+        return False
+    if (
+        cfg.excluded_formula_property
+        and cfg.excluded_formula_value
+        and properties.get(cfg.excluded_formula_property) == cfg.excluded_formula_value
+    ):
+        return False
+    return all(
+        properties.get(property_name) == expected_value
+        for property_name, expected_value in (cfg.required_select_values or {}).items()
+    )

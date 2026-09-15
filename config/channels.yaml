@@ -12,6 +12,9 @@ channels:
     publish_policy: "draft_only"
     excluded_formula_property: "목록 구분"
     excluded_formula_value: "이전 주제 보관"
+    required_select_values:
+      "선별 상태": "추천"
+      "모델 확인": "공식 확인"
 
   ppojjugi_shorts:
     source: shorts

@@ -20,6 +20,7 @@ class ChannelConfig:
     youtube_privacy: str | None = None
     excluded_formula_property: str | None = None
     excluded_formula_value: str | None = None
+    required_select_values: dict[str, str] | None = None
 
 
 def load_channels(path: str | Path = 'config/channels.yaml') -> dict[str, ChannelConfig]:
