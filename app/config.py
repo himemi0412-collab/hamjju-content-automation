@@ -21,6 +21,8 @@ class ChannelConfig:
     excluded_formula_property: str | None = None
     excluded_formula_value: str | None = None
     required_select_values: dict[str, str] | None = None
+    required_number_greater_than: dict[str, float] | None = None
+    sort_property: str | None = None
 
 
 def load_channels(path: str | Path = 'config/channels.yaml') -> dict[str, ChannelConfig]:

@@ -8,6 +8,7 @@ def blog_context(**overrides):
         '목록 구분': '다음 5편',
         '선별 상태': '추천',
         '모델 확인': '공식 확인',
+        '진행 순서': 4,
     }
     properties.update(overrides)
     return {'properties': properties}
@@ -27,6 +28,13 @@ def test_archived_or_changed_status_blog_item_is_not_eligible():
     cfg = load_channels()['naver_blog']
     assert not page_is_eligible(cfg, blog_context(**{'목록 구분': '이전 주제 보관'}))
     assert not page_is_eligible(cfg, blog_context(**{'상태': '생성 중'}))
+
+
+def test_blog_item_without_positive_work_order_is_not_eligible():
+    cfg = load_channels()['naver_blog']
+    assert not page_is_eligible(cfg, blog_context(**{'진행 순서': 0}))
+    assert not page_is_eligible(cfg, blog_context(**{'진행 순서': None}))
+    assert not page_is_eligible(cfg, blog_context(**{'진행 순서': True}))
 
 
 def test_shorts_channel_is_rechecked_before_processing():

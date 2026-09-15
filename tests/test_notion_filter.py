@@ -34,6 +34,8 @@ def test_query_ready_excludes_archived_blog_items():
             '선별 상태': '추천',
             '모델 확인': '공식 확인',
         },
+        required_number_greater_than={'진행 순서': 0},
+        sort_property='진행 순서',
     )
 
     assert notion.client.path == '/data_sources/blog-data-source/query'
@@ -46,9 +48,13 @@ def test_query_ready_excludes_archived_blog_items():
             },
             {'property': '선별 상태', 'select': {'equals': '추천'}},
             {'property': '모델 확인', 'select': {'equals': '공식 확인'}},
+            {'property': '진행 순서', 'number': {'greater_than': 0}},
         ],
     }
     assert notion.client.body['page_size'] == 1
+    assert notion.client.body['sorts'] == [
+        {'property': '진행 순서', 'direction': 'ascending'},
+    ]
 
 
 def test_formula_property_value_is_readable():

@@ -33,6 +33,8 @@ class NotionClient:
         excluded_formula_property: str | None = None,
         excluded_formula_value: str | None = None,
         required_select_values: dict[str, str] | None = None,
+        required_number_greater_than: dict[str, float] | None = None,
+        sort_property: str | None = None,
     ) -> list[dict[str, Any]]:
         filters: list[dict[str, Any]] = [{'property': '상태', 'select': {'equals': status}}]
         if channel:
@@ -47,10 +49,19 @@ class NotionClient:
                 'property': property_name,
                 'select': {'equals': expected_value},
             })
+        for property_name, minimum_value in (required_number_greater_than or {}).items():
+            filters.append({
+                'property': property_name,
+                'number': {'greater_than': minimum_value},
+            })
         body: dict[str, Any] = {
             'filter': filters[0] if len(filters) == 1 else {'and': filters},
             'page_size': min(page_size, 100),
-            'sorts': [{'timestamp': 'created_time', 'direction': 'ascending'}],
+            'sorts': [
+                {'property': sort_property, 'direction': 'ascending'}
+                if sort_property
+                else {'timestamp': 'created_time', 'direction': 'ascending'}
+            ],
         }
         r = self.client.post(f'/data_sources/{data_source_id}/query', json=body)
         r.raise_for_status()

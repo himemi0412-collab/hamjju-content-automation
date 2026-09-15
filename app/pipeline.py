@@ -30,6 +30,8 @@ class Pipeline:
             excluded_formula_property=cfg.excluded_formula_property,
             excluded_formula_value=cfg.excluded_formula_value,
             required_select_values=cfg.required_select_values,
+            required_number_greater_than=cfg.required_number_greater_than,
+            sort_property=cfg.sort_property,
         )
         results = []
         for page in pages[: limit or self.s.max_jobs_per_run]:
@@ -163,7 +165,14 @@ def page_is_eligible(cfg: ChannelConfig, context: dict[str, Any]) -> bool:
         and properties.get(cfg.excluded_formula_property) == cfg.excluded_formula_value
     ):
         return False
-    return all(
+    if not all(
         properties.get(property_name) == expected_value
         for property_name, expected_value in (cfg.required_select_values or {}).items()
+    ):
+        return False
+    return all(
+        isinstance(properties.get(property_name), (int, float))
+        and not isinstance(properties[property_name], bool)
+        and properties[property_name] > minimum_value
+        for property_name, minimum_value in (cfg.required_number_greater_than or {}).items()
     )

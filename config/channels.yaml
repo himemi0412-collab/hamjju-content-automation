@@ -15,6 +15,9 @@ channels:
     required_select_values:
       "선별 상태": "추천"
       "모델 확인": "공식 확인"
+    required_number_greater_than:
+      "진행 순서": 0
+    sort_property: "진행 순서"
 
   ppojjugi_shorts:
     source: shorts

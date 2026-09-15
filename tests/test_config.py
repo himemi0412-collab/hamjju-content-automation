@@ -13,8 +13,12 @@ def test_channels_are_separated():
         '선별 상태': '추천',
         '모델 확인': '공식 확인',
     }
+    assert c['naver_blog'].required_number_greater_than == {'진행 순서': 0}
+    assert c['naver_blog'].sort_property == '진행 순서'
     assert c['ppojjugi_shorts'].excluded_formula_value is None
     assert c['ppojjugi_shorts'].required_select_values is None
+    assert c['ppojjugi_shorts'].required_number_greater_than is None
+    assert c['ppojjugi_shorts'].sort_property is None
     assert c['japan_shorts'].youtube_privacy == 'private'
 
 
