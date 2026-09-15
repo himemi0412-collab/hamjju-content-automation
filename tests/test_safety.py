@@ -19,6 +19,9 @@ def test_naver_browser_automation_is_disabled():
 
 def test_github_action_starts_manual_and_safe():
     workflow = Path('.github/workflows/daily.yml').read_text(encoding='utf-8')
+    assert 'actions/checkout@v7' in workflow
+    assert 'actions/setup-python@v7' in workflow
+    assert 'actions/upload-artifact@v7' in workflow
     assert 'schedule:' not in workflow
     assert 'default: dry_run' in workflow
     assert '--dry-run --limit 1' in workflow

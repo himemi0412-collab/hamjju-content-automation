@@ -147,6 +147,8 @@ GitHub 저장소의 Actions secrets에 다음 값을 넣습니다.
 
 생성 파일은 Actions artifact로 14일 보존하도록 설정했습니다. Notion 파일 첨부가 성공하면 카드뉴스/MP4는 Notion에도 남습니다.
 
+워크플로의 GitHub 공식 액션은 Node.js 24 기반 메이저(`checkout@v7`, `setup-python@v7`, `upload-artifact@v7`)를 사용합니다.
+
 ## 네이버 임시저장에 대해
 
 네이버 블로그 공식 글쓰기 Open API는 현재 제공되지 않으므로, 이 프로젝트에서는 브라우저 로그인 세션/비밀번호/쿠키를 GitHub에 저장하는 위험한 방식으로 우회하지 않습니다.
