@@ -37,7 +37,15 @@ class Pipeline:
         if self.state.succeeded(key):
             return {'page_id': page_id, 'status': 'skipped', 'reason': 'idempotency'}
         if dry_run:
-            return {'page_id': page_id, 'status': 'dry_run', 'context': context}
+            # GitHub Actions logs are durable. Confirm that the page was read
+            # without printing its properties or body into the workflow log.
+            return {
+                'page_id': page_id,
+                'status': 'dry_run',
+                'channel': cfg.name,
+                'last_edited_time': page.get('last_edited_time'),
+                'content_loaded': bool(page_text or page.get('properties')),
+            }
 
         self.state.start(key, page_id, cfg.name)
         self.notion.update_status(page_id, cfg.processing_status)

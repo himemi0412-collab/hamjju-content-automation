@@ -125,7 +125,7 @@ AUTO_PRIVATE_YOUTUBE_UPLOAD=true
 
 ## 8. GitHub Actions 첫 연결
 
-`.github/workflows/daily.yml`은 처음에는 **수동 실행 전용**입니다. 저장소에 올렸다고 매일 자동 실행되지 않습니다. Actions 화면에서 채널 하나와 `dry_run`을 선택하면 대기열 1건을 읽기만 하고, OpenAI 호출·Notion 수정·미디어 생성·YouTube 업로드는 하지 않습니다.
+`.github/workflows/daily.yml`은 처음에는 **수동 실행 전용**입니다. 저장소에 올렸다고 매일 자동 실행되지 않습니다. Actions 화면에서 채널 하나와 `dry_run`을 선택하면 대기열 1건을 읽기만 하고, OpenAI 호출·Notion 수정·미디어 생성·YouTube 업로드는 하지 않습니다. Actions 로그에는 Notion 본문이나 속성값을 출력하지 않고 읽기 성공 여부만 남깁니다.
 
 GitHub 저장소의 Actions secrets에 다음 값을 넣습니다.
 

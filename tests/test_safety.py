@@ -26,3 +26,11 @@ def test_github_action_starts_manual_and_safe():
     assert "AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'" in workflow
     assert 'secrets.BLOG_DATA_SOURCE_ID' not in workflow
     assert 'secrets.SHORTS_DATA_SOURCE_ID' not in workflow
+
+
+def test_dry_run_does_not_print_notion_content():
+    pipeline = Path('app/pipeline.py').read_text(encoding='utf-8')
+    dry_run_branch = pipeline.split('if dry_run:', 1)[1].split('self.state.start', 1)[0]
+    assert "'context': context" not in dry_run_branch
+    assert "'content_loaded':" in dry_run_branch
+    assert "'existing_page_text'" not in dry_run_branch
