@@ -30,16 +30,16 @@ class NotionClient:
         status: str,
         channel: str | None = None,
         page_size: int = 10,
-        excluded_select_property: str | None = None,
-        excluded_select_value: str | None = None,
+        excluded_formula_property: str | None = None,
+        excluded_formula_value: str | None = None,
     ) -> list[dict[str, Any]]:
         filters: list[dict[str, Any]] = [{'property': '상태', 'select': {'equals': status}}]
         if channel:
             filters.append({'property': '채널', 'select': {'equals': channel}})
-        if excluded_select_property and excluded_select_value:
+        if excluded_formula_property and excluded_formula_value:
             filters.append({
-                'property': excluded_select_property,
-                'select': {'does_not_equal': excluded_select_value},
+                'property': excluded_formula_property,
+                'formula': {'string': {'does_not_equal': excluded_formula_value}},
             })
         body: dict[str, Any] = {
             'filter': filters[0] if len(filters) == 1 else {'and': filters},

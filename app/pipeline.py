@@ -27,8 +27,8 @@ class Pipeline:
             cfg.ready_status,
             cfg.notion_channel_value,
             page_size=limit or self.s.max_jobs_per_run,
-            excluded_select_property=cfg.excluded_select_property,
-            excluded_select_value=cfg.excluded_select_value,
+            excluded_formula_property=cfg.excluded_formula_property,
+            excluded_formula_value=cfg.excluded_formula_value,
         )
         results = []
         for page in pages[: limit or self.s.max_jobs_per_run]:

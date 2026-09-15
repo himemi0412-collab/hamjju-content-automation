@@ -28,15 +28,18 @@ def test_query_ready_excludes_archived_blog_items():
         'blog-data-source',
         '작성 요청',
         page_size=1,
-        excluded_select_property='목록 구분',
-        excluded_select_value='이전 주제 보관',
+        excluded_formula_property='목록 구분',
+        excluded_formula_value='이전 주제 보관',
     )
 
     assert notion.client.path == '/data_sources/blog-data-source/query'
     assert notion.client.body['filter'] == {
         'and': [
             {'property': '상태', 'select': {'equals': '작성 요청'}},
-            {'property': '목록 구분', 'select': {'does_not_equal': '이전 주제 보관'}},
+            {
+                'property': '목록 구분',
+                'formula': {'string': {'does_not_equal': '이전 주제 보관'}},
+            },
         ],
     }
     assert notion.client.body['page_size'] == 1
