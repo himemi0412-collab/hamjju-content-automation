@@ -22,7 +22,14 @@ class Pipeline:
 
     def run_channel(self, cfg: ChannelConfig, limit: int | None = None, dry_run: bool = False) -> list[dict[str, Any]]:
         ds = self.s.blog_data_source_id if cfg.source == 'blog' else self.s.shorts_data_source_id
-        pages = self.notion.query_ready(ds, cfg.ready_status, cfg.notion_channel_value, page_size=limit or self.s.max_jobs_per_run)
+        pages = self.notion.query_ready(
+            ds,
+            cfg.ready_status,
+            cfg.notion_channel_value,
+            page_size=limit or self.s.max_jobs_per_run,
+            excluded_select_property=cfg.excluded_select_property,
+            excluded_select_value=cfg.excluded_select_value,
+        )
         results = []
         for page in pages[: limit or self.s.max_jobs_per_run]:
             results.append(self.process_page(cfg, page, dry_run=dry_run))

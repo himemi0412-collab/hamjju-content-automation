@@ -18,6 +18,8 @@ class ChannelConfig:
     media_generation: bool = False
     publish_policy: str | None = None
     youtube_privacy: str | None = None
+    excluded_select_property: str | None = None
+    excluded_select_value: str | None = None
 
 
 def load_channels(path: str | Path = 'config/channels.yaml') -> dict[str, ChannelConfig]:

@@ -10,6 +10,8 @@ channels:
     prompt_file: "prompts/blog.md"
     media_generation: false
     publish_policy: "draft_only"
+    excluded_select_property: "목록 구분"
+    excluded_select_value: "이전 주제 보관"
 
   ppojjugi_shorts:
     source: shorts

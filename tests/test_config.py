@@ -7,6 +7,9 @@ def test_channels_are_separated():
     assert c['ppojjugi_shorts'].notion_channel_value == '햄찌 창작 쇼츠'
     assert c['japan_shorts'].notion_channel_value == '일본 유튜브 쇼츠'
     assert c['naver_blog'].publish_policy == 'draft_only'
+    assert c['naver_blog'].excluded_select_property == '목록 구분'
+    assert c['naver_blog'].excluded_select_value == '이전 주제 보관'
+    assert c['ppojjugi_shorts'].excluded_select_value is None
     assert c['japan_shorts'].youtube_privacy == 'private'
 
 
