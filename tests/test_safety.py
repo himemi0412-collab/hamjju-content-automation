@@ -24,3 +24,5 @@ def test_github_action_starts_manual_and_safe():
     assert '--dry-run --limit 1' in workflow
     assert "ENABLE_MEDIA_GENERATION: 'false'" in workflow
     assert "AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'" in workflow
+    assert 'secrets.BLOG_DATA_SOURCE_ID' not in workflow
+    assert 'secrets.SHORTS_DATA_SOURCE_ID' not in workflow

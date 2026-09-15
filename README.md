@@ -131,8 +131,8 @@ GitHub 저장소의 Actions secrets에 다음 값을 넣습니다.
 
 - `OPENAI_API_KEY`
 - `NOTION_ACCESS_TOKEN`
-- `BLOG_DATA_SOURCE_ID`
-- `SHORTS_DATA_SOURCE_ID`
+
+현재 블로그·쇼츠 Data Source ID는 코드 기본값에 들어 있으므로 중복 입력하지 않습니다. 대기열을 교체할 때만 Repository Variables로 별도 관리합니다.
 
 첫 DRY RUN을 확인한 뒤에만 `execute_text`로 채널 1건을 실행합니다. 이 모드도 미디어 생성과 YouTube 업로드는 강제로 OFF입니다.
 
