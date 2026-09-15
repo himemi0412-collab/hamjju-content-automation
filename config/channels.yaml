@@ -1,0 +1,36 @@
+channels:
+  naver_blog:
+    source: blog
+    notion_channel_value: null
+    ready_status: "작성 요청"
+    processing_status: "생성 중"
+    success_status: "CODEX_HANDOFF_READY"
+    revision_status: "수정 필요"
+    content_kind: "blog"
+    prompt_file: "prompts/blog.md"
+    media_generation: false
+    publish_policy: "draft_only"
+
+  ppojjugi_shorts:
+    source: shorts
+    notion_channel_value: "햄찌 창작 쇼츠"
+    ready_status: "작성 요청"
+    processing_status: "Work 제작 중"
+    success_status: "검토 대기"
+    revision_status: "수정 필요"
+    content_kind: "shorts"
+    prompt_file: "prompts/ppojjugi.md"
+    media_generation: true
+    youtube_privacy: "private"
+
+  japan_shorts:
+    source: shorts
+    notion_channel_value: "일본 유튜브 쇼츠"
+    ready_status: "작성 요청"
+    processing_status: "Work 제작 중"
+    success_status: "검토 대기"
+    revision_status: "수정 필요"
+    content_kind: "shorts"
+    prompt_file: "prompts/japan_shorts.md"
+    media_generation: true
+    youtube_privacy: "private"

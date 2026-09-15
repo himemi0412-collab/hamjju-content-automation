@@ -1,0 +1,85 @@
+name: Hamjju Safe Manual Test
+
+on:
+  # The daily schedule stays disabled until one manual dry run and one reviewed
+  # text-only execution have both succeeded.
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Channel to inspect or process
+        required: true
+        type: choice
+        default: naver_blog
+        options:
+          - naver_blog
+          - ppojjugi_shorts
+          - japan_shorts
+      mode:
+        description: Dry run only reads one item; execute_text may call OpenAI and update Notion
+        required: true
+        type: choice
+        default: dry_run
+        options:
+          - dry_run
+          - execute_text
+
+concurrency:
+  group: hamjju-content-automation
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install ffmpeg and Korean/Japanese fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-noto-cjk
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run safety tests
+        run: pytest -q
+      - name: Check configuration
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
+          BLOG_DATA_SOURCE_ID: ${{ secrets.BLOG_DATA_SOURCE_ID }}
+          SHORTS_DATA_SOURCE_ID: ${{ secrets.SHORTS_DATA_SOURCE_ID }}
+        run: python -m app.main doctor
+      - name: Read one Notion item without modifying it
+        if: ${{ inputs.mode == 'dry_run' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
+          BLOG_DATA_SOURCE_ID: ${{ secrets.BLOG_DATA_SOURCE_ID }}
+          SHORTS_DATA_SOURCE_ID: ${{ secrets.SHORTS_DATA_SOURCE_ID }}
+          ENABLE_WEB_RESEARCH: 'true'
+          ENABLE_MEDIA_GENERATION: 'false'
+          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
+        run: python -m app.main channel "${{ inputs.channel }}" --dry-run --limit 1
+      - name: Process one text item after review
+        if: ${{ inputs.mode == 'execute_text' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
+          BLOG_DATA_SOURCE_ID: ${{ secrets.BLOG_DATA_SOURCE_ID }}
+          SHORTS_DATA_SOURCE_ID: ${{ secrets.SHORTS_DATA_SOURCE_ID }}
+          ENABLE_WEB_RESEARCH: 'true'
+          ENABLE_MEDIA_GENERATION: 'false'
+          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
+        run: python -m app.main channel "${{ inputs.channel }}" --limit 1
+
+      - name: Keep generated files for inspection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hamjju-output-${{ github.run_id }}
+          path: output/
+          retention-days: 14

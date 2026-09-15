@@ -1,0 +1,14 @@
+openai>=1.99.0
+httpx>=0.28.1
+pydantic>=2.11.0
+pydantic-settings>=2.10.0
+PyYAML>=6.0.2
+python-dotenv>=1.1.0
+tenacity>=9.1.2
+typer>=0.16.0
+rich>=14.0.0
+google-api-python-client>=2.180.0
+google-auth>=2.40.0
+google-auth-oauthlib>=1.2.2
+pytest>=8.4.0
+Pillow>=11.3.0
