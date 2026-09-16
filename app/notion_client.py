@@ -67,6 +67,60 @@ class NotionClient:
         r.raise_for_status()
         return r.json().get('results', [])
 
+    def query_recent(self, data_source_id: str, page_size: int = 100) -> list[dict[str, Any]]:
+        r = self.client.post(f'/data_sources/{data_source_id}/query', json={
+            'page_size': min(page_size, 100),
+            'sorts': [{'timestamp': 'created_time', 'direction': 'descending'}],
+        })
+        r.raise_for_status()
+        return r.json().get('results', [])
+
+    def create_blog_topic(self, data_source_id: str, topic: dict[str, Any], order: int) -> str:
+        properties: dict[str, Any] = {
+            '제목': {'title': [{'text': {'content': str(topic['title'])[:2000]}}]},
+            '상태': {'select': {'name': '작성 요청'}},
+            '선별 상태': {'select': {'name': '추천'}},
+            '모델 확인': {'select': {'name': '공식 확인'}},
+            '진행 순서': {'number': order},
+            '글 유형': {'select': {'name': '가전제품·인터넷 렌탈'}},
+            '세부 주제': {'select': {'name': str(topic.get('detail_topic') or '기타')}},
+            '대표 키워드': {'rich_text': rich(str(topic.get('main_keyword') or ''))},
+            '보조 키워드': {'rich_text': rich(', '.join(topic.get('sub_keywords') or []))},
+            '독자 질문': {'rich_text': rich(str(topic.get('reader_question') or ''))},
+            '출처 목록': {'rich_text': rich(str(topic.get('sources') or ''))},
+            '키워드 출처': {'select': {'name': '계절·시기'}},
+            '말투': {'select': {'name': '햄쮸 톤 · 귀엽고 현실적'}},
+        }
+        r = self.client.post('/pages', json={
+            'parent': {'type': 'data_source_id', 'data_source_id': data_source_id},
+            'properties': properties,
+        })
+        r.raise_for_status()
+        return r.json()['id']
+
+    def create_short_topic(self, data_source_id: str, topic: dict[str, Any], channel: str) -> str:
+        verified = bool(topic.get('verified_personal_source')) if channel == '햄찌 창작 쇼츠' else True
+        status = '작성 요청' if verified else '아이디어'
+        properties: dict[str, Any] = {
+            '제목': {'title': [{'text': {'content': str(topic['title'])[:2000]}}]},
+            '상태': {'select': {'name': status}},
+            '채널': {'select': {'name': channel}},
+            '콘텐츠 ID': {'rich_text': rich(str(topic.get('content_id') or ''))},
+            '다음 행동': {'rich_text': rich(
+                '자동 제작 진행' if verified else '사용자 실제 경험 근거 확인 후 제작'
+            )},
+            '작업 기록': {'rich_text': rich(str(topic.get('concept') or ''))},
+            '출처·확인일': {'rich_text': rich(str(topic.get('sources') or ''))},
+            '버전': {'number': 1},
+            '공개 승인': {'checkbox': True},
+        }
+        r = self.client.post('/pages', json={
+            'parent': {'type': 'data_source_id', 'data_source_id': data_source_id},
+            'properties': properties,
+        })
+        r.raise_for_status()
+        return r.json()['id']
+
     def retrieve_page(self, page_id: str) -> dict[str, Any]:
         r = self.client.get(f'/pages/{page_id}')
         r.raise_for_status()
