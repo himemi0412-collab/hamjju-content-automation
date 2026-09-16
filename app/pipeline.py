@@ -7,7 +7,7 @@ from typing import Any
 from .ai import AIClient
 from .config import ChannelConfig
 from .media import MediaGenerator, compose_short_video, make_srt, render_blog_cards, save_manifest
-from .notion_client import NotionClient, compact_page_context, result_blocks
+from .notion_client import NotionClient, compact_page_context, extract_page_title, result_blocks
 from .settings import Settings
 from .state import StateStore
 from .youtube import YouTubePrivateUploader
@@ -43,6 +43,7 @@ class Pipeline:
         page = self.notion.retrieve_page(page_id)
         page_text = self.notion.read_page_text(page_id)
         context = compact_page_context(page, page_text)
+        page_title = extract_page_title(page)
         if not page_is_eligible(cfg, context):
             return {'page_id': page_id, 'status': 'skipped', 'reason': 'eligibility_changed'}
         key = f"{page_id}:{page.get('last_edited_time')}:{cfg.name}:v1"
@@ -53,6 +54,7 @@ class Pipeline:
             # without printing its properties or body into the workflow log.
             return {
                 'page_id': page_id,
+                'title': page_title,
                 'status': 'dry_run',
                 'channel': cfg.name,
                 'last_edited_time': page.get('last_edited_time'),
@@ -116,14 +118,21 @@ class Pipeline:
                 final_status = '비공개 업로드 완료'
             self.notion.update_status(page_id, final_status)
             self.state.finish(key, 'success', json.dumps({'final_status': final_status, 'media': media}, ensure_ascii=False))
-            return {'page_id': page_id, 'status': final_status, 'qa_pass': passed, 'media': media}
+            return {
+                'page_id': page_id,
+                'title': page_title,
+                'status': final_status,
+                'qa_pass': passed,
+                'notion_page_updated': True,
+                'media': media,
+            }
         except Exception as exc:
             try:
                 self.notion.update_status(page_id, cfg.revision_status)
             except Exception:
                 pass
             self.state.finish(key, 'failed', repr(exc))
-            return {'page_id': page_id, 'status': 'failed', 'error': repr(exc)}
+            return {'page_id': page_id, 'title': page_title, 'status': 'failed', 'error': repr(exc)}
 
     def _make_short_media(self, generated: dict[str, Any], job_dir: Path) -> dict[str, Any]:
         media = MediaGenerator(
