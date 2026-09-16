@@ -156,9 +156,12 @@ def compose_short_video(images: list[Path], scenes: list[dict[str, Any]], audio:
 
     escaped = str(srt.resolve()).replace('\\', '/').replace(':', '\\:').replace("'", "\\'")
     vf = f"subtitles='{escaped}':force_style='FontSize=18,Outline=2,Shadow=0,Alignment=2,MarginV=90'"
+    total_duration = sum(max(float(scene.get('seconds') or 5), 1.0) for scene in scenes)
     subprocess.run([
         'ffmpeg','-y','-loglevel','error','-i',str(silent),'-i',str(audio),
-        '-vf',vf,'-c:v','libx264','-crf','28','-preset','medium','-c:a','aac','-b:a','128k','-shortest','-movflags','+faststart',str(out_path)
+        '-vf',vf,'-af','apad','-t',str(total_duration),
+        '-c:v','libx264','-crf','28','-preset','medium','-c:a','aac','-b:a','128k',
+        '-movflags','+faststart',str(out_path)
     ], check=True)
     return out_path
 
