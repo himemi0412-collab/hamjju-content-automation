@@ -94,8 +94,10 @@ jobs:
           AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
         run: |
           if [ "${{ github.event.schedule }}" = "0 1 * * *" ]; then
+            python -m app.main seed-topics --blog-count 3 --ppojjugi-count 0 --japan-count 0
             ENABLE_MEDIA_GENERATION=false python -m app.main channel naver_blog --limit 3
           else
+            python -m app.main seed-topics --blog-count 0 --ppojjugi-count 1 --japan-count 1
             ENABLE_MEDIA_GENERATION=true python -m app.main channel ppojjugi_shorts --limit 1
             ENABLE_MEDIA_GENERATION=true python -m app.main channel japan_shorts --limit 1
           fi
