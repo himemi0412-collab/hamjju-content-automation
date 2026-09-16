@@ -138,7 +138,7 @@ GitHub 저장소의 Actions secrets에 다음 값을 넣습니다.
 
 현재 블로그·쇼츠 Data Source ID는 코드 기본값에 들어 있으므로 중복 입력하지 않습니다. 대기열을 교체할 때만 Repository Variables로 별도 관리합니다.
 
-`execute_text`는 채널 1건의 원고만 만들고, `execute_media`는 이미 검토 대상이 된 쇼츠 1건의 MP4를 만듭니다. `produce_daily_shorts`는 새 주제를 조사해 삐죽이·일본 쇼츠를 각각 1건씩 준비합니다.
+`execute_text`는 채널 1건의 원고만 만들고, `execute_media`는 이미 검토 대상이 된 쇼츠 1건의 MP4를 만듭니다. `produce_daily_shorts`는 새 주제를 조사해 삐죽이·일본 쇼츠를 각각 1건씩 준비합니다. 독립 QA에서 멈춘 쇼츠는 원인을 보완한 뒤 `retry_revision`으로 1건만 다시 제작할 수 있습니다.
 
 미디어 생성은 쇼츠 실행에서만 켜집니다. YouTube 비공개 업로드는 모든 GitHub Actions 실행에서 계속 강제로 OFF입니다.
 

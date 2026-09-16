@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import logging
+from dataclasses import replace
 from datetime import datetime, timezone
 import typer
 from rich import print
@@ -107,15 +108,24 @@ def run_all_channels(pipeline: Pipeline, channels: dict, total_limit: int, dry_r
 
 
 @app.command()
-def channel(name: str, limit: int | None = None, dry_run: bool = False, require_item: bool = False):
+def channel(
+    name: str,
+    limit: int | None = None,
+    dry_run: bool = False,
+    require_item: bool = False,
+    retry_revision: bool = False,
+):
     """Process a single configured channel."""
     s, notion, _, _, pipeline = build()
     channels = load_channels()
     if name not in channels:
         raise typer.BadParameter(f'Unknown channel: {name}')
+    cfg = channels[name]
+    if retry_revision:
+        cfg = replace(cfg, ready_status=cfg.revision_status)
     try:
         result = pipeline.run_channel(
-            channels[name],
+            cfg,
             limit=limit if limit is not None else s.max_jobs_per_run,
             dry_run=dry_run,
         )

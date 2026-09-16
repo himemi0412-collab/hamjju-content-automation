@@ -18,7 +18,7 @@ class NotionClient:
                 'Notion-Version': NOTION_VERSION,
                 'Content-Type': 'application/json',
             },
-            timeout=45.0,
+            timeout=120.0,
         )
 
     def close(self):

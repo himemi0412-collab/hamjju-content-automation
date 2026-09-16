@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from app.config import load_channels
 from app.pipeline import page_is_eligible
 
@@ -45,3 +47,13 @@ def test_shorts_channel_is_rechecked_before_processing():
     assert not page_is_eligible(cfg, {
         'properties': {'상태': '작성 요청', '채널': '일본 유튜브 쇼츠'},
     })
+
+
+def test_revision_short_is_only_eligible_for_explicit_retry():
+    cfg = load_channels()['japan_shorts']
+    context = {
+        'properties': {'상태': '수정 필요', '채널': '일본 유튜브 쇼츠'},
+    }
+    assert not page_is_eligible(cfg, context)
+    retry_cfg = replace(cfg, ready_status=cfg.revision_status)
+    assert page_is_eligible(retry_cfg, context)

@@ -29,6 +29,7 @@ on:
           - execute_text
           - execute_media
           - produce_daily_shorts
+          - retry_revision
 
 concurrency:
   group: hamjju-content-automation
@@ -98,6 +99,16 @@ jobs:
           python -m app.main seed-topics --blog-count 0 --ppojjugi-count 1 --japan-count 1
           python -m app.main channel ppojjugi_shorts --limit 1
           python -m app.main channel japan_shorts --limit 1
+
+      - name: Retry one QA revision with reviewed media generation
+        if: ${{ inputs.mode == 'retry_revision' && inputs.channel != 'naver_blog' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
+          ENABLE_WEB_RESEARCH: 'true'
+          ENABLE_MEDIA_GENERATION: 'true'
+          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
+        run: python -m app.main channel "${{ inputs.channel }}" --limit 1 --require-item --retry-revision
 
       - name: Run scheduled production
         if: ${{ github.event_name == 'schedule' }}
