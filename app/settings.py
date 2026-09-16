@@ -23,6 +23,8 @@ class Settings(BaseSettings):
 
     youtube_client_secrets_file: Path = Path('secrets/youtube_client_secret.json')
     youtube_token_file: Path = Path('secrets/youtube_token.json')
+    youtube_ppojjugi_token_file: Path = Path('secrets/youtube_ppojjugi_token.json')
+    youtube_japan_token_file: Path = Path('secrets/youtube_japan_token.json')
 
     state_db: Path = Path('output/state.db')
     output_dir: Path = Path('output')
