@@ -66,7 +66,8 @@ def render_blog_cards(cards: list[dict[str, Any]], out_dir: Path, font_path: str
     font_body = load_font(font_path, 38)
     paths: list[Path] = []
     for i, card in enumerate(cards, 1):
-        seed = sum(ord(ch) for ch in str(card.get('headline', '')))\n        bg = PALETTE[(seed + i * 7) % len(PALETTE)]
+        seed = sum(ord(ch) for ch in str(card.get('headline', ''))')
+        bg = PALETTE[(seed + i * 7) % len(PALETTE)]
         im = Image.new('RGB', (1080, 1350), bg)
         draw = ImageDraw.Draw(im)
         draw.rounded_rectangle((70, 90, 1010, 1260), radius=44, fill='#FFFFFF')
