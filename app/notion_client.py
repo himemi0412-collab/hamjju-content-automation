@@ -224,6 +224,16 @@ def property_value(prop: dict[str, Any]) -> Any:
     return None
 
 
+def extract_page_title(page: dict[str, Any]) -> str:
+    """Return the first Notion title property without logging other content."""
+    for prop in (page.get('properties') or {}).values():
+        if prop.get('type') == 'title':
+            title = property_value(prop)
+            if title:
+                return str(title)
+    return '(제목 없음)'
+
+
 def compact_page_context(page: dict[str, Any], page_text: str) -> dict[str, Any]:
     props = {}
     for name, prop in (page.get('properties') or {}).items():
