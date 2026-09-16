@@ -64,3 +64,16 @@ def test_formula_property_value_is_readable():
         'type': 'formula',
         'formula': {'type': 'string', 'string': '다음 5편'},
     }) == '다음 5편'
+
+
+def test_extract_page_title_reads_only_title_property():
+    from app.notion_client import extract_page_title
+
+    page = {
+        'properties': {
+            '상태': {'type': 'select', 'select': {'name': '작성 요청'}},
+            '제목': {'type': 'title', 'title': [{'plain_text': '자동화 테스트 글'}]},
+        },
+    }
+    assert extract_page_title(page) == '자동화 테스트 글'
+    assert extract_page_title({'properties': {}}) == '(제목 없음)'
