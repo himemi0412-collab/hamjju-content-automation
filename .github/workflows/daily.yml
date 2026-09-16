@@ -64,14 +64,14 @@ jobs:
           AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
         run: python -m app.main channel "${{ inputs.channel }}" --dry-run --limit 1 --require-item
       - name: Process one text item after review
-        if: ${{ inputs.mode == 'execute_text' || (github.event_name == 'push' && github.event.head_commit.message == 'Run approved one-time Shorts execution') }}
+        if: ${{ inputs.mode == 'execute_text' }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'false'
           AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
-        run: python -m app.main channel "${{ inputs.channel || 'ppojjugi_shorts' }}" --limit 1 --require-item
+        run: python -m app.main channel "${{ inputs.channel }}" --limit 1 --require-item
 
       - name: Keep generated files for inspection
         if: always()
