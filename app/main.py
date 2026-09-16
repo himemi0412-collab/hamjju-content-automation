@@ -3,6 +3,7 @@ import json
 import logging
 from dataclasses import replace
 from datetime import datetime, timezone
+from pathlib import Path
 import typer
 from rich import print
 
@@ -14,6 +15,8 @@ from .settings import Settings
 from .state import StateStore
 from .youtube import YouTubePrivateUploader
 from .naver import explain as naver_explain
+from .media import compose_short_video
+from .notion_client import property_value
 
 app = typer.Typer(help='햄쮸 블로그·쇼츠 자동화')
 
@@ -164,6 +167,50 @@ def setup_youtube_auth(channel: str):
         'youtube_channel_title': info.get('title'),
         'token_file': str(token_files[channel]),
         'upload_performed': False,
+    })
+
+
+@app.command('repair-short-video')
+def repair_short_video(channel: str, page_id: str, source_dir: Path):
+    """Recompose a generated Short to its full scene duration and replace its Notion review file."""
+    s = Settings()
+    if not s.notion_ready:
+        raise typer.BadParameter('NOTION_ACCESS_TOKEN is required in .env')
+    channels = load_channels()
+    if channel not in {'ppojjugi_shorts', 'japan_shorts'}:
+        raise typer.BadParameter('channel must be ppojjugi_shorts or japan_shorts')
+    cfg = channels[channel]
+    manifest_path = source_dir / 'manifest.json'
+    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    if manifest.get('page_id') != page_id or manifest.get('channel') != channel:
+        raise RuntimeError('Artifact manifest does not match the requested page and channel')
+    scenes = list((manifest.get('generated') or {}).get('scenes') or [])
+    images = sorted((source_dir / 'scenes').glob('scene_*.png'))
+    audio = source_dir / 'narration.mp3'
+    srt = source_dir / 'captions.srt'
+    if not scenes or len(images) != len(scenes) or not audio.exists() or not srt.exists():
+        raise RuntimeError('Artifact is missing scenes, images, narration, or captions')
+
+    notion = NotionClient(s.notion_access_token)
+    try:
+        page = notion.retrieve_page(page_id)
+        channel_value = property_value((page.get('properties') or {}).get('채널', {}))
+        if channel_value != cfg.notion_channel_value:
+            raise RuntimeError('Notion page channel does not match the requested channel')
+        output_dir = s.output_dir / page_id.replace('-', '')[:16]
+        output_dir.mkdir(parents=True, exist_ok=True)
+        video = compose_short_video(images, scenes, audio, srt, output_dir / 'short.mp4')
+        notion.attach_files(page_id, '최종 영상', [video])
+        notion.update_status(page_id, cfg.success_status)
+    finally:
+        notion.close()
+    print_json({
+        'page_id': page_id,
+        'channel': channel,
+        'status': cfg.success_status,
+        'duration_seconds': sum(max(float(x.get('seconds') or 5), 1.0) for x in scenes),
+        'notion_video_attached': True,
+        'youtube_upload_performed': False,
     })
 
 

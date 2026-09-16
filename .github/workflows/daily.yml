@@ -30,6 +30,15 @@ on:
           - execute_media
           - produce_daily_shorts
           - retry_revision
+          - repair_video
+      source_run_id:
+        description: Previous Actions run ID used only for repair_video
+        required: false
+        type: string
+      page_id:
+        description: Notion page ID used only for repair_video
+        required: false
+        type: string
 
 concurrency:
   group: hamjju-content-automation
@@ -40,6 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -109,6 +119,22 @@ jobs:
           ENABLE_MEDIA_GENERATION: 'true'
           AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
         run: python -m app.main channel "${{ inputs.channel }}" --limit 1 --require-item --retry-revision
+
+      - name: Repair and reattach one existing review video
+        if: ${{ inputs.mode == 'repair_video' && inputs.channel != 'naver_blog' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
+          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
+        run: |
+          test -n "${{ inputs.source_run_id }}"
+          test -n "${{ inputs.page_id }}"
+          run_id="${{ inputs.source_run_id }}"
+          page_id="${{ inputs.page_id }}"
+          page_folder="$(printf '%s' "$page_id" | tr -d '-' | cut -c1-16)"
+          gh run download "$run_id" --name "hamjju-output-$run_id" --dir recovered
+          python -m app.main repair-short-video "${{ inputs.channel }}" "$page_id" "recovered/$page_folder"
 
       - name: Run scheduled production
         if: ${{ github.event_name == 'schedule' }}
