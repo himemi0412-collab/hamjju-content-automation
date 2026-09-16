@@ -33,6 +33,18 @@ class YouTubePrivateUploader:
             raise RuntimeError('YouTube credentials are invalid')
         return creds
 
+    def current_channel(self) -> dict[str, str]:
+        youtube = build('youtube', 'v3', credentials=self._credentials(), cache_discovery=False)
+        response = youtube.channels().list(part='snippet', mine=True).execute()
+        items = response.get('items') or []
+        if len(items) != 1:
+            raise RuntimeError(f'Expected one authorized YouTube channel, found {len(items)}')
+        item = items[0]
+        return {
+            'id': str(item.get('id') or ''),
+            'title': str((item.get('snippet') or {}).get('title') or ''),
+        }
+
     def upload_private(self, video: Path, title: str, description: str = '', tags: list[str] | None = None) -> str:
         youtube = build('youtube', 'v3', credentials=self._credentials(), cache_discovery=False)
         body = {
