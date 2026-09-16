@@ -1,12 +1,13 @@
 from __future__ import annotations
 import json
 import logging
+from datetime import datetime, timezone
 import typer
 from rich import print
 
 from .ai import AIClient
 from .config import load_channels
-from .notion_client import NotionClient
+from .notion_client import NotionClient, extract_page_title
 from .pipeline import Pipeline
 from .settings import Settings
 from .state import StateStore
@@ -27,6 +28,51 @@ def build() -> tuple[Settings, NotionClient, AIClient, StateStore, Pipeline]:
     ai = AIClient(s.openai_api_key, s.text_model, s.qa_model, s.enable_web_research)
     state = StateStore(s.state_db)
     return s, notion, ai, state, Pipeline(s, notion, ai, state)
+
+
+@app.command('seed-topics')
+def seed_topics(blog_count: int = 3, ppojjugi_count: int = 1, japan_count: int = 1):
+    """Research fresh topics, save them to Notion, and mark verified items ready."""
+    s, notion, ai, _, _ = build()
+    try:
+        blog_pages = notion.query_recent(s.blog_data_source_id, 100)
+        short_pages = notion.query_recent(s.shorts_data_source_id, 100)
+        existing_blog = [extract_page_title(x) for x in blog_pages]
+        existing_shorts = [extract_page_title(x) for x in short_pages]
+        planned, usage = ai.research_topics({
+            'today_utc': datetime.now(timezone.utc).date().isoformat(),
+            'requested_counts': {
+                'blog': max(blog_count, 0),
+                'ppojjugi': max(ppojjugi_count, 0),
+                'japan': max(japan_count, 0),
+            },
+            'existing_blog_titles': existing_blog,
+            'existing_shorts_titles': existing_shorts,
+        })
+        known = {normalize_title(x) for x in existing_blog + existing_shorts}
+        created = {'blog': [], 'ppojjugi': [], 'japan': [], 'usage': usage}
+        base_order = int(datetime.now(timezone.utc).strftime('%Y%m%d')) * 100
+        for i, topic in enumerate((planned.get('blog') or [])[:max(blog_count, 0)], 1):
+            if normalize_title(topic.get('title')) in known:
+                continue
+            created['blog'].append(notion.create_blog_topic(s.blog_data_source_id, topic, base_order + i))
+            known.add(normalize_title(topic.get('title')))
+        for key, channel, count in (
+            ('ppojjugi', '햄찌 창작 쇼츠', ppojjugi_count),
+            ('japan', '일본 유튜브 쇼츠', japan_count),
+        ):
+            for topic in (planned.get(key) or [])[:max(count, 0)]:
+                if normalize_title(topic.get('title')) in known:
+                    continue
+                created[key].append(notion.create_short_topic(s.shorts_data_source_id, topic, channel))
+                known.add(normalize_title(topic.get('title')))
+    finally:
+        notion.close()
+    print_json(created)
+
+
+def normalize_title(value) -> str:
+    return ''.join(str(value or '').lower().split())
 
 
 @app.command()
