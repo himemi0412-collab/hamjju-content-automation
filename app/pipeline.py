@@ -117,7 +117,7 @@ class Pipeline:
                         media['notion_video_attached'] = False
                         media['notion_video_error'] = repr(exc)
                 if self.s.auto_private_youtube_upload and media.get('video'):
-                    media['youtube_url'] = self._upload_private(generated, Path(media['video']))
+                    media['youtube_url'] = self._upload_private(cfg.name, generated, Path(media['video']))
                     self.notion.update_properties(page_id, {
                         'YouTube 비공개 주소': {'url': media['youtube_url']},
                     })
@@ -161,8 +161,13 @@ class Pipeline:
         video = compose_short_video(images, scenes, audio, srt, job_dir / 'short.mp4')
         return {'images': [str(x) for x in images], 'audio': str(audio), 'srt': str(srt), 'video': str(video)}
 
-    def _upload_private(self, generated: dict[str, Any], video: Path) -> str:
-        uploader = YouTubePrivateUploader(self.s.youtube_client_secrets_file, self.s.youtube_token_file)
+    def _upload_private(self, channel_name: str, generated: dict[str, Any], video: Path) -> str:
+        token_file = (
+            self.s.youtube_ppojjugi_token_file
+            if channel_name == 'ppojjugi_shorts'
+            else self.s.youtube_japan_token_file
+        )
+        uploader = YouTubePrivateUploader(self.s.youtube_client_secrets_file, token_file)
         meta = generated.get('youtube') or {}
         return uploader.upload_private(
             video,
