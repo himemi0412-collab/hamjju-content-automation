@@ -129,7 +129,7 @@ AUTO_PRIVATE_YOUTUBE_UPLOAD=true
 
 ## 8. GitHub Actions 첫 연결
 
-`.github/workflows/daily.yml`은 처음에는 **수동 실행 전용**입니다. 저장소에 올렸다고 매일 자동 실행되지 않습니다. Actions 화면에서 채널 하나와 `dry_run`을 선택하면 대기열 1건을 읽기만 하고, OpenAI 호출·Notion 수정·미디어 생성·YouTube 업로드는 하지 않습니다. Actions 로그에는 Notion 본문이나 속성값을 출력하지 않고 읽기 성공 여부만 남깁니다.
+`.github/workflows/daily.yml`은 매일 10:00 KST에 블로그 최대 3건, 21:00 KST에 삐죽이·일본 쇼츠를 각각 1건 준비합니다. Actions 화면에서 채널 하나와 `dry_run`을 선택하면 대기열 1건을 읽기만 하고, OpenAI 호출·Notion 수정·미디어 생성·YouTube 업로드는 하지 않습니다. Actions 로그에는 Notion 본문이나 속성값을 출력하지 않고 읽기 성공 여부만 남깁니다.
 
 GitHub 저장소의 Actions secrets에 다음 값을 넣습니다.
 
@@ -138,11 +138,10 @@ GitHub 저장소의 Actions secrets에 다음 값을 넣습니다.
 
 현재 블로그·쇼츠 Data Source ID는 코드 기본값에 들어 있으므로 중복 입력하지 않습니다. 대기열을 교체할 때만 Repository Variables로 별도 관리합니다.
 
-첫 DRY RUN을 확인한 뒤에만 `execute_text`로 채널 1건을 실행합니다. 이 모드도 미디어 생성과 YouTube 업로드는 강제로 OFF입니다.
+`execute_text`는 채널 1건의 원고만 만들고, `execute_media`는 이미 검토 대상이 된 쇼츠 1건의 MP4를 만듭니다. `produce_daily_shorts`는 새 주제를 조사해 삐죽이·일본 쇼츠를 각각 1건씩 준비합니다.
 
-매일 스케줄, 미디어 생성, YouTube 비공개 업로드는 각각 별도 검수와 승인 후 단계적으로 켭니다. 현재 첫 연결용 workflow에서는 아래 기능을 켜지 않습니다.
+미디어 생성은 쇼츠 실행에서만 켜집니다. YouTube 비공개 업로드는 모든 GitHub Actions 실행에서 계속 강제로 OFF입니다.
 
-- `ENABLE_MEDIA_GENERATION`
 - `AUTO_PRIVATE_YOUTUBE_UPLOAD`
 
 생성 파일은 Actions artifact로 14일 보존하도록 설정했습니다. Notion 파일 첨부가 성공하면 카드뉴스/MP4는 Notion에도 남습니다.

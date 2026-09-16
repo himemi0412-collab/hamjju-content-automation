@@ -1,4 +1,4 @@
-name: Hamjju Safe Manual Test
+name: Hamjju Daily Content Production
 
 on:
   schedule:
@@ -20,7 +20,7 @@ on:
           - ppojjugi_shorts
           - japan_shorts
       mode:
-        description: Dry run, text only, or reviewed image/audio/MP4 generation
+        description: Dry run, text only, one reviewed MP4, or today's two Shorts
         required: true
         type: choice
         default: dry_run
@@ -28,6 +28,7 @@ on:
           - dry_run
           - execute_text
           - execute_media
+          - produce_daily_shorts
 
 concurrency:
   group: hamjju-content-automation
@@ -84,6 +85,19 @@ jobs:
           ENABLE_MEDIA_GENERATION: 'true'
           AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
         run: python -m app.main channel "${{ inputs.channel }}" --limit 1 --require-item
+
+      - name: Produce today's two reviewed Shorts
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'produce_daily_shorts' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
+          ENABLE_WEB_RESEARCH: 'true'
+          ENABLE_MEDIA_GENERATION: 'true'
+          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
+        run: |
+          python -m app.main seed-topics --blog-count 0 --ppojjugi-count 1 --japan-count 1
+          python -m app.main channel ppojjugi_shorts --limit 1
+          python -m app.main channel japan_shorts --limit 1
 
       - name: Run scheduled production
         if: ${{ github.event_name == 'schedule' }}
