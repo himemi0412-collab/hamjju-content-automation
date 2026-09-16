@@ -136,12 +136,25 @@ def validate_results(results: list[dict], require_item: bool = False, dry_run: b
 
 
 @app.command('setup-youtube-auth')
-def setup_youtube_auth():
-    """One-time OAuth setup. This command never uploads a video."""
+def setup_youtube_auth(channel: str):
+    """One-time OAuth setup for one channel. This command never uploads a video."""
     s = Settings()
-    uploader = YouTubePrivateUploader(s.youtube_client_secrets_file, s.youtube_token_file)
+    token_files = {
+        'ppojjugi_shorts': s.youtube_ppojjugi_token_file,
+        'japan_shorts': s.youtube_japan_token_file,
+    }
+    if channel not in token_files:
+        raise typer.BadParameter('channel must be ppojjugi_shorts or japan_shorts')
+    uploader = YouTubePrivateUploader(s.youtube_client_secrets_file, token_files[channel])
     uploader.authorize_interactively()
-    print('[green]YouTube OAuth token saved.[/green]')
+    info = uploader.current_channel()
+    print_json({
+        'channel_key': channel,
+        'youtube_channel_id': info.get('id'),
+        'youtube_channel_title': info.get('title'),
+        'token_file': str(token_files[channel]),
+        'upload_performed': False,
+    })
 
 
 @app.command('naver-status')
