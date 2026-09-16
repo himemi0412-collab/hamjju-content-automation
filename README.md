@@ -36,8 +36,9 @@
 3. 네이버 공개 발행/예약 발행 자동화는 구현하지 않았습니다.
 4. 로컬/동일 실행 환경에서는 SQLite 기록으로 중복 실행을 막고, GitHub Actions에서는 동시 실행 제한과 Notion의 `작성 요청 → 생성 중` 상태 전환으로 중복 처리를 막습니다.
 5. 오류가 나면 성공으로 기록하지 않고 `수정 필요` 상태로 남깁니다.
-6. 미디어 생성과 YouTube 업로드는 기본값 OFF입니다. 실수로 비용이 발생하거나 업로드되지 않습니다.
+6. 로컬 기본값은 미디어 생성과 YouTube 업로드가 OFF이고, GitHub의 쇼츠 제작 실행에서만 비공개 업로드를 명시적으로 켭니다.
 7. 블로그 카드뉴스가 정확히 5장이 아니거나 Notion 첨부가 실패하면 성공 상태로 넘기지 않습니다.
+8. OAuth 토큰의 실제 채널 ID가 고정된 삐죽이/일본 채널 ID와 다르면 파일 전송 전에 중단합니다.
 
 ## 1. 설치
 
@@ -113,10 +114,12 @@ Google Cloud에서 YouTube Data API OAuth Client를 만든 뒤 JSON 파일을 �
 secrets/youtube_client_secret.json
 ```
 
-최초 1회:
+채널별 최초 1회:
 
 ```bash
-python -m app.main setup-youtube-auth
+python -m app.main setup-youtube-auth ppojjugi_shorts
+python -m app.main setup-youtube-auth japan_shorts
+python -m app.main verify-youtube-auth
 ```
 
 그 다음 `.env`:
@@ -135,14 +138,17 @@ GitHub 저장소의 Actions secrets에 다음 값을 넣습니다.
 
 - `OPENAI_API_KEY`
 - `NOTION_ACCESS_TOKEN`
+- `YOUTUBE_CLIENT_SECRET_JSON_B64`
+- `YOUTUBE_PPOJJUGI_TOKEN_JSON_B64`
+- `YOUTUBE_JAPAN_TOKEN_JSON_B64`
+
+세 YouTube 값은 JSON 파일 원문을 Base64로 변환한 뒤 GitHub의 암호화된 Actions secret에만 저장합니다. 워크플로 실행 중 권한을 제한한 `secrets/` 파일로 복원하며, 저장소 파일·artifact·로그에는 포함하지 않습니다.
 
 현재 블로그·쇼츠 Data Source ID는 코드 기본값에 들어 있으므로 중복 입력하지 않습니다. 대기열을 교체할 때만 Repository Variables로 별도 관리합니다.
 
 `execute_text`는 채널 1건의 원고만 만들고, `execute_media`는 이미 검토 대상이 된 쇼츠 1건의 MP4를 만듭니다. `produce_daily_shorts`는 새 주제를 조사해 삐죽이·일본 쇼츠를 각각 1건씩 준비합니다. 독립 QA에서 멈춘 쇼츠는 원인을 보완한 뒤 `retry_revision`으로 1건만 다시 제작할 수 있습니다. 과거 artifact의 합성 파일만 복구할 때는 `repair_video`가 전체 장면 길이로 다시 합성해 같은 Notion 항목의 검토 영상을 교체합니다.
 
-미디어 생성은 쇼츠 실행에서만 켜집니다. YouTube 비공개 업로드는 모든 GitHub Actions 실행에서 계속 강제로 OFF입니다.
-
-- `AUTO_PRIVATE_YOUTUBE_UPLOAD`
+미디어 생성은 쇼츠 실행에서만 켜집니다. 예약 쇼츠 제작, `execute_media`, `produce_daily_shorts`, `retry_revision`은 채널 ID를 검사한 뒤 YouTube에 `private`로 자동 업로드합니다. `verify_youtube_auth`는 업로드 없이 두 OAuth 연결의 채널 ID와 이름만 검사합니다. 블로그·dry run·텍스트 실행·영상 복구에서는 업로드가 꺼진 상태를 유지합니다.
 
 생성 파일은 Actions artifact로 14일 보존하도록 설정했습니다. Notion 파일 첨부가 성공하면 카드뉴스/MP4는 Notion에도 남습니다.
 

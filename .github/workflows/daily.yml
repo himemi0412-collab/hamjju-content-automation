@@ -20,7 +20,7 @@ on:
           - ppojjugi_shorts
           - japan_shorts
       mode:
-        description: Dry run, text only, one reviewed MP4, or today's two Shorts
+        description: Dry run, text only, reviewed MP4, today's Shorts, or OAuth verification
         required: true
         type: choice
         default: dry_run
@@ -31,6 +31,7 @@ on:
           - produce_daily_shorts
           - retry_revision
           - repair_video
+          - verify_youtube_auth
       source_run_id:
         description: Previous Actions run ID used only for repair_video
         required: false
@@ -64,6 +65,21 @@ jobs:
         run: pip install -r requirements.txt
       - name: Run safety tests
         run: pytest -q
+      - name: Materialize YouTube OAuth files
+        if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 12 * * *') || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'execute_media' || inputs.mode == 'produce_daily_shorts' || inputs.mode == 'retry_revision' || inputs.mode == 'verify_youtube_auth')) }}
+        env:
+          YOUTUBE_CLIENT_SECRET_JSON_B64: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON_B64 }}
+          YOUTUBE_PPOJJUGI_TOKEN_JSON_B64: ${{ secrets.YOUTUBE_PPOJJUGI_TOKEN_JSON_B64 }}
+          YOUTUBE_JAPAN_TOKEN_JSON_B64: ${{ secrets.YOUTUBE_JAPAN_TOKEN_JSON_B64 }}
+        run: |
+          test -n "$YOUTUBE_CLIENT_SECRET_JSON_B64"
+          test -n "$YOUTUBE_PPOJJUGI_TOKEN_JSON_B64"
+          test -n "$YOUTUBE_JAPAN_TOKEN_JSON_B64"
+          install -d -m 700 secrets
+          umask 077
+          printf '%s' "$YOUTUBE_CLIENT_SECRET_JSON_B64" | base64 --decode > secrets/youtube_client_secret.json
+          printf '%s' "$YOUTUBE_PPOJJUGI_TOKEN_JSON_B64" | base64 --decode > secrets/youtube_ppojjugi_token.json
+          printf '%s' "$YOUTUBE_JAPAN_TOKEN_JSON_B64" | base64 --decode > secrets/youtube_japan_token.json
       - name: Check configuration
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -94,7 +110,7 @@ jobs:
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'true'
-          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
+          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'true'
         run: python -m app.main channel "${{ inputs.channel }}" --limit 1 --require-item
 
       - name: Produce today's two reviewed Shorts
@@ -104,7 +120,7 @@ jobs:
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'true'
-          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
+          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'true'
         run: |
           python -m app.main seed-topics --blog-count 0 --ppojjugi-count 1 --japan-count 1
           python -m app.main channel ppojjugi_shorts --limit 1
@@ -117,8 +133,12 @@ jobs:
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'true'
-          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
+          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'true'
         run: python -m app.main channel "${{ inputs.channel }}" --limit 1 --require-item --retry-revision
+
+      - name: Verify both YouTube OAuth channel identities without uploading
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'verify_youtube_auth' }}
+        run: python -m app.main verify-youtube-auth
 
       - name: Repair and reattach one existing review video
         if: ${{ inputs.mode == 'repair_video' && inputs.channel != 'naver_blog' }}
@@ -149,8 +169,8 @@ jobs:
             ENABLE_MEDIA_GENERATION=false python -m app.main channel naver_blog --limit 3
           else
             python -m app.main seed-topics --blog-count 0 --ppojjugi-count 1 --japan-count 1
-            ENABLE_MEDIA_GENERATION=true python -m app.main channel ppojjugi_shorts --limit 1
-            ENABLE_MEDIA_GENERATION=true python -m app.main channel japan_shorts --limit 1
+            ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=true python -m app.main channel ppojjugi_shorts --limit 1
+            ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=true python -m app.main channel japan_shorts --limit 1
           fi
 
       - name: Keep generated files for inspection

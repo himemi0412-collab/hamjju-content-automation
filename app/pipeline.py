@@ -162,12 +162,25 @@ class Pipeline:
         return {'images': [str(x) for x in images], 'audio': str(audio), 'srt': str(srt), 'video': str(video)}
 
     def _upload_private(self, channel_name: str, generated: dict[str, Any], video: Path) -> str:
-        token_file = (
-            self.s.youtube_ppojjugi_token_file
-            if channel_name == 'ppojjugi_shorts'
-            else self.s.youtube_japan_token_file
-        )
+        channel_auth = {
+            'ppojjugi_shorts': (
+                self.s.youtube_ppojjugi_token_file,
+                self.s.youtube_ppojjugi_channel_id,
+            ),
+            'japan_shorts': (
+                self.s.youtube_japan_token_file,
+                self.s.youtube_japan_channel_id,
+            ),
+        }
+        if channel_name not in channel_auth:
+            raise RuntimeError(f'YouTube upload is not configured for channel: {channel_name}')
+        token_file, expected_channel_id = channel_auth[channel_name]
         uploader = YouTubePrivateUploader(self.s.youtube_client_secrets_file, token_file)
+        authorized_channel = uploader.current_channel()
+        if authorized_channel.get('id') != expected_channel_id:
+            raise RuntimeError(
+                f'YouTube channel mismatch for {channel_name}; upload stopped before transfer'
+            )
         meta = generated.get('youtube') or {}
         return uploader.upload_private(
             video,

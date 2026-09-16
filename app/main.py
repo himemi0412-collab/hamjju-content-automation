@@ -156,11 +156,17 @@ def setup_youtube_auth(channel: str):
         'ppojjugi_shorts': s.youtube_ppojjugi_token_file,
         'japan_shorts': s.youtube_japan_token_file,
     }
+    expected_channel_ids = {
+        'ppojjugi_shorts': s.youtube_ppojjugi_channel_id,
+        'japan_shorts': s.youtube_japan_channel_id,
+    }
     if channel not in token_files:
         raise typer.BadParameter('channel must be ppojjugi_shorts or japan_shorts')
     uploader = YouTubePrivateUploader(s.youtube_client_secrets_file, token_files[channel])
     uploader.authorize_interactively()
     info = uploader.current_channel()
+    if info.get('id') != expected_channel_ids[channel]:
+        raise RuntimeError(f'Authorized YouTube channel does not match {channel}')
     print_json({
         'channel_key': channel,
         'youtube_channel_id': info.get('id'),
@@ -168,6 +174,37 @@ def setup_youtube_auth(channel: str):
         'token_file': str(token_files[channel]),
         'upload_performed': False,
     })
+
+
+@app.command('verify-youtube-auth')
+def verify_youtube_auth():
+    """Verify both OAuth tokens against their fixed channel IDs without uploading."""
+    s = Settings()
+    channels = {
+        'ppojjugi_shorts': (
+            s.youtube_ppojjugi_token_file,
+            s.youtube_ppojjugi_channel_id,
+        ),
+        'japan_shorts': (
+            s.youtube_japan_token_file,
+            s.youtube_japan_channel_id,
+        ),
+    }
+    results = []
+    for channel_key, (token_file, expected_channel_id) in channels.items():
+        uploader = YouTubePrivateUploader(s.youtube_client_secrets_file, token_file)
+        info = uploader.current_channel()
+        channel_match = info.get('id') == expected_channel_id
+        results.append({
+            'channel_key': channel_key,
+            'youtube_channel_id': info.get('id'),
+            'youtube_channel_title': info.get('title'),
+            'channel_match': channel_match,
+            'upload_performed': False,
+        })
+        if not channel_match:
+            raise RuntimeError(f'Authorized YouTube channel does not match {channel_key}')
+    print_json(results)
 
 
 @app.command('repair-short-video')
@@ -231,7 +268,8 @@ def doctor():
         'media_generation': s.enable_media_generation,
         'auto_private_youtube_upload': s.auto_private_youtube_upload,
         'youtube_client_secret_exists': s.youtube_client_secrets_file.exists(),
-        'youtube_token_exists': s.youtube_token_file.exists(),
+        'youtube_ppojjugi_token_exists': s.youtube_ppojjugi_token_file.exists(),
+        'youtube_japan_token_exists': s.youtube_japan_token_file.exists(),
     }
     print_json(checks)
 

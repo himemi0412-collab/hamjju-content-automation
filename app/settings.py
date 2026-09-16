@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     youtube_token_file: Path = Path('secrets/youtube_token.json')
     youtube_ppojjugi_token_file: Path = Path('secrets/youtube_ppojjugi_token.json')
     youtube_japan_token_file: Path = Path('secrets/youtube_japan_token.json')
+    youtube_ppojjugi_channel_id: str = 'UCjCEzw6WQmQRZeOV-O8cYpg'
+    youtube_japan_channel_id: str = 'UCXezqjpy6AgXEynvTxSjzmg'
 
     state_db: Path = Path('output/state.db')
     output_dir: Path = Path('output')
