@@ -8,7 +8,6 @@ on:
   push:
     branches:
       - main
-  # Manual dry-run and reviewed text execution remain available for safe checks.
   workflow_dispatch:
     inputs:
       channel:
@@ -21,13 +20,14 @@ on:
           - ppojjugi_shorts
           - japan_shorts
       mode:
-        description: Dry run only reads one item; execute_text may call OpenAI and update Notion
+        description: Dry run, text only, or reviewed image/audio/MP4 generation
         required: true
         type: choice
         default: dry_run
         options:
           - dry_run
           - execute_text
+          - execute_media
 
 concurrency:
   group: hamjju-content-automation
@@ -75,21 +75,29 @@ jobs:
           ENABLE_MEDIA_GENERATION: 'false'
           AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
         run: python -m app.main channel "${{ inputs.channel }}" --limit 1 --require-item
+      - name: Generate one reviewed Shorts MP4
+        if: ${{ inputs.mode == 'execute_media' && inputs.channel != 'naver_blog' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
+          ENABLE_WEB_RESEARCH: 'true'
+          ENABLE_MEDIA_GENERATION: 'true'
+          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
+        run: python -m app.main channel "${{ inputs.channel }}" --limit 1 --require-item
 
-      - name: Run scheduled text preparation
+      - name: Run scheduled production
         if: ${{ github.event_name == 'schedule' }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
           ENABLE_WEB_RESEARCH: 'true'
-          ENABLE_MEDIA_GENERATION: 'false'
           AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
         run: |
           if [ "${{ github.event.schedule }}" = "0 1 * * *" ]; then
-            python -m app.main channel naver_blog --limit 3
+            ENABLE_MEDIA_GENERATION=false python -m app.main channel naver_blog --limit 3
           else
-            python -m app.main channel ppojjugi_shorts --limit 1
-            python -m app.main channel japan_shorts --limit 1
+            ENABLE_MEDIA_GENERATION=true python -m app.main channel ppojjugi_shorts --limit 1
+            ENABLE_MEDIA_GENERATION=true python -m app.main channel japan_shorts --limit 1
           fi
 
       - name: Keep generated files for inspection
