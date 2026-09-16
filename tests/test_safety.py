@@ -17,12 +17,16 @@ def test_naver_browser_automation_is_disabled():
         raise AssertionError('Naver automation should be disabled by design')
 
 
-def test_github_action_starts_manual_and_safe():
+def test_github_action_schedule_stays_text_only_and_safe():
     workflow = Path('.github/workflows/daily.yml').read_text(encoding='utf-8')
     assert 'actions/checkout@v7' in workflow
     assert 'actions/setup-python@v7' in workflow
     assert 'actions/upload-artifact@v7' in workflow
-    assert 'schedule:' not in workflow
+    assert "cron: '0 1 * * *'" in workflow
+    assert "cron: '0 12 * * *'" in workflow
+    assert 'python -m app.main channel naver_blog --limit 3' in workflow
+    assert 'python -m app.main channel ppojjugi_shorts --limit 1' in workflow
+    assert 'python -m app.main channel japan_shorts --limit 1' in workflow
     assert 'default: dry_run' in workflow
     assert '--dry-run --limit 1' in workflow
     assert "ENABLE_MEDIA_GENERATION: 'false'" in workflow
