@@ -8,6 +8,8 @@ from typing import Any
 from PIL import Image, ImageDraw, ImageFont
 from openai import OpenAI
 
+from .budget import BudgetGuard
+
 PALETTE = [
     '#F7F8FB', '#E7F1FF', '#EDE9FE', '#FFE8EF', '#DFF7EE',
     '#E8F5F7', '#F0EAF8', '#F8EAF2', '#E6F2EC', '#E9EEF7',
@@ -20,22 +22,44 @@ ACCENT = '#5B67D8'
 
 
 class MediaGenerator:
-    def __init__(self, api_key: str, image_model: str, tts_model: str, voice: str, font_path: str | None = None):
+    def __init__(
+        self,
+        api_key: str,
+        image_model: str,
+        tts_model: str,
+        voice: str,
+        font_path: str | None = None,
+        image_quality: str = 'medium',
+        budget: BudgetGuard | None = None,
+        image_estimated_cost_usd: float = 0.05,
+        tts_estimated_cost_usd: float = 0.03,
+    ):
         self.client = OpenAI(api_key=api_key)
         self.image_model = image_model
         self.tts_model = tts_model
         self.voice = voice
         self.font_path = font_path
+        self.image_quality = image_quality
+        self.budget = budget
+        self.image_estimated_cost_usd = image_estimated_cost_usd
+        self.tts_estimated_cost_usd = tts_estimated_cost_usd
 
     def generate_scene_images(self, scenes: list[dict[str, Any]], out_dir: Path) -> list[Path]:
         out_dir.mkdir(parents=True, exist_ok=True)
         paths: list[Path] = []
         for i, scene in enumerate(scenes, 1):
             prompt = str(scene.get('image_prompt') or scene.get('caption') or '')
+            if self.budget:
+                self.budget.reserve(
+                    'image_generation',
+                    self.image_estimated_cost_usd,
+                    {'model': self.image_model, 'quality': self.image_quality, 'scene': i},
+                )
             response = self.client.images.generate(
                 model=self.image_model,
                 prompt=prompt + '\nVertical composition. Clean natural color. No yellow cast. No sepia filter.',
                 size='1024x1536',
+                quality=self.image_quality,
             )
             item = response.data[0]
             b64 = getattr(item, 'b64_json', None)
@@ -48,6 +72,12 @@ class MediaGenerator:
 
     def generate_tts(self, text: str, out_path: Path) -> Path:
         out_path.parent.mkdir(parents=True, exist_ok=True)
+        if self.budget:
+            self.budget.reserve(
+                'tts_generation',
+                self.tts_estimated_cost_usd,
+                {'model': self.tts_model, 'characters': len(text)},
+            )
         with self.client.audio.speech.with_streaming_response.create(
             model=self.tts_model,
             voice=self.voice,

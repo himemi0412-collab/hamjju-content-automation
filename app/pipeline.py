@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .ai import AIClient
+from .budget import BudgetGuard
 from .config import ChannelConfig
 from .media import MediaGenerator, compose_short_video, make_srt, render_blog_cards, save_manifest
 from .notion_client import NotionClient, compact_page_context, extract_page_title, result_blocks
@@ -14,11 +15,19 @@ from .youtube import YouTubePrivateUploader
 
 
 class Pipeline:
-    def __init__(self, settings: Settings, notion: NotionClient, ai: AIClient, state: StateStore):
+    def __init__(
+        self,
+        settings: Settings,
+        notion: NotionClient,
+        ai: AIClient,
+        state: StateStore,
+        budget: BudgetGuard | None = None,
+    ):
         self.s = settings
         self.notion = notion
         self.ai = ai
         self.state = state
+        self.budget = budget
 
     def run_channel(self, cfg: ChannelConfig, limit: int | None = None, dry_run: bool = False) -> list[dict[str, Any]]:
         ds = self.s.blog_data_source_id if cfg.source == 'blog' else self.s.shorts_data_source_id
@@ -87,6 +96,7 @@ class Pipeline:
                 'generated': generated,
                 'qa': qa,
                 'usage': {'generation': gen_usage, 'qa': qa_usage},
+                'budget': self.budget.snapshot() if self.budget else None,
                 'created_at': datetime.now(timezone.utc).isoformat(),
             }
             save_manifest(job_dir / 'manifest.json', manifest)
@@ -108,22 +118,34 @@ class Pipeline:
                     media['notion_cards_error'] = repr(exc)
                     raise RuntimeError('Failed to attach all blog card-news images to Notion') from exc
             elif cfg.content_kind == 'shorts' and passed and cfg.media_generation and self.s.enable_media_generation:
-                media = self._make_short_media(generated, job_dir)
-                if media.get('video'):
-                    try:
-                        self.notion.attach_files(page_id, '최종 영상', [Path(media['video'])])
-                        media['notion_video_attached'] = True
-                    except Exception as exc:
-                        media['notion_video_attached'] = False
-                        media['notion_video_error'] = repr(exc)
-                if self.s.auto_private_youtube_upload and media.get('video'):
-                    media['youtube_url'] = self._upload_private(cfg.name, generated, Path(media['video']))
-                    self.notion.update_properties(page_id, {
-                        'YouTube 비공개 주소': {'url': media['youtube_url']},
-                    })
+                scenes = generated.get('scenes') or []
+                media_cost = len(scenes) * self.s.openai_image_estimated_cost_usd + self.s.openai_tts_estimated_cost_usd
+                if self.budget and not self.budget.can_spend(media_cost):
+                    media = {
+                        'budget_blocked': True,
+                        'reason': 'monthly_internal_budget_guard',
+                        'required_media_estimate_usd': round(media_cost, 6),
+                        'budget': self.budget.snapshot(),
+                    }
+                else:
+                    media = self._make_short_media(generated, job_dir)
+                    if media.get('video'):
+                        try:
+                            self.notion.attach_files(page_id, '최종 영상', [Path(media['video'])])
+                            media['notion_video_attached'] = True
+                        except Exception as exc:
+                            media['notion_video_attached'] = False
+                            media['notion_video_error'] = repr(exc)
+                    if self.s.auto_private_youtube_upload and media.get('video'):
+                        media['youtube_url'] = self._upload_private(cfg.name, generated, Path(media['video']))
+                        self.notion.update_properties(page_id, {
+                            'YouTube 비공개 주소': {'url': media['youtube_url']},
+                        })
 
             self.notion.append_blocks(page_id, result_blocks(cfg.name, generated, qa))
             final_status = cfg.success_status if passed else cfg.revision_status
+            if media.get('budget_blocked'):
+                final_status = cfg.revision_status
             if passed and media.get('youtube_url'):
                 final_status = '비공개 업로드 완료'
             self.notion.update_status(page_id, final_status)
@@ -134,6 +156,7 @@ class Pipeline:
                 'status': final_status,
                 'qa_pass': passed,
                 'notion_page_updated': True,
+                'budget_blocked': bool(media.get('budget_blocked')),
                 'media': media,
             }
         except Exception as exc:
@@ -151,6 +174,10 @@ class Pipeline:
             self.s.tts_model,
             self.s.tts_voice,
             self.s.card_font_path,
+            self.s.image_quality,
+            self.budget,
+            self.s.openai_image_estimated_cost_usd,
+            self.s.openai_tts_estimated_cost_usd,
         )
         scenes = generated.get('scenes') or []
         if not scenes:
@@ -162,6 +189,8 @@ class Pipeline:
         return {'images': [str(x) for x in images], 'audio': str(audio), 'srt': str(srt), 'video': str(video)}
 
     def _upload_private(self, channel_name: str, generated: dict[str, Any], video: Path) -> str:
+        if self.budget:
+            self.budget.require_below_limit('youtube_private_upload')
         channel_auth = {
             'ppojjugi_shorts': (
                 self.s.youtube_ppojjugi_token_file,

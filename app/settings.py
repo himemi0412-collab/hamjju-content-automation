@@ -13,8 +13,21 @@ class Settings(BaseSettings):
     text_model: str = 'gpt-5.6-luna'
     qa_model: str = 'gpt-5.6-luna'
     image_model: str = 'gpt-image-2'
+    image_quality: str = 'medium'
     tts_model: str = 'gpt-4o-mini-tts'
     tts_voice: str = 'coral'
+
+    openai_monthly_budget_usd: float = 22.0
+    openai_budget_ledger: Path = Path('output/openai-cost-ledger.json')
+    openai_budget_baseline_month: str = ''
+    openai_budget_baseline_usd: float = 0.0
+    openai_budget_require_existing_ledger: bool = False
+    openai_image_estimated_cost_usd: float = 0.05
+    openai_tts_estimated_cost_usd: float = 0.03
+    openai_text_reserve_usd: float = 0.04
+    openai_web_text_reserve_usd: float = 0.08
+    max_generation_output_tokens: int = 12000
+    max_qa_output_tokens: int = 6000
 
     max_jobs_per_run: int = 3
     enable_web_research: bool = True

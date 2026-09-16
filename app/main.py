@@ -8,6 +8,7 @@ import typer
 from rich import print
 
 from .ai import AIClient
+from .budget import BudgetGuard
 from .config import load_channels
 from .notion_client import NotionClient, extract_page_title
 from .pipeline import Pipeline
@@ -29,9 +30,26 @@ def build() -> tuple[Settings, NotionClient, AIClient, StateStore, Pipeline]:
     if not s.openai_ready:
         raise typer.BadParameter('OPENAI_API_KEY is required in .env')
     notion = NotionClient(s.notion_access_token)
-    ai = AIClient(s.openai_api_key, s.text_model, s.qa_model, s.enable_web_research)
+    budget = BudgetGuard(
+        s.openai_budget_ledger,
+        s.openai_monthly_budget_usd,
+        s.openai_budget_baseline_month,
+        s.openai_budget_baseline_usd,
+        s.openai_budget_require_existing_ledger,
+    )
+    ai = AIClient(
+        s.openai_api_key,
+        s.text_model,
+        s.qa_model,
+        s.enable_web_research,
+        budget,
+        s.openai_text_reserve_usd,
+        s.openai_web_text_reserve_usd,
+        s.max_generation_output_tokens,
+        s.max_qa_output_tokens,
+    )
     state = StateStore(s.state_db)
-    return s, notion, ai, state, Pipeline(s, notion, ai, state)
+    return s, notion, ai, state, Pipeline(s, notion, ai, state, budget)
 
 
 @app.command('seed-topics')
@@ -141,7 +159,10 @@ def channel(
 def validate_results(results: list[dict], require_item: bool = False, dry_run: bool = False) -> None:
     if require_item and len(results) != 1:
         raise RuntimeError(f'Expected exactly one Notion item, found {len(results)}')
-    failures = [x for x in results if x.get('status') in {'failed', 'skipped'}]
+    failures = [
+        x for x in results
+        if x.get('status') in {'failed', 'skipped'} or x.get('budget_blocked')
+    ]
     if failures:
         raise RuntimeError(f'Notion processing did not complete: {failures}')
     if require_item and not dry_run and not results[0].get('notion_page_updated'):
@@ -260,6 +281,13 @@ def naver_status():
 def doctor():
     """Check configuration without sending content anywhere."""
     s = Settings()
+    budget = BudgetGuard(
+        s.openai_budget_ledger,
+        s.openai_monthly_budget_usd,
+        s.openai_budget_baseline_month,
+        s.openai_budget_baseline_usd,
+        s.openai_budget_require_existing_ledger,
+    )
     checks = {
         'openai_key_present': bool(s.openai_api_key),
         'notion_token_present': bool(s.notion_access_token),
@@ -267,6 +295,9 @@ def doctor():
         'shorts_data_source_id': s.shorts_data_source_id,
         'media_generation': s.enable_media_generation,
         'auto_private_youtube_upload': s.auto_private_youtube_upload,
+        'image_quality': s.image_quality,
+        'openai_monthly_internal_budget_usd': s.openai_monthly_budget_usd,
+        'openai_budget': budget.snapshot(),
         'youtube_client_secret_exists': s.youtube_client_secrets_file.exists(),
         'youtube_ppojjugi_token_exists': s.youtube_ppojjugi_token_file.exists(),
         'youtube_japan_token_exists': s.youtube_japan_token_file.exists(),

@@ -1,5 +1,15 @@
 name: Hamjju Daily Content Production
 
+env:
+  IMAGE_QUALITY: medium
+  OPENAI_MONTHLY_BUDGET_USD: '22'
+  OPENAI_BUDGET_LEDGER: output/openai-cost-ledger.json
+  OPENAI_BUDGET_REQUIRE_EXISTING_LEDGER: 'true'
+  # The project dashboard showed $0.64 spent when this guard was introduced.
+  # This one-time baseline is ignored automatically after September 2026.
+  OPENAI_BUDGET_BASELINE_MONTH: '2026-09'
+  OPENAI_BUDGET_BASELINE_USD: '0.64'
+
 on:
   schedule:
     # GitHub cron is UTC: 01:00=10:00 KST, 12:00=21:00 KST
@@ -53,6 +63,14 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@v7
+      - name: Restore the cross-run OpenAI budget ledger
+        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'repair_video' && inputs.mode != 'verify_youtube_auth') }}
+        uses: actions/cache@v6
+        with:
+          path: output/openai-cost-ledger.json
+          key: hamjju-openai-budget-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            hamjju-openai-budget-${{ runner.os }}-
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'

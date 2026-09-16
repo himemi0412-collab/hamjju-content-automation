@@ -1,4 +1,6 @@
 from pathlib import Path
+import pytest
+
 from app.naver import save_draft, NaverDraftAutomationUnavailable
 
 
@@ -22,6 +24,11 @@ def test_github_action_schedule_keeps_blog_draft_only_and_uploads_shorts_private
     assert 'actions/checkout@v7' in workflow
     assert 'actions/setup-python@v7' in workflow
     assert 'actions/upload-artifact@v7' in workflow
+    assert 'actions/cache@v6' in workflow
+    assert "OPENAI_MONTHLY_BUDGET_USD: '22'" in workflow
+    assert 'IMAGE_QUALITY: medium' in workflow
+    assert 'output/openai-cost-ledger.json' in workflow
+    assert "OPENAI_BUDGET_REQUIRE_EXISTING_LEDGER: 'true'" in workflow
     assert "cron: '0 1 * * *'" in workflow
     assert "cron: '0 12 * * *'" in workflow
     assert 'ENABLE_MEDIA_GENERATION=false python -m app.main channel naver_blog --limit 3' in workflow
@@ -65,6 +72,40 @@ def test_channel_mismatch_stops_before_youtube_upload(monkeypatch, tmp_path):
     else:
         raise AssertionError('A mismatched YouTube channel must stop the upload')
     assert called['upload'] is False
+
+
+def test_internal_budget_stops_before_youtube_upload(monkeypatch, tmp_path):
+    from datetime import datetime, timezone
+
+    from app.budget import BudgetGuard, BudgetLimitReached
+    from app.pipeline import Pipeline
+    from app.settings import Settings
+
+    called = {'uploader_created': False}
+
+    class FakeUploader:
+        def __init__(self, *_args, **_kwargs):
+            called['uploader_created'] = True
+
+    monkeypatch.setattr('app.pipeline.YouTubePrivateUploader', FakeUploader)
+    month = datetime.now(timezone.utc).strftime('%Y-%m')
+    budget = BudgetGuard(tmp_path / 'ledger.json', 0.5, month, 0.5)
+    pipeline = Pipeline(Settings(), None, None, None, budget)
+
+    with pytest.raises(BudgetLimitReached):
+        pipeline._upload_private('ppojjugi_shorts', {'title': 'test'}, tmp_path / 'video.mp4')
+    assert called['uploader_created'] is False
+
+
+def test_budget_blocked_result_fails_workflow_validation():
+    from app.main import validate_results
+
+    with pytest.raises(RuntimeError, match='did not complete'):
+        validate_results([{
+            'status': '수정 필요',
+            'notion_page_updated': True,
+            'budget_blocked': True,
+        }])
 
 
 def test_dry_run_does_not_print_notion_content():

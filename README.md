@@ -39,6 +39,8 @@
 6. 로컬 기본값은 미디어 생성과 YouTube 업로드가 OFF이고, GitHub의 쇼츠 제작 실행에서만 비공개 업로드를 명시적으로 켭니다.
 7. 블로그 카드뉴스가 정확히 5장이 아니거나 Notion 첨부가 실패하면 성공 상태로 넘기지 않습니다.
 8. OAuth 토큰의 실제 채널 ID가 고정된 삐죽이/일본 채널 ID와 다르면 파일 전송 전에 중단합니다.
+9. GPT Image 2는 `1024x1536` / `medium` 품질로 고정하며, `auto` 품질을 사용하지 않습니다.
+10. 월별 보수적 예상비용 장부가 $22에 도달하기 전에 모든 신규 OpenAI 호출과 YouTube 업로드를 중단합니다. OpenAI 프로젝트의 $25 하드 한도는 최종 방어선입니다.
 
 ## 1. 설치
 
@@ -106,6 +108,17 @@ ENABLE_MEDIA_GENERATION=true
 
 이 기능은 OpenAI 이미지/TTS API 비용이 발생할 수 있습니다.
 
+이미지 품질과 내부 비용 한도 기본값은 다음과 같습니다.
+
+```env
+IMAGE_QUALITY=medium
+OPENAI_MONTHLY_BUDGET_USD=22
+OPENAI_BUDGET_LEDGER=output/openai-cost-ledger.json
+OPENAI_BUDGET_REQUIRE_EXISTING_LEDGER=false
+```
+
+비용 장부는 텍스트 토큰·웹 검색·이미지·TTS를 보수적으로 합산합니다. GitHub Actions는 매 실행마다 이 파일을 캐시에서 복원하고 실행 후 다시 보존하며, 운영 환경에서는 장부가 손상되거나 예상치 않게 사라지면 유료 호출을 진행하지 않습니다. 예상 누계에 다음 호출의 예약 비용을 더했을 때 22달러 이상이면 콘텐츠 생성과 YouTube 업로드를 그 전에 중단합니다. OpenAI 프로젝트의 25달러 한도는 별도의 최종 안전장치입니다.
+
 ## 7. YouTube 비공개 업로드
 
 Google Cloud에서 YouTube Data API OAuth Client를 만든 뒤 JSON 파일을 아래 위치에 둡니다.
@@ -168,6 +181,8 @@ GitHub 저장소의 Actions secrets에 다음 값을 넣습니다.
 - 기본 텍스트 모델은 비용 절감형 `gpt-5.6-luna`입니다.
 - 블로그 카드뉴스는 AI 이미지 생성 대신 로컬 렌더링합니다.
 - 미디어 생성은 명시적으로 켜야만 실행됩니다.
+- 이미지 품질은 `medium`으로 고정하고 이미지 1장당 $0.05, TTS 1편당 $0.03을 보수적으로 예약합니다.
+- 텍스트·웹 검색은 응답 사용량을 기준으로 추정하며, 호출 전 상한을 먼저 예약한 뒤 실제 추정치로 정산합니다.
 
 ## 테스트
 
