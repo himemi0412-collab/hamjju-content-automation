@@ -1,6 +1,9 @@
 name: Hamjju Safe Manual Test
 
 on:
+  push:
+    branches:
+      - main
   # The daily schedule stays disabled until one manual dry run and one reviewed
   # text-only execution have both succeeded.
   workflow_dispatch:
