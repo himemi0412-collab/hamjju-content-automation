@@ -27,6 +27,20 @@ class AIClient:
         response = self.client.responses.create(**kwargs)
         return parse_json(response.output_text), usage_dict(response)
 
+    def research_topics(self, context: dict[str, Any], prompt_path: str | Path = 'prompts/topic_radar.md') -> tuple[dict[str, Any], dict[str, Any]]:
+        system = Path(prompt_path).read_text(encoding='utf-8')
+        kwargs: dict[str, Any] = {
+            'model': self.text_model,
+            'input': [
+                {'role': 'system', 'content': system},
+                {'role': 'user', 'content': '현재 대기열과 요청 수량:\n' + json.dumps(context, ensure_ascii=False, indent=2)},
+            ],
+        }
+        if self.enable_web_research:
+            kwargs['tools'] = [{'type': 'web_search'}]
+        response = self.client.responses.create(**kwargs)
+        return parse_json(response.output_text), usage_dict(response)
+
     def qa(self, generated: dict[str, Any], context: dict[str, Any], qa_prompt: str | Path = 'prompts/qa.md') -> tuple[dict[str, Any], dict[str, Any]]:
         system = Path(qa_prompt).read_text(encoding='utf-8')
         response = self.client.responses.create(
