@@ -61,6 +61,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      issues: write
     steps:
       - uses: actions/checkout@v7
       - name: Restore the cross-run OpenAI budget ledger
@@ -198,3 +199,58 @@ jobs:
           name: hamjju-output-${{ github.run_id }}
           path: output/
           retention-days: 14
+
+      - name: Update mobile status board
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_STATUS: ${{ job.status }}
+          EVENT_NAME: ${{ github.event_name }}
+          SCHEDULE_EXPR: ${{ github.event.schedule }}
+          DISPATCH_MODE: ${{ inputs.mode }}
+          DISPATCH_CHANNEL: ${{ inputs.channel }}
+        run: |
+          if [ "$RUN_STATUS" = "success" ]; then
+            state="✅ 정상 완료"
+          else
+            state="❌ 확인 필요"
+          fi
+
+          if [ "$EVENT_NAME" = "schedule" ] && [ "$SCHEDULE_EXPR" = "0 1 * * *" ]; then
+            task="10:00 KST 블로그 자동 제작"
+          elif [ "$EVENT_NAME" = "schedule" ] && [ "$SCHEDULE_EXPR" = "0 12 * * *" ]; then
+            task="21:00 KST 쇼츠 자동 제작"
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            task="수동 실행: ${DISPATCH_CHANNEL:-미지정} / ${DISPATCH_MODE:-미지정}"
+          elif [ "$EVENT_NAME" = "push" ]; then
+            task="코드 변경 안전성 검사"
+          else
+            task="$EVENT_NAME"
+          fi
+
+          updated_at="$(date -u '+%Y-%m-%d %H:%M UTC')"
+          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+          cat > /tmp/hamjju-status.md <<EOF
+          ## 햄쮸 자동화 운영 상태
+
+          - 현재 상태: **$state**
+          - 마지막 작업: **$task**
+          - 마지막 확인: **$updated_at**
+          - 실행 상세: $run_url
+          - 자동 실행: **매일 10:00 KST 블로그 / 21:00 KST 쇼츠**
+
+          ### 안전장치
+          - 네이버 공개·예약 발행: **안 함**
+          - YouTube 업로드: **비공개만**
+          - OpenAI 내부 월 한도: **\$22**
+          - 실패 시 성공 처리하지 않고 확인 대상으로 남김
+
+          ### 평소 사용법
+          정상일 때는 결과만 확인하면 됩니다. 실패가 표시되면 해당 실행 로그를 기준으로 실패한 부분만 최소 수정합니다.
+
+          _상태판 갱신 실패는 콘텐츠 제작 자체를 실패시키지 않습니다._
+          EOF
+
+          gh issue edit 1 --repo "$GITHUB_REPOSITORY" --body-file /tmp/hamjju-status.md
