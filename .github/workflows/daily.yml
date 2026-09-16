@@ -62,7 +62,7 @@ jobs:
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'false'
           AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
-        run: python -m app.main channel "${{ inputs.channel || 'naver_blog' }}" --dry-run --limit 1 --require-item
+        run: python -m app.main channel "${{ inputs.channel || 'ppojjugi_shorts' }}" --dry-run --limit 1 --require-item
       - name: Process one text item after review
         if: ${{ inputs.mode == 'execute_text' }}
         env:
