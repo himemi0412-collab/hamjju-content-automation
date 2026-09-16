@@ -8,7 +8,13 @@ from typing import Any
 from PIL import Image, ImageDraw, ImageFont
 from openai import OpenAI
 
-PALETTE = ['#F7F8FB', '#E7F1FF', '#EDE9FE', '#FFE8EF', '#DFF7EE']
+PALETTE = [
+    '#F7F8FB', '#E7F1FF', '#EDE9FE', '#FFE8EF', '#DFF7EE',
+    '#E8F5F7', '#F0EAF8', '#F8EAF2', '#E6F2EC', '#E9EEF7',
+    '#F3E8EE', '#E4F0F2', '#ECE8F5', '#F7E9E6', '#E2EFE7',
+    '#E8ECF4', '#F1E7F0', '#E5F1EE', '#EEEAF3', '#E7EDF2',
+    '#F5E8EC', '#E3EFF5', '#EBE7F2', '#E6F3F0',
+]
 TEXT = '#20242C'
 ACCENT = '#5B67D8'
 
@@ -60,7 +66,7 @@ def render_blog_cards(cards: list[dict[str, Any]], out_dir: Path, font_path: str
     font_body = load_font(font_path, 38)
     paths: list[Path] = []
     for i, card in enumerate(cards, 1):
-        bg = PALETTE[(i - 1) % len(PALETTE)]
+        seed = sum(ord(ch) for ch in str(card.get('headline', '')))\n        bg = PALETTE[(seed + i * 7) % len(PALETTE)]
         im = Image.new('RGB', (1080, 1350), bg)
         draw = ImageDraw.Draw(im)
         draw.rounded_rectangle((70, 90, 1010, 1260), radius=44, fill='#FFFFFF')
