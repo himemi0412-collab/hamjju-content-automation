@@ -44,6 +44,16 @@ class Pipeline:
         page_text = self.notion.read_page_text(page_id)
         context = compact_page_context(page, page_text)
         page_title = extract_page_title(page)
+        media_expected = bool(
+            cfg.content_kind == 'shorts'
+            and cfg.media_generation
+            and self.s.enable_media_generation
+        )
+        context['automation_scope'] = {
+            'mode': 'media' if media_expected else 'text_only',
+            'media_expected': media_expected,
+            'youtube_upload_expected': bool(media_expected and self.s.auto_private_youtube_upload),
+        }
         if not page_is_eligible(cfg, context):
             return {'page_id': page_id, 'status': 'skipped', 'reason': 'eligibility_changed'}
         key = f"{page_id}:{page.get('last_edited_time')}:{cfg.name}:v1"
