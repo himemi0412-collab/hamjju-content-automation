@@ -30,7 +30,7 @@ def build() -> tuple[Settings, NotionClient, AIClient, StateStore, Pipeline]:
 
 
 @app.command()
-def run(limit: int | None = None, dry_run: bool = False):
+def run(limit: int | None = None, dry_run: bool = False, require_item: bool = False):
     """Process all three channels using the existing Notion queues."""
     s, notion, _, _, pipeline = build()
     channels = load_channels()
@@ -44,6 +44,7 @@ def run(limit: int | None = None, dry_run: bool = False):
     finally:
         notion.close()
     print_json(all_results)
+    validate_results(all_results, require_item=require_item, dry_run=dry_run)
 
 
 def run_all_channels(pipeline: Pipeline, channels: dict, total_limit: int, dry_run: bool = False):
@@ -60,7 +61,7 @@ def run_all_channels(pipeline: Pipeline, channels: dict, total_limit: int, dry_r
 
 
 @app.command()
-def channel(name: str, limit: int | None = None, dry_run: bool = False):
+def channel(name: str, limit: int | None = None, dry_run: bool = False, require_item: bool = False):
     """Process a single configured channel."""
     s, notion, _, _, pipeline = build()
     channels = load_channels()
@@ -75,6 +76,17 @@ def channel(name: str, limit: int | None = None, dry_run: bool = False):
     finally:
         notion.close()
     print_json(result)
+    validate_results(result, require_item=require_item, dry_run=dry_run)
+
+
+def validate_results(results: list[dict], require_item: bool = False, dry_run: bool = False) -> None:
+    if require_item and len(results) != 1:
+        raise RuntimeError(f'Expected exactly one Notion item, found {len(results)}')
+    failures = [x for x in results if x.get('status') in {'failed', 'skipped'}]
+    if failures:
+        raise RuntimeError(f'Notion processing did not complete: {failures}')
+    if require_item and not dry_run and not results[0].get('notion_page_updated'):
+        raise RuntimeError('Notion page update was not confirmed')
 
 
 @app.command('setup-youtube-auth')
