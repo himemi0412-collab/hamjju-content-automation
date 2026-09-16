@@ -59,7 +59,7 @@ jobs:
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'false'
           AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
-        run: python -m app.main channel "${{ inputs.channel }}" --dry-run --limit 1
+        run: python -m app.main channel "${{ inputs.channel }}" --dry-run --limit 1 --require-item
       - name: Process one text item after review
         if: ${{ inputs.mode == 'execute_text' }}
         env:
@@ -68,7 +68,7 @@ jobs:
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'false'
           AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
-        run: python -m app.main channel "${{ inputs.channel }}" --limit 1
+        run: python -m app.main channel "${{ inputs.channel }}" --limit 1 --require-item
 
       - name: Keep generated files for inspection
         if: always()
