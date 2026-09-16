@@ -8,8 +8,7 @@ on:
   push:
     branches:
       - main
-  # The daily schedule stays disabled until one manual dry run and one reviewed
-  # text-only execution have both succeeded.
+  # Manual dry-run and reviewed text execution remain available for safe checks.
   workflow_dispatch:
     inputs:
       channel:
