@@ -75,6 +75,20 @@ class MediaGenerator:
             )
         else:
             raise ValueError(f'Unknown Shorts image style: {channel_style}')
+        reference_files = {
+            'ppojjugi_shorts': Path('assets/reference/ppijuk_style_board.jpg.b64'),
+            'japan_shorts': Path('assets/reference/japan_style_board.jpg.b64'),
+        }
+        reference_b64 = reference_files[channel_style]
+        if not reference_b64.exists():
+            raise RuntimeError(f'Missing required style reference: {reference_b64}')
+        reference_path = out_dir / '_style_reference.jpg'
+        reference_path.write_bytes(base64.b64decode(reference_b64.read_text(encoding='utf-8').strip()))
+        style_suffix += (
+            ' Use the supplied reference board only for its exact illustration language, line quality, '
+            'color treatment, composition density, character proportions, caption-safe layout, and emotional restraint. '
+            'Create one new coherent scene, not a collage or contact sheet. Do not copy the reference story or any text.'
+        )
         for i, scene in enumerate(scenes, 1):
             prompt = str(scene.get('image_prompt') or scene.get('caption') or '')
             if self.budget:
@@ -83,12 +97,14 @@ class MediaGenerator:
                     self.image_estimated_cost_usd,
                     {'model': self.image_model, 'quality': self.image_quality, 'scene': i},
                 )
-            response = self.client.images.generate(
-                model=self.image_model,
-                prompt=prompt + '\n' + style_suffix,
-                size=image_size,
-                quality=self.image_quality,
-            )
+            with reference_path.open('rb') as reference_image:
+                response = self.client.images.edit(
+                    model=self.image_model,
+                    image=reference_image,
+                    prompt=prompt + '\n' + style_suffix,
+                    size=image_size,
+                    quality=self.image_quality,
+                )
             item = response.data[0]
             b64 = getattr(item, 'b64_json', None)
             if not b64:
