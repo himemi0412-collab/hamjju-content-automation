@@ -85,8 +85,8 @@ jobs:
         run: pip install -r requirements.txt
       - name: Run safety tests
         run: pytest -q
-      - name: Repair the Ppijuk reference-matched caption layout once
-        if: ${{ github.event_name == 'push' && github.event.head_commit.message == 'Repair Ppijuk reference caption layout' }}
+      - name: Finalize both reference-matched Shorts reviews once
+        if: ${{ github.event_name == 'push' && github.event.head_commit.message == 'Finalize reference-matched Shorts reviews' }}
         env:
           GH_TOKEN: ${{ github.token }}
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
@@ -94,6 +94,7 @@ jobs:
         run: |
           gh run download 35189231782 --name hamjju-output-35189231782 --dir recovered
           python -m app.main repair-short-video ppojjugi_shorts 3dd15789-1194-817f-a43b-fec762bf06d1 recovered/3dd157891194817f
+          python -m app.main repair-short-video japan_shorts 3dd15789-1194-81d5-bcd7-f158335092f4 recovered/3dd15789119481d5
 
       - name: Materialize YouTube OAuth files
         if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 12 * * *') || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'execute_media' || inputs.mode == 'produce_daily_shorts' || inputs.mode == 'retry_revision' || inputs.mode == 'verify_youtube_auth')) }}
