@@ -171,15 +171,19 @@ class Pipeline:
         narration_profiles = {
             'ppojjugi_shorts': (
                 self.s.tts_ppojjugi_voice,
-                'Young adult Korean woman. Natural intimate diary voice, slightly tired and introspective, '
-                'warm but restrained. Medium pace with clear Korean pronunciation and short reflective pauses. '
-                'Do not sound like an announcer, advertisement, cartoon, or exaggerated cute character.',
+                'Young adult Korean woman speaking in a soft, dry, intimate diary monologue. '
+                'Low-energy and slightly weary, with restrained emotion, gentle downward sentence endings, '
+                'small natural sighs, and clear but unforced Korean. Keep a steady conversational pace and '
+                'leave roughly half a second of reflective space between thoughts. No bright smile, cute acting, '
+                'announcer projection, advertisement rhythm, or melodrama.',
             ),
             'japan_shorts': (
                 self.s.tts_japan_voice,
-                'Mature Japanese man in his late fifties or sixties. Low, warm, calm storytelling voice, '
-                'restrained emotion and gentle Showa-memory documentary tone. Slow measured pace, clear standard '
-                'Japanese, and natural pauses. No youthful brightness, anime acting, or commercial narration.',
+                'Mature Japanese man with low chest resonance and a quiet documentary storytelling tone. '
+                'Read in natural standard Japanese at a measured pace, with restrained nostalgia, softly falling '
+                'sentence endings, and short pauses of about half a second between clauses. Dialogue quotations '
+                'should shift only subtly, never become theatrical. No youthful brightness, anime acting, '
+                'commercial narration, exaggerated old-man acting, or sentimental overperformance.',
             ),
         }
         if channel_style not in narration_profiles:
