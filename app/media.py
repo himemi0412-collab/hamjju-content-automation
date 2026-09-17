@@ -336,9 +336,14 @@ def compose_short_video(images: list[Path], scenes: list[dict[str, Any]], audio:
             f"Alignment=2,MarginV=110'"
         )
     total_duration = sum(max(float(scene.get('seconds') or 5), 1.0) for scene in scenes)
+    audio_filter = (
+        'loudnorm=I=-16:TP=-1.5:LRA=11,apad'
+        if channel_style == 'ppojjugi_shorts'
+        else 'loudnorm=I=-19:TP=-2:LRA=11,apad'
+    )
     subprocess.run([
         'ffmpeg','-y','-loglevel','error','-i',str(silent),'-i',str(audio),
-        '-vf',vf,'-af','apad','-t',str(total_duration),
+        '-vf',vf,'-af',audio_filter,'-t',str(total_duration),
         '-c:v','libx264','-crf','28','-preset','medium','-c:a','aac','-b:a','128k',
         '-movflags','+faststart',str(out_path)
     ], check=True)
