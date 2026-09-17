@@ -121,3 +121,22 @@ def test_blog_success_requires_five_cards_and_notion_attachment():
     assert "if len(card_news) != 5:" in pipeline
     assert "if len(cards) != 5:" in pipeline
     assert "raise RuntimeError('Failed to attach all blog card-news images to Notion')" in pipeline
+
+
+def test_shorts_master_video_guides_are_enforced_in_prompts_and_composer():
+    ppojjugi = Path('prompts/ppojjugi.md').read_text(encoding='utf-8')
+    japan = Path('prompts/japan_shorts.md').read_text(encoding='utf-8')
+    qa = Path('prompts/qa.md').read_text(encoding='utf-8')
+    media = Path('app/media.py').read_text(encoding='utf-8')
+    pipeline = Path('app/pipeline.py').read_text(encoding='utf-8')
+
+    assert '삐죽이 쇼츠 영상.mp4' in ppojjugi
+    assert '흐린 전체 화면 배경' in ppojjugi
+    assert "'삐죽이의 오늘'" in media
+    assert 'PPOJJUGI_REFERENCE_LAYOUT' in media
+    assert '일본 쇼츠 영상.mp4' in japan
+    assert '첫 장면 상단' in japan
+    assert 'JAPAN_REFERENCE_LAYOUT' in media
+    assert 'channel_style=channel_style' in pipeline
+    assert '마스터 가이드' in qa
+    assert "ImageOps.fit(source, (1080, 1920)" in media
