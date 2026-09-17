@@ -137,6 +137,9 @@ def test_shorts_master_video_guides_are_enforced_in_prompts_and_composer():
     assert '일본 쇼츠 영상.mp4' in japan
     assert '첫 장면 상단' in japan
     assert 'JAPAN_REFERENCE_LAYOUT' in media
+    assert '20대 여성·60~70대 여성·20대 남성·60~70대 남성' in japan
+    assert '한 편 안에서는 선택한 단일 화자를 끝까지 유지' in japan
+    assert 'docs/japan_voice_reference.md' in japan
     assert 'channel_style=channel_style' in pipeline
     assert '마스터 가이드' in qa
     assert "ImageOps.fit(source, (1080, 1920)" in media
