@@ -85,11 +85,11 @@ jobs:
         run: pip install -r requirements.txt
       - name: Run safety tests
         run: pytest -q
-      - name: Generate reference-matched Shorts previews once
+      - name: Generate reference-matched Shorts previews once (v2)
         if: ${{ github.event_name == 'push' && github.event.head_commit.message == 'Generate reference-matched Shorts previews' }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: python scripts/reference_preview.py
+        run: python -m scripts.reference_preview
 
       - name: Materialize YouTube OAuth files
         if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 12 * * *') || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'execute_media' || inputs.mode == 'produce_daily_shorts' || inputs.mode == 'retry_revision' || inputs.mode == 'verify_youtube_auth')) }}
