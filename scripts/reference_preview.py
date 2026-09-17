@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 from app.media import MediaGenerator
 from app.settings import Settings
@@ -32,7 +33,8 @@ def main() -> None:
             settings.card_font_path,
             settings.image_quality,
         )
-        media.generate_scene_images([{'image_prompt': prompt, 'caption': ''}], out / 'images', channel)
+        if os.getenv('VOICE_ONLY') != '1':
+            media.generate_scene_images([{'image_prompt': prompt, 'caption': ''}], out / 'images', channel)
         media.generate_tts(text, out / 'voice.mp3', instructions=instructions)
 
 
