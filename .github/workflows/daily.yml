@@ -85,7 +85,7 @@ jobs:
         run: pip install -r requirements.txt
       - name: Run safety tests
         run: pytest -q
-      - name: Regenerate the two reference-matched Shorts reviews once
+      - name: Regenerate the two reference-matched Shorts reviews once (v2)
         if: ${{ github.event_name == 'push' && github.event.head_commit.message == 'Regenerate reference-matched Shorts reviews' }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
