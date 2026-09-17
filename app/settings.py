@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', extra='ignore')
 
     openai_api_key: str = ''
+    fal_key: str = ''
     notion_access_token: str = ''
     blog_data_source_id: str = '21a60556-f086-4b7a-96b3-81995c77edef'
     shorts_data_source_id: str = 'e7ad07b7-0652-4747-956d-e7b071d4bde9'
@@ -14,10 +15,13 @@ class Settings(BaseSettings):
     qa_model: str = 'gpt-5.6-luna'
     image_model: str = 'gpt-image-2'
     image_quality: str = 'medium'
-    tts_model: str = 'gpt-4o-mini-tts'
-    tts_voice: str = 'coral'
-    tts_ppojjugi_voice: str = 'coral'
-    tts_japan_voice: str = 'cedar'
+    tts_model: str = 'fal-ai/gemini-3.1-flash-tts'
+    tts_voice: str = 'Aoede'
+    tts_ppojjugi_voice: str = 'Aoede'
+    tts_japan_voice: str = 'Gacrux'
+    fal_tts_temperature: float = 1.1
+    fal_tts_ppojjugi_language: str = 'Korean (South Korea)'
+    fal_tts_japan_language: str = 'Japanese (Japan)'
 
     openai_monthly_budget_usd: float = 22.0
     openai_budget_ledger: Path = Path('output/openai-cost-ledger.json')

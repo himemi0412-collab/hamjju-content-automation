@@ -3,10 +3,12 @@ import base64
 import json
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 from openai import OpenAI
+import httpx
 
 from .budget import BudgetGuard
 
@@ -37,6 +39,9 @@ class MediaGenerator:
         budget: BudgetGuard | None = None,
         image_estimated_cost_usd: float = 0.05,
         tts_estimated_cost_usd: float = 0.03,
+        fal_key: str = '',
+        tts_language_code: str | None = None,
+        tts_temperature: float = 1.1,
     ):
         self.client = OpenAI(api_key=api_key)
         self.image_model = image_model
@@ -47,6 +52,9 @@ class MediaGenerator:
         self.budget = budget
         self.image_estimated_cost_usd = image_estimated_cost_usd
         self.tts_estimated_cost_usd = tts_estimated_cost_usd
+        self.fal_key = fal_key
+        self.tts_language_code = tts_language_code
+        self.tts_temperature = tts_temperature
 
     def generate_scene_images(
         self,
@@ -130,14 +138,69 @@ class MediaGenerator:
                 self.tts_estimated_cost_usd if estimated_cost_usd is None else estimated_cost_usd,
                 {'model': self.tts_model, 'characters': len(text)},
             )
-        with self.client.audio.speech.with_streaming_response.create(
-            model=self.tts_model,
-            voice=self.voice,
-            input=text,
-            instructions=instructions,
-        ) as response:
-            response.stream_to_file(out_path)
+        if self.tts_model.startswith('fal-ai/'):
+            self._generate_fal_tts(text, out_path, instructions)
+        else:
+            with self.client.audio.speech.with_streaming_response.create(
+                model=self.tts_model,
+                voice=self.voice,
+                input=text,
+                instructions=instructions,
+            ) as response:
+                response.stream_to_file(out_path)
         return out_path
+
+    def _generate_fal_tts(self, text: str, out_path: Path, instructions: str) -> None:
+        if not self.fal_key:
+            raise RuntimeError('FAL_KEY is required for the approved Shorts TTS endpoint')
+        output_format = out_path.suffix.lower().lstrip('.')
+        if output_format not in {'wav', 'mp3', 'ogg_opus'}:
+            output_format = 'mp3'
+        headers = {'Authorization': f'Key {self.fal_key}', 'Content-Type': 'application/json'}
+        payload = {
+            'prompt': text,
+            'style_instructions': instructions,
+            'voice': self.voice,
+            'language_code': self.tts_language_code,
+            'temperature': self.tts_temperature,
+            'output_format': output_format,
+        }
+        submit_url = f'https://queue.fal.run/{self.tts_model}'
+        with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+            try:
+                submitted = client.post(submit_url, headers=headers, json=payload)
+                submitted.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code in {401, 402, 403}:
+                    raise RuntimeError(
+                        'Fal TTS authorization or billing identity failed. Verify the connected Fal account, '
+                        'FAL_KEY account, and billing account match before treating this as insufficient credit.'
+                    ) from exc
+                raise
+            job = submitted.json()
+            status_url = job['status_url']
+            response_url = job['response_url']
+            deadline = time.monotonic() + 240
+            while True:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(
+                        f'Fal TTS request {job.get("request_id", "unknown")} timed out; do not resubmit '
+                        'until this request ID is checked.'
+                    )
+                status = client.get(status_url, headers=headers)
+                status.raise_for_status()
+                state = status.json().get('status')
+                if state == 'COMPLETED':
+                    break
+                if state not in {'IN_QUEUE', 'IN_PROGRESS'}:
+                    raise RuntimeError(f'Unexpected Fal TTS queue state: {state!r}')
+                time.sleep(1.0)
+            result_response = client.get(response_url, headers=headers)
+            result_response.raise_for_status()
+            audio_url = result_response.json()['audio']['url']
+            audio_response = client.get(audio_url)
+            audio_response.raise_for_status()
+            out_path.write_bytes(audio_response.content)
 
 
 def probe_media_duration(path: Path) -> float:

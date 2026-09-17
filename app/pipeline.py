@@ -179,11 +179,10 @@ class Pipeline:
             ),
             'japan_shorts': (
                 self.s.tts_japan_voice,
-                'Mature Japanese man with low chest resonance and a quiet documentary storytelling tone. '
-                'Read in natural standard Japanese at a measured pace, with restrained nostalgia, softly falling '
-                'sentence endings, and short pauses of about half a second between clauses. Dialogue quotations '
-                'should shift only subtly, never become theatrical. No youthful brightness, anime acting, '
-                'commercial narration, exaggerated old-man acting, or sentimental overperformance.',
+                'Japanese woman in her 60s or 70s recalling an old memory with warmth, nostalgia, a little sadness, '
+                'and quiet acceptance. Read in natural standard Japanese at a measured, human pace, with softly '
+                'falling sentence endings and short reflective pauses. No mechanical TTS, broadcast narration, '
+                'advertising tone, anime acting, or theatrical overperformance.',
             ),
         }
         if channel_style not in narration_profiles:
@@ -199,6 +198,13 @@ class Pipeline:
             self.budget,
             self.s.openai_image_estimated_cost_usd,
             self.s.openai_tts_estimated_cost_usd,
+            self.s.fal_key,
+            (
+                self.s.fal_tts_ppojjugi_language
+                if channel_style == 'ppojjugi_shorts'
+                else self.s.fal_tts_japan_language
+            ),
+            self.s.fal_tts_temperature,
         )
         scenes = generated.get('scenes') or []
         if not scenes:

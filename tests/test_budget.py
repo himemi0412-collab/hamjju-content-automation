@@ -91,3 +91,62 @@ def test_image_generation_is_pinned_to_medium(monkeypatch, tmp_path):
     assert len(paths) == 1
     assert calls[0]['quality'] == 'medium'
     assert calls[0]['size'] == '1024x1536'
+
+
+def test_fal_tts_uses_approved_single_speaker_settings(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeResponse:
+        def __init__(self, payload=None, content=b'voice'):
+            self._payload = payload or {}
+            self.content = content
+            self.status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._payload
+
+    class FakeClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def post(self, url, headers, json):
+            calls.append((url, headers, json))
+            return FakeResponse({
+                'request_id': 'request-1',
+                'status_url': 'https://queue.fal.run/status',
+                'response_url': 'https://queue.fal.run/response',
+            })
+
+        def get(self, url, headers=None):
+            if url.endswith('/status'):
+                return FakeResponse({'status': 'COMPLETED'})
+            if url.endswith('/response'):
+                return FakeResponse({'audio': {'url': 'https://cdn.example/voice.wav'}})
+            return FakeResponse(content=b'voice')
+
+    monkeypatch.setattr('app.media.httpx.Client', FakeClient)
+    media = MediaGenerator(
+        'openai-key', 'gpt-image-2', 'fal-ai/gemini-3.1-flash-tts', 'Aoede',
+        fal_key='fal-key', tts_language_code='Korean (South Korea)', tts_temperature=1.1,
+    )
+    output = media.generate_tts('안녕하세요.', tmp_path / 'voice.wav', instructions='친구처럼 말한다.')
+
+    assert output.read_bytes() == b'voice'
+    assert calls[0][0] == 'https://queue.fal.run/fal-ai/gemini-3.1-flash-tts'
+    assert calls[0][2] == {
+        'prompt': '안녕하세요.',
+        'style_instructions': '친구처럼 말한다.',
+        'voice': 'Aoede',
+        'language_code': 'Korean (South Korea)',
+        'temperature': 1.1,
+        'output_format': 'wav',
+    }

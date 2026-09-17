@@ -106,7 +106,12 @@ python -m app.main run --limit 1
 ENABLE_MEDIA_GENERATION=true
 ```
 
-이 기능은 OpenAI 이미지/TTS API 비용이 발생할 수 있습니다.
+이 기능은 OpenAI 이미지 API와 Fal TTS 비용이 발생할 수 있습니다. 쇼츠 음성은
+`fal-ai/gemini-3.1-flash-tts`만 사용하며, 삐죽이는 `Aoede` 한국어 1인 화자,
+일본 쇼츠는 `Gacrux` 일본어 60~70대 여성 1인 화자로 고정합니다. temperature는
+둘 다 `1.1`입니다. 한 편 안에서 나레이션과 캐릭터 목소리를 임의로 나누거나 서로
+다른 음성 소스를 섞지 않습니다. Fal 오류가 나면 동일 요청을 다시 과금하기 전에
+요청 ID를 확인하고, 연결 계정·`FAL_KEY` 계정·결제 계정의 일치 여부를 먼저 점검합니다.
 
 이미지 품질과 내부 비용 한도 기본값은 다음과 같습니다.
 

@@ -314,6 +314,10 @@ def doctor():
     )
     checks = {
         'openai_key_present': bool(s.openai_api_key),
+        'fal_key_present': bool(s.fal_key),
+        'tts_model': s.tts_model,
+        'tts_ppojjugi_voice': s.tts_ppojjugi_voice,
+        'tts_japan_voice': s.tts_japan_voice,
         'notion_token_present': bool(s.notion_access_token),
         'blog_data_source_id': s.blog_data_source_id,
         'shorts_data_source_id': s.shorts_data_source_id,
