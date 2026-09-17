@@ -52,7 +52,7 @@ class MediaGenerator:
         self,
         scenes: list[dict[str, Any]],
         out_dir: Path,
-        channel_style: str,
+        channel_style: str = 'japan_shorts',
     ) -> list[Path]:
         out_dir.mkdir(parents=True, exist_ok=True)
         paths: list[Path] = []
