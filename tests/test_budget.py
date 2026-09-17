@@ -78,7 +78,7 @@ def test_image_generation_is_pinned_to_medium(monkeypatch, tmp_path):
     calls = []
 
     class FakeImages:
-        def generate(self, **kwargs):
+        def edit(self, **kwargs):
             calls.append(kwargs)
             return SimpleNamespace(data=[SimpleNamespace(b64_json=base64.b64encode(b'image').decode())])
 
