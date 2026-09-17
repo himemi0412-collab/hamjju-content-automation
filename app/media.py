@@ -252,8 +252,19 @@ def prepare_short_frames(
                 if index == 1 and hook.strip():
                     draw = ImageDraw.Draw(canvas)
                     hook_text = hook.strip()
-                    if len(hook_text) > 22:
-                        hook_text = hook_text[:22] + '\n' + hook_text[22:44]
+                    hook_lines: list[str] = []
+                    current = ''
+                    for ch in hook_text:
+                        trial = current + ch
+                        box = draw.textbbox((0, 0), trial, font=hook_font)
+                        if box[2] - box[0] > 900 and current:
+                            hook_lines.append(current)
+                            current = ch
+                        else:
+                            current = trial
+                    if current:
+                        hook_lines.append(current)
+                    hook_text = '\n'.join(hook_lines[:3])
                     draw.multiline_text((540, 150), hook_text, font=hook_font, fill='#FFFFFF',
                                         stroke_width=4, stroke_fill='#30323A', anchor='ma',
                                         align='center', spacing=12)
@@ -296,8 +307,17 @@ def compose_short_video(images: list[Path], scenes: list[dict[str, Any]], audio:
     subprocess.run(['ffmpeg','-y','-loglevel','error','-f','concat','-safe','0','-i',str(concat),'-c','copy',str(silent)], check=True)
 
     escaped = str(srt.resolve()).replace('\\', '/').replace(':', '\\:').replace("'", "\\'")
-    margin_v = 300 if channel_style == 'ppojjugi_shorts' else 110
-    vf = f"subtitles='{escaped}':force_style='FontSize=18,Outline=2,Shadow=0,Alignment=2,MarginV={margin_v}'"
+    if channel_style == 'ppojjugi_shorts':
+        margin_v = 700
+        subtitle_font = 'Noto Sans CJK KR'
+    else:
+        margin_v = 110
+        subtitle_font = 'Noto Sans CJK JP'
+    vf = (
+        f"subtitles='{escaped}':"
+        f"force_style='FontName={subtitle_font},FontSize=18,Outline=2,Shadow=0,"
+        f"Alignment=2,MarginV={margin_v}'"
+    )
     total_duration = sum(max(float(scene.get('seconds') or 5), 1.0) for scene in scenes)
     subprocess.run([
         'ffmpeg','-y','-loglevel','error','-i',str(silent),'-i',str(audio),
