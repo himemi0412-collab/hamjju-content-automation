@@ -85,6 +85,7 @@ jobs:
         run: pip install -r requirements.txt
       - name: Run safety tests
         run: pytest -q
+      # One-time reference-locked Ppijuk regeneration.
       - name: Regenerate corrected Ppijuk Short from the approved reference once
         if: ${{ github.event_name == 'push' && github.event.head_commit.message == 'Regenerate corrected Ppijuk Short from approved reference' }}
         env:
