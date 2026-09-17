@@ -140,3 +140,7 @@ def test_shorts_master_video_guides_are_enforced_in_prompts_and_composer():
     assert 'channel_style=channel_style' in pipeline
     assert '마스터 가이드' in qa
     assert "ImageOps.fit(source, (1080, 1920)" in media
+    assert '"narration": "이 장면에서 들릴 내레이션"' in ppojjugi
+    assert '"narration": "この場面で実際に流れるナレーション"' in japan
+    assert 'concat_scene_audio' in media
+    assert "'scene_durations': durations" in pipeline
