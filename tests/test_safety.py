@@ -24,7 +24,8 @@ def test_github_action_schedule_keeps_all_publication_and_upload_disabled():
     assert 'actions/checkout@v7' in workflow
     assert 'actions/setup-python@v7' in workflow
     assert 'actions/upload-artifact@v7' in workflow
-    assert 'actions/cache@v6' in workflow
+    assert 'actions/cache/restore@v6' in workflow
+    assert 'actions/cache/save@v6' in workflow
     assert "OPENAI_MONTHLY_BUDGET_USD: '22'" in workflow
     assert 'IMAGE_QUALITY: medium' in workflow
     assert 'output/openai-cost-ledger.json' in workflow

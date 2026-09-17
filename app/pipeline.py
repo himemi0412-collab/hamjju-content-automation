@@ -1,8 +1,11 @@
 from __future__ import annotations
+import hashlib
 import json
-from datetime import datetime, timezone
+import logging
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
+import httpx
 
 from .ai import AIClient
 from .budget import BudgetGuard
@@ -23,6 +26,9 @@ class Pipeline:
         state: StateStore,
         budget: BudgetGuard | None = None,
     ):
+        # httpx INFO includes full request URLs; Notion files use signed URLs.
+        for logger_name in ('httpx', 'httpcore'):
+            logging.getLogger(logger_name).setLevel(logging.WARNING)
         self.s = settings
         self.notion = notion
         self.ai = ai
@@ -48,6 +54,14 @@ class Pipeline:
         return results
 
     def process_page(self, cfg: ChannelConfig, page_stub: dict[str, Any], dry_run: bool = False) -> dict[str, Any]:
+        # Read/claim failures belong to this item, not to every remaining item.
+        try:
+            result = self._process_page(cfg, page_stub, dry_run=dry_run)
+        except Exception as exc:
+            result = {'page_id': page_stub.get('id'), 'status': 'failed', 'error': repr(exc)}
+        return {'channel': cfg.name, **result}
+
+    def _process_page(self, cfg: ChannelConfig, page_stub: dict[str, Any], dry_run: bool = False) -> dict[str, Any]:
         page_id = page_stub['id']
         page = self.notion.retrieve_page(page_id)
         page_text = self.notion.read_page_text(page_id)
@@ -59,6 +73,7 @@ class Pipeline:
             and self.s.enable_media_generation
         )
         context['automation_scope'] = {
+            'current_date_kst': datetime.now(timezone(timedelta(hours=9))).date().isoformat(),
             'mode': 'media' if media_expected else 'text_only',
             'media_expected': media_expected,
             'youtube_upload_expected': bool(media_expected and self.s.auto_private_youtube_upload),
@@ -81,12 +96,12 @@ class Pipeline:
             }
 
         self.state.start(key, page_id, cfg.name)
-        self.notion.update_status(page_id, cfg.processing_status)
         try:
+            self.notion.update_status(page_id, cfg.processing_status)
             use_web = cfg.name in {'naver_blog', 'japan_shorts'}
             generated, gen_usage = self.ai.generate(cfg.prompt_file, context, use_web=use_web)
             qa, qa_usage = self.ai.qa(generated, {'channel': cfg.name, **context})
-            passed = bool(qa.get('pass')) and not qa.get('blocking_issues')
+            passed = qa.get('pass') is True and not qa.get('blocking_issues')
 
             job_dir = self.s.output_dir / page_id.replace('-', '')[:16]
             job_dir.mkdir(parents=True, exist_ok=True)
@@ -110,6 +125,16 @@ class Pipeline:
                 if len(cards) != 5:
                     raise RuntimeError('Blog card-news render did not produce exactly five images')
                 media['cards'] = [str(x) for x in cards]
+                manifest['text_qa'] = qa
+                qa, image_qa_usage = self.ai.qa(generated, {
+                    'channel': cfg.name, **context,
+                    'automation_scope': {'mode': 'blog_cards', 'stage': 'rendered_cards', 'media_expected': True},
+                }, image_paths=cards)
+                passed = qa.get('pass') is True and not qa.get('blocking_issues')
+                media['rendered_card_qa_pass'] = passed
+                manifest['qa'] = qa
+                manifest['usage']['rendered_card_qa'] = image_qa_usage
+                save_manifest(job_dir / 'manifest.json', manifest)
                 try:
                     self.notion.attach_files(page_id, '생성 이미지', cards)
                     media['notion_cards_attached'] = True
@@ -142,20 +167,31 @@ class Pipeline:
                             'YouTube 비공개 주소': {'url': media['youtube_url']},
                         })
 
-            self.notion.append_blocks(page_id, result_blocks(cfg.name, generated, qa))
+            blocks = result_blocks(cfg.name, generated, qa)
+            self.notion.append_blocks(page_id, blocks)
             final_status = cfg.success_status if passed else cfg.revision_status
             if media.get('budget_blocked'):
                 final_status = cfg.revision_status
             if passed and media.get('youtube_url'):
                 final_status = '비공개 업로드 완료'
             self.notion.update_status(page_id, final_status)
-            self.state.finish(key, 'success', json.dumps({'final_status': final_status, 'media': media}, ensure_ascii=False))
+            output_verified = False
+            if cfg.content_kind == 'blog':
+                observation = self._verify_blog_output(page_id, page_title, final_status, blocks, [Path(x) for x in media.get('cards', [])])
+                save_manifest(job_dir / 'notion-readback.json', observation)
+                output_verified = True
+            complete = passed and not media.get('budget_blocked')
+            manifest.update({'media': media, 'final_status': final_status, 'output_verified': output_verified})
+            manifest['budget'] = self.budget.snapshot() if self.budget else None
+            save_manifest(job_dir / 'manifest.json', manifest)
+            self.state.finish(key, 'success' if complete else 'revision_required', json.dumps({'final_status': final_status, 'media': media}, ensure_ascii=False))
             return {
                 'page_id': page_id,
                 'title': page_title,
                 'status': final_status,
                 'qa_pass': passed,
                 'notion_page_updated': True,
+                'output_verified': output_verified,
                 'budget_blocked': bool(media.get('budget_blocked')),
                 'media': media,
             }
@@ -166,6 +202,39 @@ class Pipeline:
                 pass
             self.state.finish(key, 'failed', repr(exc))
             return {'page_id': page_id, 'title': page_title, 'status': 'failed', 'error': repr(exc)}
+
+    def _verify_blog_output(self, page_id: str, page_title: str, status: str, expected_blocks: list[dict[str, Any]], cards: list[Path]) -> dict[str, Any]:
+        page = self.notion.retrieve_page(page_id)
+        observed_blocks = self.notion.read_page_blocks(page_id)
+        expected = [block_signature(block) for block in expected_blocks]
+        observed = [block_signature(block) for block in observed_blocks[-len(expected):]]
+        if extract_page_title(page) != page_title:
+            raise RuntimeError('Notion read-back title changed during production')
+        if compact_page_context(page, '').get('properties', {}).get('상태') != status:
+            raise RuntimeError('Notion read-back status did not match the saved result')
+        if expected != observed:
+            raise RuntimeError('Notion read-back body blocks did not match the complete generated result')
+        files = page.get('properties', {}).get('생성 이미지', {}).get('files', [])
+        if cards and [f.get('name') for f in files] != [p.name for p in cards]:
+            raise RuntimeError('Notion read-back card count/order did not match all five images')
+        hashes = []
+        for file, path in zip(files, cards):
+            url = file.get(file.get('type', ''), {}).get('url')
+            if not url:
+                raise RuntimeError('Notion read-back card URL is unavailable')
+            try:
+                response = httpx.get(url, follow_redirects=True, timeout=60)
+                response.raise_for_status()
+            except Exception:
+                # Signed asset URLs must never enter durable logs.
+                raise RuntimeError('Notion read-back card download failed') from None
+            digest = hashlib.sha256(response.content).hexdigest()
+            if digest != hashlib.sha256(path.read_bytes()).hexdigest():
+                raise RuntimeError('Notion read-back image bytes did not match the rendered original')
+            hashes.append({'name': path.name, 'sha256': digest})
+        return {'page_id': page_id, 'title': page_title, 'status': status,
+                'body_blocks_verified': len(expected), 'cards_verified': hashes,
+                'verified_at': datetime.now(timezone.utc).isoformat(), 'naver_draft_verified': False}
 
     def _make_short_media(self, generated: dict[str, Any], job_dir: Path, channel_style: str) -> dict[str, Any]:
         narration_profiles = {
@@ -273,6 +342,12 @@ class Pipeline:
             description=str(meta.get('description') or ''),
             tags=list(meta.get('tags') or []),
         )
+
+
+def block_signature(block: dict[str, Any]) -> tuple[str, str]:
+    kind = block.get('type', '')
+    rich_text = block.get(kind, {}).get('rich_text', [])
+    return kind, ''.join(item.get('plain_text', item.get('text', {}).get('content', '')) for item in rich_text)
 
 
 def page_is_eligible(cfg: ChannelConfig, context: dict[str, Any]) -> bool:

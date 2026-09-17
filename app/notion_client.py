@@ -81,6 +81,8 @@ class NotionClient:
             '상태': {'select': {'name': '작성 요청'}},
             '선별 상태': {'select': {'name': '추천'}},
             '모델 확인': {'select': {'name': '공식 확인'}},
+            # The Notion queue formula treats an empty source order as archived.
+            '원본 순서': {'number': order},
             '진행 순서': {'number': order},
             '글 유형': {'select': {'name': '가전제품·인터넷 렌탈'}},
             '세부 주제': {'select': {'name': str(topic.get('detail_topic') or '기타')}},
@@ -125,6 +127,23 @@ class NotionClient:
         r = self.client.get(f'/pages/{page_id}')
         r.raise_for_status()
         return r.json()
+
+    def read_page_blocks(self, page_id: str) -> list[dict[str, Any]]:
+        blocks: list[dict[str, Any]] = []
+        cursor = None
+        while True:
+            params: dict[str, Any] = {'page_size': 100}
+            if cursor:
+                params['start_cursor'] = cursor
+            response = self.client.get(f'/blocks/{page_id}/children', params=params)
+            response.raise_for_status()
+            data = response.json()
+            blocks.extend(data.get('results', []))
+            if not data.get('has_more'):
+                return blocks
+            cursor = data.get('next_cursor')
+            if not cursor:
+                raise RuntimeError('Notion block pagination did not return a cursor')
 
     def read_page_text(self, page_id: str, max_chars: int = 18000) -> str:
         out: list[str] = []

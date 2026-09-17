@@ -37,6 +37,7 @@ on:
         options:
           - dry_run
           - execute_text
+          - recover_blog
           - execute_media
           - produce_daily_shorts
           - retry_revision
@@ -48,7 +49,7 @@ on:
         required: false
         type: string
       page_id:
-        description: Notion page ID used only for repair_video
+        description: Exact existing Notion page ID for recover_blog, regenerate_review, or repair_video
         required: false
         type: string
 
@@ -67,12 +68,20 @@ jobs:
       - uses: actions/checkout@v7
       - name: Restore the cross-run OpenAI budget ledger
         if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'repair_video' && inputs.mode != 'verify_youtube_auth') }}
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: output/openai-cost-ledger.json
           key: hamjju-openai-budget-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             hamjju-openai-budget-${{ runner.os }}-
+      - name: Restore processing checkpoints
+        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth') }}
+        uses: actions/cache/restore@v6
+        with:
+          path: output/state.db
+          key: hamjju-processing-state-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            hamjju-processing-state-${{ runner.os }}-
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
@@ -135,6 +144,19 @@ jobs:
           AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
         run: python -m app.main channel "${{ inputs.channel }}" --limit 1 --require-item
 
+      - name: Recover one existing blog without creating new topics
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'recover_blog' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
+          ENABLE_WEB_RESEARCH: 'true'
+          ENABLE_MEDIA_GENERATION: 'false'
+          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
+          RECOVERY_PAGE_ID: ${{ inputs.page_id }}
+        run: |
+          test -n "$RECOVERY_PAGE_ID"
+          python -m app.main page naver_blog "$RECOVERY_PAGE_ID"
+
       - name: Produce today's two reviewed Shorts
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'produce_daily_shorts' }}
         env:
@@ -145,9 +167,11 @@ jobs:
           ENABLE_MEDIA_GENERATION: 'true'
           AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
         run: |
-          python -m app.main seed-topics --blog-count 0 --ppojjugi-count 1 --japan-count 1
-          python -m app.main channel ppojjugi_shorts --limit 1
-          python -m app.main channel japan_shorts --limit 1
+          result=0
+          python -m app.main seed-topics --blog-count 0 --ppojjugi-count 1 --japan-count 1 || result=1
+          python -m app.main channel ppojjugi_shorts --limit 1 || result=1
+          python -m app.main channel japan_shorts --limit 1 || result=1
+          exit "$result"
 
       - name: Retry one QA revision with reviewed media generation
         if: ${{ inputs.mode == 'retry_revision' && inputs.channel != 'naver_blog' }}
@@ -202,14 +226,40 @@ jobs:
           ENABLE_WEB_RESEARCH: 'true'
           AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
         run: |
+          result=0
           if [ "${{ github.event.schedule }}" = "0 1 * * *" ]; then
-            python -m app.main seed-topics --blog-count 3 --ppojjugi-count 0 --japan-count 0
-            ENABLE_MEDIA_GENERATION=false python -m app.main channel naver_blog --limit 3
+            python -m app.main seed-topics --blog-count 3 --ppojjugi-count 0 --japan-count 0 || result=1
+            ENABLE_MEDIA_GENERATION=false python -m app.main channel naver_blog --limit 3 || result=1
           else
-            python -m app.main seed-topics --blog-count 0 --ppojjugi-count 1 --japan-count 1
-            ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=false python -m app.main channel ppojjugi_shorts --limit 1
-            ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=false python -m app.main channel japan_shorts --limit 1
+            python -m app.main seed-topics --blog-count 0 --ppojjugi-count 1 --japan-count 1 || result=1
+            ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=false python -m app.main channel ppojjugi_shorts --limit 1 || result=1
+            ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=false python -m app.main channel japan_shorts --limit 1 || result=1
           fi
+          exit "$result"
+
+      - name: Save charged budget even when production fails
+        if: ${{ always() && hashFiles('output/openai-cost-ledger.json') != '' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'repair_video' && inputs.mode != 'verify_youtube_auth')) }}
+        uses: actions/cache/save@v6
+        with:
+          path: output/openai-cost-ledger.json
+          key: hamjju-openai-budget-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Save processing checkpoints even when one item fails
+        if: ${{ always() && hashFiles('output/state.db') != '' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth')) }}
+        uses: actions/cache/save@v6
+        with:
+          path: output/state.db
+          key: hamjju-processing-state-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Summarize actual production evidence
+        if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth')) }}
+        env:
+          RUN_STATUS: ${{ job.status }}
+          EVENT_NAME: ${{ github.event_name }}
+          SCHEDULE_EXPR: ${{ github.event.schedule }}
+          DISPATCH_MODE: ${{ inputs.mode }}
+          DISPATCH_CHANNEL: ${{ inputs.channel }}
+        run: python -m app.run_report
 
       - name: Keep generated files for inspection
         if: always()
@@ -219,57 +269,11 @@ jobs:
           path: output/
           retention-days: 14
 
-      - name: Update mobile status board
-        if: always()
+      - name: Update production status board
+        if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth')) }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_STATUS: ${{ job.status }}
-          EVENT_NAME: ${{ github.event_name }}
-          SCHEDULE_EXPR: ${{ github.event.schedule }}
-          DISPATCH_MODE: ${{ inputs.mode }}
-          DISPATCH_CHANNEL: ${{ inputs.channel }}
         run: |
-          if [ "$RUN_STATUS" = "success" ]; then
-            state="✅ 정상 완료"
-          else
-            state="❌ 확인 필요"
-          fi
-
-          if [ "$EVENT_NAME" = "schedule" ] && [ "$SCHEDULE_EXPR" = "0 1 * * *" ]; then
-            task="10:00 KST 블로그 자동 제작"
-          elif [ "$EVENT_NAME" = "schedule" ] && [ "$SCHEDULE_EXPR" = "0 12 * * *" ]; then
-            task="21:00 KST 쇼츠 자동 제작"
-          elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            task="수동 실행: ${DISPATCH_CHANNEL:-미지정} / ${DISPATCH_MODE:-미지정}"
-          elif [ "$EVENT_NAME" = "push" ]; then
-            task="코드 변경 안전성 검사"
-          else
-            task="$EVENT_NAME"
-          fi
-
-          updated_at="$(date -u '+%Y-%m-%d %H:%M UTC')"
-          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-
-          cat > /tmp/hamjju-status.md <<EOF
-          ## 햄쮸 자동화 운영 상태
-
-          - 현재 상태: **$state**
-          - 마지막 작업: **$task**
-          - 마지막 확인: **$updated_at**
-          - 실행 상세: $run_url
-          - 자동 실행: **매일 10:00 KST 블로그 / 21:00 KST 쇼츠**
-
-          ### 안전장치
-          - 네이버 공개·예약 발행: **안 함**
-          - YouTube 업로드: **비공개만**
-          - OpenAI 내부 월 한도: **\$22**
-          - 실패 시 성공 처리하지 않고 확인 대상으로 남김
-
-          ### 평소 사용법
-          정상일 때는 결과만 확인하면 됩니다. 실패가 표시되면 해당 실행 로그를 기준으로 실패한 부분만 최소 수정합니다.
-
-          _상태판 갱신 실패는 콘텐츠 제작 자체를 실패시키지 않습니다._
-          EOF
-
-          gh issue edit 1 --repo "$GITHUB_REPOSITORY" --body-file /tmp/hamjju-status.md
+          test -f output/production-summary.md
+          gh issue edit 1 --repo "$GITHUB_REPOSITORY" --body-file output/production-summary.md

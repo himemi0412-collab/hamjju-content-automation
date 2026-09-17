@@ -1,4 +1,5 @@
 from __future__ import annotations
+import base64
 import json
 import re
 from pathlib import Path
@@ -61,16 +62,27 @@ class AIClient:
         response = self._create_response(kwargs, 'topic_research', bool(kwargs.get('tools')))
         return parse_json(response.output_text), usage_dict(response)
 
-    def qa(self, generated: dict[str, Any], context: dict[str, Any], qa_prompt: str | Path = 'prompts/qa.md') -> tuple[dict[str, Any], dict[str, Any]]:
+    def qa(self, generated: dict[str, Any], context: dict[str, Any], qa_prompt: str | Path = 'prompts/qa.md', image_paths: list[Path] | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
         system = Path(qa_prompt).read_text(encoding='utf-8')
+        content: list[dict[str, Any]] = [{
+            'type': 'input_text',
+            'text': json.dumps({'source_context': context, 'generated': generated}, ensure_ascii=False),
+        }]
+        for index, path in enumerate(image_paths or [], 1):
+            content.append({'type': 'input_text', 'text': f'실제 렌더링 카드 {index}: {path.name}'})
+            content.append({
+                'type': 'input_image',
+                'image_url': 'data:image/png;base64,' + base64.b64encode(path.read_bytes()).decode('ascii'),
+                'detail': 'high',
+            })
         response = self._create_response({
             'model': self.qa_model,
             'max_output_tokens': self.max_qa_output_tokens,
             'input': [
                 {'role': 'system', 'content': system},
-                {'role': 'user', 'content': json.dumps({'source_context': context, 'generated': generated}, ensure_ascii=False)},
+                {'role': 'user', 'content': content},
             ],
-        }, 'qa', False)
+        }, 'rendered_card_qa' if image_paths else 'qa', False)
         return parse_json(response.output_text), usage_dict(response)
 
     def _create_response(self, kwargs: dict[str, Any], category: str, uses_web: bool):

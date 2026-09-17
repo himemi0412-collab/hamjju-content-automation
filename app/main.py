@@ -18,6 +18,7 @@ from .youtube import YouTubePrivateUploader
 from .naver import explain as naver_explain
 from .media import compose_short_video
 from .notion_client import property_value
+from .run_report import record_results
 
 app = typer.Typer(help='햄쮸 블로그·쇼츠 자동화')
 
@@ -57,6 +58,13 @@ def seed_topics(blog_count: int = 3, ppojjugi_count: int = 1, japan_count: int =
     """Research fresh topics, save them to Notion, and mark verified items ready."""
     s, notion, ai, _, _ = build()
     try:
+        # Fill the existing ready queue rather than adding another three topics
+        # every morning while older unprocessed topics are still waiting.
+        requested_blog_count = max(blog_count, 0)
+        blog_count = missing_blog_topics(notion, s.blog_data_source_id, requested_blog_count)
+        if not any((blog_count, max(ppojjugi_count, 0), max(japan_count, 0))):
+            print_json({'blog': [], 'ppojjugi': [], 'japan': [], 'reason': 'ready_backlog_sufficient'})
+            return
         blog_pages = notion.query_recent(s.blog_data_source_id, 100)
         short_pages = notion.query_recent(s.shorts_data_source_id, 100)
         existing_blog = [extract_page_title(x) for x in blog_pages]
@@ -97,6 +105,22 @@ def normalize_title(value) -> str:
     return ''.join(str(value or '').lower().split())
 
 
+def missing_blog_topics(notion: NotionClient, data_source_id: str, target: int) -> int:
+    if target <= 0:
+        return 0
+    cfg = load_channels()['naver_blog']
+    ready = notion.query_ready(
+        data_source_id, cfg.ready_status, cfg.notion_channel_value,
+        page_size=target,
+        excluded_formula_property=cfg.excluded_formula_property,
+        excluded_formula_value=cfg.excluded_formula_value,
+        required_select_values=cfg.required_select_values,
+        required_number_greater_than=cfg.required_number_greater_than,
+        sort_property=cfg.sort_property,
+    )
+    return max(target - len(ready), 0)
+
+
 @app.command()
 def run(limit: int | None = None, dry_run: bool = False, require_item: bool = False):
     """Process all three channels using the existing Notion queues."""
@@ -112,7 +136,10 @@ def run(limit: int | None = None, dry_run: bool = False, require_item: bool = Fa
     finally:
         notion.close()
     print_json(all_results)
-    validate_results(all_results, require_item=require_item, dry_run=dry_run)
+    expected = limit if limit is not None else s.max_jobs_per_run
+    if not dry_run:
+        record_results(s.output_dir, 'all_channels', all_results, expected)
+    validate_results(all_results, require_item=require_item, dry_run=dry_run, expected_count=expected)
 
 
 def run_all_channels(pipeline: Pipeline, channels: dict, total_limit: int, dry_run: bool = False):
@@ -122,7 +149,10 @@ def run_all_channels(pipeline: Pipeline, channels: dict, total_limit: int, dry_r
     for name in ('naver_blog', 'ppojjugi_shorts', 'japan_shorts'):
         if remaining == 0:
             break
-        batch = pipeline.run_channel(channels[name], limit=remaining, dry_run=dry_run)
+        try:
+            batch = pipeline.run_channel(channels[name], limit=remaining, dry_run=dry_run)
+        except Exception as exc:
+            batch = [{'channel': name, 'status': 'failed', 'error': repr(exc)}]
         all_results += batch
         remaining -= len(batch)
     return all_results
@@ -150,10 +180,15 @@ def channel(
             limit=limit if limit is not None else s.max_jobs_per_run,
             dry_run=dry_run,
         )
+    except Exception as exc:
+        result = [{'channel': name, 'status': 'failed', 'error': repr(exc)}]
     finally:
         notion.close()
     print_json(result)
-    validate_results(result, require_item=require_item, dry_run=dry_run)
+    expected = limit if limit is not None else s.max_jobs_per_run
+    if not dry_run:
+        record_results(s.output_dir, name, result, expected)
+    validate_results(result, require_item=require_item, dry_run=dry_run, expected_count=expected)
 
 
 @app.command('page')
@@ -169,23 +204,38 @@ def process_exact_page(name: str, page_id: str, retry_revision: bool = False):
     try:
         page = notion.retrieve_page(page_id)
         result = [pipeline.process_page(cfg, page)]
+    except Exception as exc:
+        result = [{'page_id': page_id, 'channel': name, 'status': 'failed', 'error': repr(exc)}]
     finally:
         notion.close()
     print_json(result)
+    record_results(s.output_dir, name, result, 1)
     validate_results(result, require_item=True, dry_run=False)
 
 
-def validate_results(results: list[dict], require_item: bool = False, dry_run: bool = False) -> None:
+def validate_results(
+    results: list[dict], require_item: bool = False, dry_run: bool = False,
+    expected_count: int | None = None,
+) -> None:
     if require_item and len(results) != 1:
         raise RuntimeError(f'Expected exactly one Notion item, found {len(results)}')
+    if not dry_run and not results:
+        raise RuntimeError('Production did not complete: no Notion items were processed')
     failures = [
         x for x in results
-        if x.get('status') in {'failed', 'skipped'} or x.get('budget_blocked')
+        if x.get('status') in {'failed', 'skipped', '수정 필요'}
+        or x.get('budget_blocked') or x.get('qa_pass') is False
     ]
     if failures:
         raise RuntimeError(f'Notion processing did not complete: {failures}')
-    if require_item and not dry_run and not results[0].get('notion_page_updated'):
+    if not dry_run and any(not x.get('notion_page_updated') for x in results):
         raise RuntimeError('Notion page update was not confirmed')
+    if not dry_run and any(x.get('qa_pass') is not True for x in results):
+        raise RuntimeError('Independent QA pass was not confirmed')
+    if not dry_run and any(x.get('channel') == 'naver_blog' and x.get('output_verified') is not True for x in results):
+        raise RuntimeError('Blog output read-back verification was not confirmed')
+    if not dry_run and expected_count is not None and len(results) < expected_count:
+        raise RuntimeError(f'Production incomplete: expected {expected_count} items, processed {len(results)}')
 
 
 @app.command('setup-youtube-auth')

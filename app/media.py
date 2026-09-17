@@ -232,27 +232,181 @@ def concat_scene_audio(parts: list[Path], out_path: Path) -> tuple[Path, list[fl
 
 
 def render_blog_cards(cards: list[dict[str, Any]], out_dir: Path, font_path: str | None = None) -> list[Path]:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    cards = cards[:5]
-    if not cards:
-        return []
-    font_big = load_font(font_path, 64)
-    font_body = load_font(font_path, 38)
-    paths: list[Path] = []
+    """Typeset five original explanatory diagrams; never invent product photos.
+
+    All text is measured before files are saved. A missing structure or overflow
+    is a production failure, not permission to drop content or shrink it away.
+    """
+    layouts = ('cover', 'flow', 'comparison', 'checklist', 'decision')
+    if len(cards) != 5:
+        raise ValueError('Blog card set must contain exactly five cards')
+    rendered: list[Image.Image] = []
+    # Rotate a restrained topic palette, while keeping a coherent set.
+    palette_sets = [
+        ('#B8E4D8', '#F6C3A5', '#B9C4EE', '#294B46'),
+        ('#F3B2C6', '#A9D8DC', '#D9E3A6', '#49394C'),
+        ('#B9D7F3', '#C9B8E8', '#F7A6A6', '#293F57'),
+    ]
+    palette = palette_sets[sum(map(ord, str(cards[0].get('headline', '')))) % len(palette_sets)]
+    primary, secondary, tertiary, ink = palette
     for i, card in enumerate(cards, 1):
-        seed = sum(ord(ch) for ch in str(card.get('headline', '')))
-        bg = PALETTE[(seed + i * 7) % len(PALETTE)]
-        im = Image.new('RGB', (1080, 1350), bg)
+        layout = card.get('layout')
+        if layout != layouts[i - 1] or card.get('card') != i:
+            raise ValueError(f'Card {i} must use layout={layouts[i - 1]} and matching card number')
+        headline = _blog_required_text(card.get('headline'), f'card {i} headline')
+        copy = _blog_required_text(card.get('copy'), f'card {i} copy')
+        illustration = card.get('illustration')
+        if illustration not in {'bubbles', 'laundry', 'wifi', 'document'}:
+            raise ValueError(f'Card {i} has an unsupported explanatory illustration')
+        items = card.get('items')
+        minimum, maximum = {'cover': (2, 2), 'flow': (3, 3), 'comparison': (2, 2),
+                            'checklist': (3, 4), 'decision': (3, 3)}[layout]
+        if not isinstance(items, list) or not minimum <= len(items) <= maximum:
+            raise ValueError(f'Card {i} {layout} requires {minimum}..{maximum} structured items')
+        for item in items:
+            if not isinstance(item, dict):
+                raise ValueError(f'Card {i} item must contain label and detail')
+            _blog_required_text(item.get('label'), f'card {i} item label')
+            _blog_required_text(item.get('detail'), f'card {i} item detail')
+        im = Image.new('RGB', (1080, 1080), '#FFFFFF')
         draw = ImageDraw.Draw(im)
-        draw.rounded_rectangle((70, 90, 1010, 1260), radius=44, fill='#FFFFFF')
-        draw.rounded_rectangle((90, 115, 230, 185), radius=28, fill=ACCENT)
-        draw.text((160, 150), f'{i}/5', font=font_body, fill='#FFFFFF', anchor='mm')
-        draw_multiline(draw, str(card.get('headline', '')), (110, 245), 820, font_big, TEXT, spacing=16)
-        draw_multiline(draw, str(card.get('copy', '')), (110, 560), 840, font_body, TEXT, spacing=14)
+        role = ('질문 하나', '원리 살펴보기', '같은 기준으로 비교', '실행 전 체크', '선택 기준 정리')[i - 1]
+        draw.rounded_rectangle((62, 48, 390, 102), radius=20, fill=primary)
+        _blog_text(draw, role, (84, 60, 370, 92), font_path, 25, ink, 1)
+        _blog_text(draw, f'{i:02d} / 05', (868, 60, 1018, 92), font_path, 25, ink, 1)
+        _blog_text(draw, headline, (62, 140, 1018, 292), font_path, 64, ink, 2, title=True)
+        _blog_text(draw, copy, (64, 306, 1016, 396), font_path, 33, ink, 2)
+
+        if layout == 'cover':
+            draw.ellipse((312, 418, 768, 822), fill=primary)
+            _blog_symbol(draw, illustration, (540, 610), 245, ink, '#FFFFFF')
+            for j, item in enumerate(items):
+                x = 64 + j * 500
+                draw.rounded_rectangle((x, 824, x + 452, 984), radius=24, fill=(secondary, tertiary)[j])
+                _blog_text(draw, item['label'], (x + 24, 846, x + 428, 892), font_path, 34, ink, 1, title=True)
+                _blog_text(draw, item['detail'], (x + 24, 907, x + 428, 970), font_path, 27, ink, 2)
+        elif layout == 'flow':
+            for j, item in enumerate(items):
+                y = 438 + j * 181
+                color = (primary, secondary, tertiary)[j]
+                draw.ellipse((66, y + 15, 164, y + 113), fill=color)
+                _blog_text(draw, str(j + 1), (99, y + 34, 143, y + 92), font_path, 43, ink, 1, title=True)
+                draw.line((196, y + 18, 196, y + 132), fill=color, width=8)
+                _blog_text(draw, item['label'], (224, y + 2, 998, y + 53), font_path, 39, ink, 1, title=True)
+                _blog_text(draw, item['detail'], (224, y + 67, 998, y + 144), font_path, 30, ink, 2)
+                if j < 2:
+                    _blog_arrow(draw, (115, y + 132), (115, y + 169), ink)
+        elif layout == 'comparison':
+            for j, item in enumerate(items):
+                x = 64 + j * 500
+                color = (primary, secondary)[j]
+                draw.rounded_rectangle((x, 436, x + 452, 970), radius=28, fill=color)
+                _blog_text(draw, item['label'], (x + 26, 466, x + 426, 570), font_path, 42, ink, 2, title=True)
+                # Two columns share the same visual and scale: no invented
+                # better/worse score or unverified product appearance.
+                _blog_symbol(draw, illustration, (x + 226, 651), 117, ink, '#FFFFFF')
+                _blog_text(draw, item['detail'], (x + 30, 749, x + 422, 944), font_path, 31, ink, 5)
+        elif layout == 'checklist':
+            height = 132 if len(items) == 4 else 173
+            for j, item in enumerate(items):
+                y = 426 + j * height
+                draw.rounded_rectangle((64, y + 9, 133, y + 78), radius=16, fill=primary)
+                draw.line([(83, y + 40), (98, y + 55), (117, y + 30)], fill=ink, width=6)
+                _blog_text(draw, item['label'], (164, y + 4, 1005, y + 48), font_path, 34, ink, 1, title=True)
+                _blog_text(draw, item['detail'], (164, y + 59, 1005, y + height - 5), font_path, 28, ink, 2)
+                if j < len(items) - 1:
+                    draw.line((165, y + height - 4, 1007, y + height - 4), fill=tertiary, width=2)
+        else:  # decision: three labeled stops on a reading path.
+            draw.line((107, 486, 107, 883), fill=primary, width=12)
+            for j, item in enumerate(items):
+                y = 429 + j * 180
+                draw.ellipse((76, y + 20, 138, y + 82), fill=(primary, secondary, tertiary)[j], outline=ink, width=3)
+                _blog_text(draw, str(j + 1), (95, y + 30, 127, y + 71), font_path, 29, ink, 1)
+                _blog_text(draw, item['label'], (178, y + 1, 1009, y + 54), font_path, 40, ink, 1, title=True)
+                _blog_text(draw, item['detail'], (178, y + 71, 1009, y + 144), font_path, 30, ink, 2)
+        draw.line((64, 1012, 1016, 1012), fill=ink, width=2)
+        _blog_text(draw, '이해를 돕는 설명 도식 · 실제 제품 사진 아님', (64, 1030, 1016, 1065), font_path, 22, ink, 1)
+        rendered.append(im)
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    paths: list[Path] = []
+    for i, im in enumerate(rendered, 1):
         path = out_dir / f'card_{i:02d}.png'
-        im.save(path, quality=95)
+        im.save(path)
         paths.append(path)
     return paths
+
+
+def _blog_required_text(value: Any, field: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f'Missing {field}')
+    return value.strip()
+
+
+def _blog_text(draw, text, box, font_path, size, fill, max_lines, title=False):
+    bundled = Path(__file__).resolve().parents[1] / 'assets/fonts/Cafe24Ssurround-v2.0/Cafe24Ssurround-v2.0.ttf'
+    font = load_font(str(bundled) if title and bundled.exists() else font_path, size)
+    if not isinstance(font, ImageFont.FreeTypeFont):
+        raise ValueError('A readable Korean TrueType/OpenType font is required for blog cards')
+    left, top, right, bottom = box
+    lines: list[str] = []
+    current = ''
+    for ch in str(text):
+        if ch == '\n':
+            lines.append(current)
+            current = ''
+        elif draw.textlength(current + ch, font=font) > right - left:
+            if not current:
+                raise ValueError('Blog card text character exceeds its available width')
+            word_boundary = current.rfind(' ')
+            if word_boundary > 0:
+                lines.append(current[:word_boundary])
+                current = current[word_boundary + 1:] + ch
+            else:
+                lines.append(current)
+                current = ch
+        else:
+            current += ch
+    if current:
+        lines.append(current)
+    line_height = size + 9
+    if len(lines) > max_lines or len(lines) * line_height - 9 > bottom - top:
+        raise ValueError(f'Blog card text overflow ({max_lines} lines allowed): {text!r}')
+    for line_index, line in enumerate(lines):
+        draw.text((left, top + line_index * line_height), line, font=font, fill=fill, anchor='lt')
+
+
+def _blog_arrow(draw, start, end, color):
+    draw.line((start, end), fill=color, width=5)
+    x, y = end
+    draw.line(((x - 10, y - 10), (x, y), (x + 10, y - 10)), fill=color, width=5)
+
+
+def _blog_symbol(draw, symbol, center, size, ink, paper):
+    """Original abstract explanatory marks, not drawings of particular models."""
+    x, y = center
+    r = size / 2
+    if symbol == 'bubbles':
+        for dx, dy, radius in ((-0.55, 0.2, 0.58), (0.35, 0.35, 0.7), (-0.04, -0.55, 0.65), (0.81, -0.55, 0.25)):
+            cx, cy, rr = x + dx * r, y + dy * r, r * radius
+            draw.ellipse((cx - rr, cy - rr, cx + rr, cy + rr), fill=paper, outline=ink, width=5)
+            draw.arc((cx - rr * .6, cy - rr * .6, cx + rr * .6, cy + rr * .6), 195, 260, fill=ink, width=3)
+    elif symbol == 'wifi':
+        for scale in (.5, .82, 1.14):
+            rr = r * scale
+            draw.arc((x - rr, y - rr, x + rr, y + rr), 214, 326, fill=ink, width=9)
+        draw.ellipse((x - 11, y - 3, x + 11, y + 19), fill=ink)
+        # A wall boundary explains coverage without pretending to show a router.
+        draw.line((x + r * 1.45, y - r, x + r * 1.45, y + r * .8), fill=ink, width=8)
+    elif symbol == 'laundry':
+        draw.rounded_rectangle((x - r, y - r * .7, x + r, y + r * .7), radius=18, fill=paper, outline=ink, width=5)
+        for dx in (-.48, 0, .48):
+            draw.line((x + dx * r, y - r * .65, x + dx * r, y + r * .65), fill=ink, width=3)
+        draw.line((x - r * .92, y + r * .35, x + r * .9, y + r * .35), fill=ink, width=3)
+    else:
+        draw.rounded_rectangle((x - r * .7, y - r, x + r * .7, y + r), radius=12, fill=paper, outline=ink, width=5)
+        for dy in (-.48, 0, .48):
+            draw.line((x - r * .4, y + r * dy, x + r * .4, y + r * dy), fill=ink, width=5)
 
 
 def load_font(font_path: str | None, size: int):
