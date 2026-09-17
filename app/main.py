@@ -156,6 +156,25 @@ def channel(
     validate_results(result, require_item=require_item, dry_run=dry_run)
 
 
+@app.command('page')
+def process_exact_page(name: str, page_id: str, retry_revision: bool = False):
+    """Process one exact Notion page without selecting another queue item."""
+    s, notion, _, _, pipeline = build()
+    channels = load_channels()
+    if name not in channels:
+        raise typer.BadParameter(f'Unknown channel: {name}')
+    cfg = channels[name]
+    if retry_revision:
+        cfg = replace(cfg, ready_status=cfg.revision_status)
+    try:
+        page = notion.retrieve_page(page_id)
+        result = [pipeline.process_page(cfg, page)]
+    finally:
+        notion.close()
+    print_json(result)
+    validate_results(result, require_item=True, dry_run=False)
+
+
 def validate_results(results: list[dict], require_item: bool = False, dry_run: bool = False) -> None:
     if require_item and len(results) != 1:
         raise RuntimeError(f'Expected exactly one Notion item, found {len(results)}')
