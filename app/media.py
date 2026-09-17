@@ -74,12 +74,12 @@ class MediaGenerator:
             paths.append(path)
         return paths
 
-    def generate_tts(self, text: str, out_path: Path) -> Path:
+    def generate_tts(self, text: str, out_path: Path, estimated_cost_usd: float | None = None) -> Path:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         if self.budget:
             self.budget.reserve(
                 'tts_generation',
-                self.tts_estimated_cost_usd,
+                self.tts_estimated_cost_usd if estimated_cost_usd is None else estimated_cost_usd,
                 {'model': self.tts_model, 'characters': len(text)},
             )
         with self.client.audio.speech.with_streaming_response.create(
@@ -89,6 +89,34 @@ class MediaGenerator:
         ) as response:
             response.stream_to_file(out_path)
         return out_path
+
+
+def probe_media_duration(path: Path) -> float:
+    if not shutil.which('ffprobe'):
+        raise RuntimeError('ffprobe is required for narration timing')
+    result = subprocess.run([
+        'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+        '-of', 'default=noprint_wrappers=1:nokey=1', str(path),
+    ], check=True, capture_output=True, text=True)
+    duration = float(result.stdout.strip())
+    if duration <= 0:
+        raise RuntimeError(f'Invalid media duration: {path}')
+    return duration
+
+
+def concat_scene_audio(parts: list[Path], out_path: Path) -> tuple[Path, list[float]]:
+    if not parts:
+        raise ValueError('At least one scene narration file is required')
+    if not shutil.which('ffmpeg'):
+        raise RuntimeError('ffmpeg is required for narration timing')
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    concat_file = out_path.parent / 'narration_concat.txt'
+    concat_file.write_text(''.join(f"file '{part.resolve().as_posix()}'\\n" for part in parts), encoding='utf-8')
+    subprocess.run([
+        'ffmpeg', '-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0',
+        '-i', str(concat_file), '-c:a', 'libmp3lame', '-b:a', '192k', str(out_path),
+    ], check=True)
+    return out_path, [probe_media_duration(part) for part in parts]
 
 
 def render_blog_cards(cards: list[dict[str, Any]], out_dir: Path, font_path: str | None = None) -> list[Path]:
