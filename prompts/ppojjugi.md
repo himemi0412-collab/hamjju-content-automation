@@ -30,7 +30,8 @@
 음성·영상:
 - narration은 자연스럽고 담백한 한국어 구어체로 작성한다.
 - 장면은 5~7개로 구성하고 화면 변화가 이야기 흐름과 일치하게 한다.
-- caption은 짧고 읽기 쉽게 작성하며 narration의 의미와 어긋나지 않게 한다.
+- 각 scene에 그 화면에서 실제로 들릴 narration 구간을 넣는다. scene narration을 순서대로 이어 붙이면 전체 narration과 의미·문장 순서가 정확히 같아야 한다.
+- caption은 해당 scene narration의 핵심만 짧게 요약하고 서로 어긋나지 않게 한다.
 
 반드시 JSON 하나만 출력한다.
 스키마:
@@ -39,7 +40,7 @@
   "hook": "",
   "narration": "전체 내레이션",
   "scenes": [
-    {"scene": 1, "seconds": 7, "caption": "", "image_prompt": ""}
+    {"scene": 1, "seconds": 7, "narration": "이 장면에서 들릴 내레이션", "caption": "", "image_prompt": ""}
   ],
   "youtube": {"title": "", "description": "", "tags": []},
   "fact_check_notes": [],
