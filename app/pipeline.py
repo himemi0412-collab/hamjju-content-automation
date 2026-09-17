@@ -15,6 +15,7 @@ from .notion_client import NotionClient, compact_page_context, extract_page_titl
 from .settings import Settings
 from .state import StateStore
 from .youtube import YouTubePrivateUploader
+from .manuscript_repair import apply_reviewed_corrections, manuscript_hash
 
 
 class Pipeline:
@@ -116,6 +117,9 @@ class Pipeline:
             use_web = cfg.name in {'naver_blog', 'japan_shorts'}
             if previous:
                 generated = previous['generated']
+                corrections = Path('repairs') / f'{page_id}.json'
+                if corrections.exists():
+                    generated = apply_reviewed_corrections(generated, page_id, corrections)
                 gen_usage = {'reused_from_manifest': True}
             else:
                 generated, gen_usage = self.ai.generate(cfg.prompt_file, context, use_web=use_web)
@@ -136,6 +140,7 @@ class Pipeline:
                 'usage': {'generation': gen_usage, 'qa': qa_usage},
                 'budget': self.budget.snapshot() if self.budget else None,
                 'created_at': datetime.now(timezone.utc).isoformat(),
+                'manuscript_sha256': manuscript_hash(generated),
             }
             save_manifest(job_dir / 'manifest.json', manifest)
 

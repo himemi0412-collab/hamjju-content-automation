@@ -1,0 +1,22 @@
+{
+  "page_id": "3de15789-1194-8109-996e-cd744b29ea76",
+  "source_sha256": "f26b794592a4692e7e73f7749f69ac763c1a4794daae7f979d8df024e61cc7ac",
+  "reason": "Independent review: direct official citation and remove unsupported leakage location. Re-run full image/manuscript QA afterward.",
+  "replacements": [
+    {
+      "old": "https://www.samsung.com/sec/dishwashers/all-dishwashers/",
+      "new": "https://www.samsungsvc.co.kr/solution/1152286",
+      "expected_count": 5
+    },
+    {
+      "old": "삼성전자 식기세척기 공식 안내",
+      "new": "삼성전자서비스: 세척 또는 헹굼 후 거품 안내",
+      "expected_count": 1
+    },
+    {
+      "old": "오히려 물살과 세제가 제대로 작동하지 못하고, 거품이 문틈이나 배수 주변으로 넘칠 가능성이 커집니다.",
+      "new": "일반 주방용 세제로 과다 거품이 생기면 세척 효과가 낮아지거나 누수로 이어질 수 있습니다.",
+      "expected_count": 1
+    }
+  ]
+}
