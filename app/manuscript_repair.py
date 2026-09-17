@@ -12,6 +12,8 @@ def manuscript_hash(generated: dict) -> str:
 
 def apply_reviewed_corrections(generated: dict, page_id: str, path: Path) -> dict:
     plan = json.loads(path.read_text(encoding='utf-8'))
+    if plan.get('page_id') == page_id and plan.get('target_sha256') == manuscript_hash(generated):
+        return generated
     if plan.get('page_id') != page_id or plan.get('source_sha256') != manuscript_hash(generated):
         raise ValueError('Reviewed corrections do not match the exact source manuscript')
     output = generated

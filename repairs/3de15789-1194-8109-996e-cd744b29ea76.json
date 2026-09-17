@@ -18,5 +18,29 @@
       "new": "일반 주방용 세제로 과다 거품이 생기면 세척 효과가 낮아지거나 누수로 이어질 수 있습니다.",
       "expected_count": 1
     }
-  ]
+  ],
+  "attached_cards": [
+    {
+      "name": "card_01.png",
+      "sha256": "abc6e0930c23a42c7420f8134ade642eea1e9bfcc0bef508a696aa026b0a54d8"
+    },
+    {
+      "name": "card_02.png",
+      "sha256": "3890cd4eaef3fb0df9690c59a402447a4ae45fec867c0ac24e07190f061b0032"
+    },
+    {
+      "name": "card_03.png",
+      "sha256": "5e5ef9ea625bc4a0c404d2ae84e5b3543acda69b5e1edc93c36e9f5f97d92656"
+    },
+    {
+      "name": "card_04.png",
+      "sha256": "cb9c57f90d2fa298f83b22eff0ad179e7a6268561296f505af27a971df5c9e39"
+    },
+    {
+      "name": "card_05.png",
+      "sha256": "8919e32e1e6aec25f234e37fe175dec33439d25461069ac5f94ea442e1c3deb0"
+    }
+  ],
+  "target_sha256": "60f8682155583b4584b0e6b5facfb9c0c35a763ad0e5212a289a6ec7be1f41ec",
+  "attachment_evidence_run_id": 35257184453
 }

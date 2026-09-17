@@ -182,8 +182,11 @@ class NotionClient:
             r.raise_for_status()
 
     def archive_blocks(self, block_ids: list[str]) -> None:
+        """Move specified blocks to recoverable Notion Trash, not permanent deletion."""
         for block_id in block_ids:
-            response = self.client.patch(f'/blocks/{block_id}', json={'archived': True})
+            # Notion 2026-03-11 uses DELETE for this reversible operation.
+            # PATCH archived=true is rejected by the block update endpoint.
+            response = self.client.delete(f'/blocks/{block_id}')
             response.raise_for_status()
 
     def upload_small_file(self, path: Path) -> str:

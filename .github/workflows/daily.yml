@@ -68,7 +68,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Restore the cross-run OpenAI budget ledger
-        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'repair_video' && inputs.mode != 'verify_youtube_auth') }}
         uses: actions/cache/restore@v6
         with:
           path: output/openai-cost-ledger.json

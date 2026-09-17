@@ -57,10 +57,10 @@ class BudgetGuard:
 
     def _load(self) -> dict[str, Any]:
         if not self.path.exists():
-            if self.require_existing and self.baseline_month != self.month:
+            if self.require_existing:
                 raise RuntimeError(
                     'OpenAI budget ledger is missing; paid API calls are blocked until '
-                    'a current-month baseline is configured'
+                    'the existing ledger is restored and verified'
                 )
             data = self._new_ledger()
             self._save(data)

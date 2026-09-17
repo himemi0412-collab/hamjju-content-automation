@@ -19,12 +19,12 @@ def test_budget_ledger_persists_settled_estimate_and_resets_next_month(tmp_path)
     guard.settle(event_id, 0.1)
     assert guard.snapshot()['estimated_spend_usd'] == 0.3
 
-    restored = BudgetGuard(ledger, 1.0, now=september)
+    restored = BudgetGuard(ledger, 1.0, require_existing=True, now=september)
     assert restored.snapshot()['estimated_spend_usd'] == 0.3
     with pytest.raises(BudgetLimitReached):
         restored.reserve('image', 0.7)
 
-    october = BudgetGuard(ledger, 1.0, '2026-09', 0.2, now=datetime(2026, 10, 1, tzinfo=timezone.utc))
+    october = BudgetGuard(ledger, 1.0, '2026-09', 0.2, require_existing=True, now=datetime(2026, 10, 1, tzinfo=timezone.utc))
     assert october.snapshot()['estimated_spend_usd'] == 0.0
 
 
@@ -35,28 +35,38 @@ def test_corrupt_budget_ledger_fails_closed(tmp_path):
         BudgetGuard(ledger, 22.0)
 
 
-def test_missing_required_ledger_fails_closed_without_current_month_baseline(tmp_path):
+@pytest.mark.parametrize('baseline_month', ['', '2026-08', '2026-09'])
+def test_missing_required_ledger_fails_closed_even_with_current_month_baseline(tmp_path, baseline_month):
+    ledger = tmp_path / 'ledger.json'
     with pytest.raises(RuntimeError, match='budget ledger is missing'):
         BudgetGuard(
-            tmp_path / 'ledger.json',
+            ledger,
             22.0,
-            baseline_month='2026-08',
-            baseline_usd=0.0,
+            baseline_month=baseline_month,
+            baseline_usd=0.64,
             require_existing=True,
             now=datetime(2026, 9, 17, tzinfo=timezone.utc),
         )
+    assert not ledger.exists()
 
 
-def test_current_month_baseline_can_bootstrap_required_ledger(tmp_path):
+def test_explicit_nonproduction_bootstrap_then_required_restore_preserves_spend(tmp_path):
+    ledger = tmp_path / 'ledger.json'
     guard = BudgetGuard(
-        tmp_path / 'ledger.json',
+        ledger,
         22.0,
         baseline_month='2026-09',
         baseline_usd=0.64,
-        require_existing=True,
+        require_existing=False,
         now=datetime(2026, 9, 17, tzinfo=timezone.utc),
     )
     assert guard.snapshot()['estimated_spend_usd'] == 0.64
+    guard.reserve('already_charged_work', 1.0)
+    restored = BudgetGuard(
+        ledger, 22.0, baseline_month='2026-09', baseline_usd=0.64,
+        require_existing=True, now=datetime(2026, 9, 18, tzinfo=timezone.utc),
+    )
+    assert restored.snapshot()['estimated_spend_usd'] == 1.64
 
 
 def test_text_cost_estimate_counts_tokens_and_web_search():

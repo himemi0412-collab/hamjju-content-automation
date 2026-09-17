@@ -92,7 +92,14 @@ class Pipeline:
             self._match_prior_blog_blocks(page_id, previous)
             expected_names = [Path(p).name for p in previous.get('media', {}).get('cards', [])]
             if [f.get('name') for f in prior_files] != expected_names:
-                raise RuntimeError('MANUAL_EDIT_CONFLICT: attached files differ from the previous automation output')
+                # An upload may have completed before the body replacement failed.
+                # Reconcile only a reviewed receipt bound to this exact manuscript,
+                # checking downloaded bytes, never filenames alone.
+                receipt_path = Path('repairs') / f'{page_id}.json'
+                receipt = json.loads(receipt_path.read_text(encoding='utf-8')) if receipt_path.exists() else {}
+                if receipt.get('page_id') != page_id or receipt.get('source_sha256') != manuscript_hash(previous['generated']):
+                    raise RuntimeError('MANUAL_EDIT_CONFLICT: attached files differ from the previous automation output')
+                match_attached_cards(prior_files, receipt.get('attached_cards', []))
             # The matched page is a prior machine output, not new source notes.
             # Avoid feeding its obsolete QA verdict back into the fresh review.
             context['existing_page_text'] = ''
@@ -162,12 +169,17 @@ class Pipeline:
                 media['rendered_card_qa_pass'] = passed
                 manifest['qa'] = qa
                 manifest['usage']['rendered_card_qa'] = image_qa_usage
+                manifest['media'] = media
                 save_manifest(job_dir / 'manifest.json', manifest)
                 try:
                     if previous:
                         self._match_prior_blog_blocks(page_id, previous)
                     self.notion.attach_files(page_id, '생성 이미지', cards)
                     media['notion_cards_attached'] = True
+                    manifest['media'] = media
+                    if previous:
+                        manifest['resume_previous_output'] = previous.get('resume_previous_output') or previous
+                    save_manifest(job_dir / 'manifest.json', manifest)
                 except Exception as exc:
                     media['notion_cards_attached'] = False
                     media['notion_cards_error'] = repr(exc)
@@ -204,6 +216,8 @@ class Pipeline:
                 # If a person edited the page, stop instead of overwriting it.
                 self.notion.archive_blocks([block['id'] for block in prior_blocks])
             self.notion.append_blocks(page_id, blocks)
+            manifest.pop('resume_previous_output', None)
+            save_manifest(job_dir / 'manifest.json', manifest)
             final_status = cfg.success_status if passed else cfg.revision_status
             if media.get('budget_blocked'):
                 final_status = cfg.revision_status
@@ -240,7 +254,8 @@ class Pipeline:
 
     def _match_prior_blog_blocks(self, page_id: str, previous: dict[str, Any]) -> list[dict[str, Any]]:
         observed = self.notion.read_page_blocks(page_id)
-        expected = result_blocks('naver_blog', previous['generated'], previous['qa'])
+        prior_output = previous.get('resume_previous_output') or previous
+        expected = result_blocks('naver_blog', prior_output['generated'], prior_output['qa'])
         if [block_signature(x) for x in observed] != [block_signature(x) for x in expected]:
             raise RuntimeError('MANUAL_EDIT_CONFLICT: current page does not match the previous automation output')
         if any(not block.get('id') for block in observed):
@@ -386,6 +401,22 @@ class Pipeline:
             description=str(meta.get('description') or ''),
             tags=list(meta.get('tags') or []),
         )
+
+
+def match_attached_cards(files: list[dict], receipt: list[dict]) -> None:
+    if not receipt or len(receipt) != 5 or [f.get('name') for f in files] != [r.get('name') for r in receipt]:
+        raise RuntimeError('MANUAL_EDIT_CONFLICT: attached image receipt does not match')
+    for file, expected in zip(files, receipt):
+        url = file.get(file.get('type', ''), {}).get('url')
+        if not url:
+            raise RuntimeError('Attached image reconciliation URL is unavailable')
+        try:
+            response = httpx.get(url, follow_redirects=True, timeout=60)
+            response.raise_for_status()
+        except Exception:
+            raise RuntimeError('Attached image reconciliation download failed') from None
+        if hashlib.sha256(response.content).hexdigest() != expected.get('sha256'):
+            raise RuntimeError('MANUAL_EDIT_CONFLICT: attached image bytes changed')
 
 
 def block_signature(block: dict[str, Any]) -> tuple[str, str]:
