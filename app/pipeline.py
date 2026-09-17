@@ -168,11 +168,28 @@ class Pipeline:
             return {'page_id': page_id, 'title': page_title, 'status': 'failed', 'error': repr(exc)}
 
     def _make_short_media(self, generated: dict[str, Any], job_dir: Path, channel_style: str) -> dict[str, Any]:
+        narration_profiles = {
+            'ppojjugi_shorts': (
+                self.s.tts_ppojjugi_voice,
+                'Young adult Korean woman. Natural intimate diary voice, slightly tired and introspective, '
+                'warm but restrained. Medium pace with clear Korean pronunciation and short reflective pauses. '
+                'Do not sound like an announcer, advertisement, cartoon, or exaggerated cute character.',
+            ),
+            'japan_shorts': (
+                self.s.tts_japan_voice,
+                'Mature Japanese man in his late fifties or sixties. Low, warm, calm storytelling voice, '
+                'restrained emotion and gentle Showa-memory documentary tone. Slow measured pace, clear standard '
+                'Japanese, and natural pauses. No youthful brightness, anime acting, or commercial narration.',
+            ),
+        }
+        if channel_style not in narration_profiles:
+            raise ValueError(f'Unknown Shorts narration style: {channel_style}')
+        voice, narration_instructions = narration_profiles[channel_style]
         media = MediaGenerator(
             self.s.openai_api_key,
             self.s.image_model,
             self.s.tts_model,
-            self.s.tts_voice,
+            voice,
             self.s.card_font_path,
             self.s.image_quality,
             self.budget,
@@ -185,7 +202,7 @@ class Pipeline:
         scene_narrations = [str(scene.get('narration') or '').strip() for scene in scenes]
         if any(not text for text in scene_narrations):
             raise ValueError('Every Shorts scene must include its exact narration segment')
-        images = media.generate_scene_images(scenes, job_dir / 'scenes')
+        images = media.generate_scene_images(scenes, job_dir / 'scenes', channel_style)
         total_characters = max(sum(len(text) for text in scene_narrations), 1)
         audio_parts: list[Path] = []
         for index, text in enumerate(scene_narrations, 1):
@@ -194,6 +211,7 @@ class Pipeline:
                 text,
                 job_dir / 'narration_scenes' / f'{index:02d}.mp3',
                 estimated_cost_usd=share,
+                instructions=narration_instructions,
             ))
         audio, durations = concat_scene_audio(audio_parts, job_dir / 'narration.mp3')
         timed_scenes = [
