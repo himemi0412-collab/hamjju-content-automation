@@ -85,17 +85,15 @@ jobs:
         run: pip install -r requirements.txt
       - name: Run safety tests
         run: pytest -q
-      - name: Regenerate both Shorts from the approved references once
-        if: ${{ github.event_name == 'push' && github.event.head_commit.message == 'Regenerate Shorts from approved references' }}
+      - name: Regenerate corrected Japan Short from the approved reference once
+        if: ${{ github.event_name == 'push' && github.event.head_commit.message == 'Regenerate corrected Japan Short from approved reference' }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'true'
           AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
-        run: |
-          python -m app.main page ppojjugi_shorts 3dd15789-1194-817f-a43b-fec762bf06d1 --retry-revision
-          python -m app.main page japan_shorts 3dd15789-1194-81d5-bcd7-f158335092f4 --retry-revision
+        run: python -m app.main page japan_shorts 3dd15789-1194-81d5-bcd7-f158335092f4 --retry-revision
 
       - name: Materialize YouTube OAuth files
         if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 12 * * *') || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'execute_media' || inputs.mode == 'produce_daily_shorts' || inputs.mode == 'retry_revision' || inputs.mode == 'verify_youtube_auth')) }}
