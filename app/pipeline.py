@@ -128,7 +128,7 @@ class Pipeline:
                         'budget': self.budget.snapshot(),
                     }
                 else:
-                    media = self._make_short_media(generated, job_dir)
+                    media = self._make_short_media(generated, job_dir, cfg.name)
                     if media.get('video'):
                         try:
                             self.notion.attach_files(page_id, '최종 영상', [Path(media['video'])])
@@ -167,7 +167,7 @@ class Pipeline:
             self.state.finish(key, 'failed', repr(exc))
             return {'page_id': page_id, 'title': page_title, 'status': 'failed', 'error': repr(exc)}
 
-    def _make_short_media(self, generated: dict[str, Any], job_dir: Path) -> dict[str, Any]:
+    def _make_short_media(self, generated: dict[str, Any], job_dir: Path, channel_style: str) -> dict[str, Any]:
         media = MediaGenerator(
             self.s.openai_api_key,
             self.s.image_model,
@@ -185,7 +185,12 @@ class Pipeline:
         images = media.generate_scene_images(scenes, job_dir / 'scenes')
         audio = media.generate_tts(str(generated.get('narration') or ''), job_dir / 'narration.mp3')
         srt = make_srt(scenes, job_dir / 'captions.srt')
-        video = compose_short_video(images, scenes, audio, srt, job_dir / 'short.mp4')
+        video = compose_short_video(
+            images, scenes, audio, srt, job_dir / 'short.mp4',
+            channel_style=channel_style,
+            hook=str(generated.get('hook') or ''),
+            font_path=self.s.card_font_path,
+        )
         return {'images': [str(x) for x in images], 'audio': str(audio), 'srt': str(srt), 'video': str(video)}
 
     def _upload_private(self, channel_name: str, generated: dict[str, Any], video: Path) -> str:

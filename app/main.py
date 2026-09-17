@@ -257,7 +257,12 @@ def repair_short_video(channel: str, page_id: str, source_dir: Path):
             raise RuntimeError('Notion page channel does not match the requested channel')
         output_dir = s.output_dir / page_id.replace('-', '')[:16]
         output_dir.mkdir(parents=True, exist_ok=True)
-        video = compose_short_video(images, scenes, audio, srt, output_dir / 'short.mp4')
+        video = compose_short_video(
+            images, scenes, audio, srt, output_dir / 'short.mp4',
+            channel_style=channel,
+            hook=str(manifest.get('generated', {}).get('hook') or ''),
+            font_path=s.card_font_path,
+        )
         notion.attach_files(page_id, '최종 영상', [video])
         notion.update_status(page_id, cfg.success_status)
     finally:
