@@ -5,7 +5,7 @@ import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 from openai import OpenAI
 
 from .budget import BudgetGuard
@@ -19,6 +19,10 @@ PALETTE = [
 ]
 TEXT = '#20242C'
 ACCENT = '#5B67D8'
+
+SHORTS_GUIDE_VERSION = '2026-09-17-master-video-v1'
+PPOJJUGI_REFERENCE_LAYOUT = 'blurred-background/white-horizontal-panel/top-brand/scene-number/bottom-caption'
+JAPAN_REFERENCE_LAYOUT = 'full-frame-illustration/first-scene-top-hook/bottom-japanese-caption'
 
 
 class MediaGenerator:
@@ -155,6 +159,53 @@ def make_srt(scenes: list[dict[str, Any]], path: Path) -> Path:
     return path
 
 
+def prepare_short_frames(
+    images: list[Path],
+    scenes: list[dict[str, Any]],
+    out_dir: Path,
+    channel_style: str,
+    hook: str = '',
+    font_path: str | None = None,
+) -> list[Path]:
+    """Apply the two user-approved master-video layouts before MP4 encoding."""
+    if len(images) != len(scenes):
+        raise ValueError('Every scene must have exactly one image before layout rendering')
+    out_dir.mkdir(parents=True, exist_ok=True)
+    title_font = load_font(font_path, 42)
+    hook_font = load_font(font_path, 52)
+    number_font = load_font(font_path, 30)
+    prepared: list[Path] = []
+    for index, image_path in enumerate(images, 1):
+        with Image.open(image_path).convert('RGB') as source:
+            if channel_style == 'ppojjugi_shorts':
+                canvas = ImageOps.fit(source, (1080, 1920), method=Image.Resampling.LANCZOS)
+                canvas = canvas.filter(ImageFilter.GaussianBlur(28))
+                panel = ImageOps.fit(source, (940, 620), method=Image.Resampling.LANCZOS)
+                bordered = ImageOps.expand(panel, border=12, fill='#FFFFFF')
+                canvas.paste(bordered, ((1080 - bordered.width) // 2, 350))
+                draw = ImageDraw.Draw(canvas)
+                draw.text((540, 120), '삐죽이의 오늘', font=title_font, fill='#FFFFFF',
+                          stroke_width=3, stroke_fill='#383A43', anchor='mm')
+                draw.text((540, 1035), f'{index:02d}', font=number_font, fill='#FFFFFF',
+                          stroke_width=2, stroke_fill='#383A43', anchor='mm')
+            elif channel_style == 'japan_shorts':
+                canvas = ImageOps.fit(source, (1080, 1920), method=Image.Resampling.LANCZOS)
+                if index == 1 and hook.strip():
+                    draw = ImageDraw.Draw(canvas)
+                    hook_text = hook.strip()
+                    if len(hook_text) > 22:
+                        hook_text = hook_text[:22] + '\n' + hook_text[22:44]
+                    draw.multiline_text((540, 150), hook_text, font=hook_font, fill='#FFFFFF',
+                                        stroke_width=4, stroke_fill='#30323A', anchor='ma',
+                                        align='center', spacing=12)
+            else:
+                raise ValueError(f'Unknown Shorts master layout: {channel_style}')
+            out = out_dir / f'frame_{index:02d}.png'
+            canvas.save(out, quality=95)
+            prepared.append(out)
+    return prepared
+
+
 def fmt_srt(seconds: float) -> str:
     ms = int((seconds - int(seconds)) * 1000)
     total = int(seconds)
@@ -163,13 +214,14 @@ def fmt_srt(seconds: float) -> str:
     return f'{h:02d}:{m:02d}:{s:02d},{ms:03d}'
 
 
-def compose_short_video(images: list[Path], scenes: list[dict[str, Any]], audio: Path, srt: Path, out_path: Path) -> Path:
+def compose_short_video(images: list[Path], scenes: list[dict[str, Any]], audio: Path, srt: Path, out_path: Path, channel_style: str, hook: str = '', font_path: str | None = None) -> Path:
     if not shutil.which('ffmpeg'):
         raise RuntimeError('ffmpeg is required for video composition')
     work = out_path.parent / '_segments'
     work.mkdir(parents=True, exist_ok=True)
+    frames = prepare_short_frames(images, scenes, work / 'styled_frames', channel_style, hook, font_path)
     segments: list[Path] = []
-    for i, (image, scene) in enumerate(zip(images, scenes), 1):
+    for i, (image, scene) in enumerate(zip(frames, scenes), 1):
         dur = max(float(scene.get('seconds') or 5), 1.0)
         seg = work / f'{i:02d}.mp4'
         subprocess.run([
@@ -185,7 +237,8 @@ def compose_short_video(images: list[Path], scenes: list[dict[str, Any]], audio:
     subprocess.run(['ffmpeg','-y','-loglevel','error','-f','concat','-safe','0','-i',str(concat),'-c','copy',str(silent)], check=True)
 
     escaped = str(srt.resolve()).replace('\\', '/').replace(':', '\\:').replace("'", "\\'")
-    vf = f"subtitles='{escaped}':force_style='FontSize=18,Outline=2,Shadow=0,Alignment=2,MarginV=90'"
+    margin_v = 300 if channel_style == 'ppojjugi_shorts' else 110
+    vf = f"subtitles='{escaped}':force_style='FontSize=18,Outline=2,Shadow=0,Alignment=2,MarginV={margin_v}'"
     total_duration = sum(max(float(scene.get('seconds') or 5), 1.0) for scene in scenes)
     subprocess.run([
         'ffmpeg','-y','-loglevel','error','-i',str(silent),'-i',str(audio),
