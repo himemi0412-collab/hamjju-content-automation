@@ -233,6 +233,7 @@ def prepare_short_frames(
     title_font = load_font(font_path, 42)
     hook_font = load_font(font_path, 52)
     number_font = load_font(font_path, 30)
+    caption_font = load_font(font_path, 46)
     prepared: list[Path] = []
     for index, image_path in enumerate(images, 1):
         with Image.open(image_path).convert('RGB') as source:
@@ -247,6 +248,25 @@ def prepare_short_frames(
                           stroke_width=3, stroke_fill='#383A43', anchor='mm')
                 draw.text((540, 1035), f'{index:02d}', font=number_font, fill='#FFFFFF',
                           stroke_width=2, stroke_fill='#383A43', anchor='mm')
+                caption_text = str(scenes[index - 1].get('caption') or '').strip()
+                if caption_text:
+                    caption_lines: list[str] = []
+                    current = ''
+                    for ch in caption_text:
+                        trial = current + ch
+                        box = draw.textbbox((0, 0), trial, font=caption_font)
+                        if box[2] - box[0] > 850 and current:
+                            caption_lines.append(current)
+                            current = ch
+                        else:
+                            current = trial
+                    if current:
+                        caption_lines.append(current)
+                    draw.multiline_text(
+                        (540, 1100), '\n'.join(caption_lines[:2]), font=caption_font,
+                        fill='#FFFFFF', stroke_width=3, stroke_fill='#383A43',
+                        anchor='ma', align='center', spacing=10,
+                    )
             elif channel_style == 'japan_shorts':
                 canvas = ImageOps.fit(source, (1080, 1920), method=Image.Resampling.LANCZOS)
                 if index == 1 and hook.strip():
@@ -308,16 +328,13 @@ def compose_short_video(images: list[Path], scenes: list[dict[str, Any]], audio:
 
     escaped = str(srt.resolve()).replace('\\', '/').replace(':', '\\:').replace("'", "\\'")
     if channel_style == 'ppojjugi_shorts':
-        margin_v = 700
-        subtitle_font = 'Noto Sans CJK KR'
+        vf = 'null'
     else:
-        margin_v = 110
-        subtitle_font = 'Noto Sans CJK JP'
-    vf = (
-        f"subtitles='{escaped}':"
-        f"force_style='FontName={subtitle_font},FontSize=18,Outline=2,Shadow=0,"
-        f"Alignment=2,MarginV={margin_v}'"
-    )
+        vf = (
+            f"subtitles='{escaped}':"
+            f"force_style='FontName=Noto Sans CJK JP,FontSize=18,Outline=2,Shadow=0,"
+            f"Alignment=2,MarginV=110'"
+        )
     total_duration = sum(max(float(scene.get('seconds') or 5), 1.0) for scene in scenes)
     subprocess.run([
         'ffmpeg','-y','-loglevel','error','-i',str(silent),'-i',str(audio),
