@@ -59,9 +59,11 @@ class MediaGenerator:
         if channel_style == 'ppojjugi_shorts':
             image_size = '1536x1024'
             style_suffix = (
-                'Landscape 3:2 hand-drawn 2D animation still for the center panel. '
-                'Keep the complete hamster character small enough that ears, head, body, and feet stay visible. '
-                'Thin slightly imperfect pencil line, flat muted pastel colors, minimal soft shading, quiet everyday background. '
+                'Landscape 3:2 hand-drawn 2D animation still, full bleed with no border, no inset frame, and no blank margins. '
+                'Match the supplied hamster exactly: golden-orange fur, cream muzzle and belly, tiny black bean eyes, pink nose, two front teeth, lavender shirt, dark green apron. '
+                'Use an intimate medium close-up or close-up; the hamster must occupy 35 to 60 percent of the frame and its face must be clearly readable. '
+                'Thin slightly imperfect pencil line, painterly muted colors, subtle soft shading, detailed urban or domestic environment, quiet weary emotion. '
+                'Use restrained dusk or indoor cinematic values with clear midtone contrast; never high-key white, washed-out, empty, tiny-subject, or nursery-pastel composition. '
                 'No text, no photorealism, no 3D, no glossy advertising look, no yellow cast, no sepia.'
             )
         elif channel_style == 'japan_shorts':
@@ -256,13 +258,15 @@ def prepare_short_frames(
             if channel_style == 'ppojjugi_shorts':
                 canvas = ImageOps.fit(source, (1080, 1920), method=Image.Resampling.LANCZOS)
                 canvas = canvas.filter(ImageFilter.GaussianBlur(28))
-                panel = ImageOps.fit(source, (940, 620), method=Image.Resampling.LANCZOS)
-                bordered = ImageOps.expand(panel, border=12, fill='#FFFFFF')
-                canvas.paste(bordered, ((1080 - bordered.width) // 2, 350))
+                dimmer = Image.new('RGB', canvas.size, '#252733')
+                canvas = Image.blend(canvas, dimmer, 0.32)
+                panel = ImageOps.fit(source, (1020, 360), method=Image.Resampling.LANCZOS)
+                bordered = ImageOps.expand(panel, border=8, fill='#FFFFFF')
+                canvas.paste(bordered, ((1080 - bordered.width) // 2, 470))
                 draw = ImageDraw.Draw(canvas)
                 draw.text((540, 120), '삐죽이의 오늘', font=title_font, fill='#FFFFFF',
                           stroke_width=3, stroke_fill='#383A43', anchor='mm')
-                draw.text((540, 1035), f'{index:02d}', font=number_font, fill='#FFFFFF',
+                draw.text((540, 1000), f'{index:02d}', font=number_font, fill='#FFFFFF',
                           stroke_width=2, stroke_fill='#383A43', anchor='mm')
                 caption_text = str(scenes[index - 1].get('caption') or '').strip()
                 if caption_text:
@@ -279,7 +283,7 @@ def prepare_short_frames(
                     if current:
                         caption_lines.append(current)
                     draw.multiline_text(
-                        (540, 1100), '\n'.join(caption_lines[:2]), font=caption_font,
+                        (540, 875), '\n'.join(caption_lines[:2]), font=caption_font,
                         fill='#FFFFFF', stroke_width=3, stroke_fill='#383A43',
                         anchor='ma', align='center', spacing=10,
                     )
