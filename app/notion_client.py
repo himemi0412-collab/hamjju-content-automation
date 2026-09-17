@@ -112,7 +112,7 @@ class NotionClient:
             '작업 기록': {'rich_text': rich(str(topic.get('concept') or ''))},
             '출처·확인일': {'rich_text': rich(str(topic.get('sources') or ''))},
             '버전': {'number': 1},
-            '공개 승인': {'checkbox': True},
+            '공개 승인': {'checkbox': False},
         }
         r = self.client.post('/pages', json={
             'parent': {'type': 'data_source_id', 'data_source_id': data_source_id},

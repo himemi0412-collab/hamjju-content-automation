@@ -23,7 +23,7 @@
 
 ### 햄찌 창작 쇼츠
 
-`작성 요청` → `Work 제작 중` → 대본/장면표 → 독립 QA → (선택) 이미지/TTS/MP4 → Notion 최종 영상 첨부 → (선택) YouTube 비공개 업로드 → `검토 대기` 또는 `비공개 업로드 완료`
+`작성 요청` → `Work 제작 중` → 대본/장면표 → 독립 QA → (선택) 이미지/TTS/MP4 → Notion 최종 영상 첨부 → `검토 대기`
 
 ### 일본 쇼츠
 
@@ -31,12 +31,12 @@
 
 ## 안전장치
 
-1. YouTube 업로더는 코드상 `privacyStatus=private`만 지원합니다.
-2. `public` / `unlisted` 업로드 함수는 없습니다.
+1. 현재 운영 기준에서는 YouTube 업로드를 실행하지 않습니다. 공개 승인은 항상 NO에서 시작합니다.
+2. 남아 있는 YouTube 업로더 코드는 `privacyStatus=private`만 지원하지만 모든 워크플로에서 `AUTO_PRIVATE_YOUTUBE_UPLOAD=false`로 고정합니다.
 3. 네이버 공개 발행/예약 발행 자동화는 구현하지 않았습니다.
 4. 로컬/동일 실행 환경에서는 SQLite 기록으로 중복 실행을 막고, GitHub Actions에서는 동시 실행 제한과 Notion의 `작성 요청 → 생성 중` 상태 전환으로 중복 처리를 막습니다.
 5. 오류가 나면 성공으로 기록하지 않고 `수정 필요` 상태로 남깁니다.
-6. 로컬 기본값은 미디어 생성과 YouTube 업로드가 OFF이고, GitHub의 쇼츠 제작 실행에서만 비공개 업로드를 명시적으로 켭니다.
+6. 로컬과 GitHub Actions 모두 YouTube 업로드가 OFF이며, 쇼츠 제작은 최종 MP4와 Notion 검토 기록까지만 진행합니다.
 7. 블로그 카드뉴스가 정확히 5장이 아니거나 Notion 첨부가 실패하면 성공 상태로 넘기지 않습니다.
 8. OAuth 토큰의 실제 채널 ID가 고정된 삐죽이/일본 채널 ID와 다르면 파일 전송 전에 중단합니다.
 9. GPT Image 2는 `1024x1536` / `medium` 품질로 고정하며, `auto` 품질을 사용하지 않습니다.
@@ -119,7 +119,7 @@ OPENAI_BUDGET_REQUIRE_EXISTING_LEDGER=false
 
 비용 장부는 텍스트 토큰·웹 검색·이미지·TTS를 보수적으로 합산합니다. GitHub Actions는 매 실행마다 이 파일을 캐시에서 복원하고 실행 후 다시 보존하며, 운영 환경에서는 장부가 손상되거나 예상치 않게 사라지면 유료 호출을 진행하지 않습니다. 예상 누계에 다음 호출의 예약 비용을 더했을 때 22달러 이상이면 콘텐츠 생성과 YouTube 업로드를 그 전에 중단합니다. OpenAI 프로젝트의 25달러 한도는 별도의 최종 안전장치입니다.
 
-## 7. YouTube 비공개 업로드
+## 7. YouTube 업로드 정책
 
 Google Cloud에서 YouTube Data API OAuth Client를 만든 뒤 JSON 파일을 아래 위치에 둡니다.
 
@@ -135,13 +135,13 @@ python -m app.main setup-youtube-auth japan_shorts
 python -m app.main verify-youtube-auth
 ```
 
-그 다음 `.env`:
+현재 운영값:
 
 ```env
-AUTO_PRIVATE_YOUTUBE_UPLOAD=true
+AUTO_PRIVATE_YOUTUBE_UPLOAD=false
 ```
 
-업로드 코드는 `private`로 고정되어 있습니다.
+업로드 코드는 호출하지 않습니다. 공개·비공개를 포함한 YouTube 전송은 별도 사용자 승인과 별도 작업 없이는 실행하지 않습니다.
 
 ## 8. GitHub Actions 첫 연결
 
@@ -161,7 +161,7 @@ GitHub 저장소의 Actions secrets에 다음 값을 넣습니다.
 
 `execute_text`는 채널 1건의 원고만 만들고, `execute_media`는 이미 검토 대상이 된 쇼츠 1건의 MP4를 만듭니다. `produce_daily_shorts`는 새 주제를 조사해 삐죽이·일본 쇼츠를 각각 1건씩 준비합니다. 독립 QA에서 멈춘 쇼츠는 원인을 보완한 뒤 `retry_revision`으로 1건만 다시 제작할 수 있습니다. 과거 artifact의 합성 파일만 복구할 때는 `repair_video`가 전체 장면 길이로 다시 합성해 같은 Notion 항목의 검토 영상을 교체합니다.
 
-미디어 생성은 쇼츠 실행에서만 켜집니다. 예약 쇼츠 제작, `execute_media`, `produce_daily_shorts`, `retry_revision`은 채널 ID를 검사한 뒤 YouTube에 `private`로 자동 업로드합니다. `verify_youtube_auth`는 업로드 없이 두 OAuth 연결의 채널 ID와 이름만 검사합니다. 블로그·dry run·텍스트 실행·영상 복구에서는 업로드가 꺼진 상태를 유지합니다.
+미디어 생성은 쇼츠 실행에서만 켜집니다. 예약 쇼츠 제작, `execute_media`, `produce_daily_shorts`, `retry_revision`, 영상 복구까지 모두 MP4와 Notion 검토 기록에서 멈추며 YouTube에는 업로드하지 않습니다. `verify_youtube_auth`는 업로드 없이 두 OAuth 연결의 채널 ID와 이름만 검사합니다.
 
 생성 파일은 Actions artifact로 14일 보존하도록 설정했습니다. Notion 파일 첨부가 성공하면 카드뉴스/MP4는 Notion에도 남습니다.
 
