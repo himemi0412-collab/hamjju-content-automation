@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     image_quality: str = 'medium'
     tts_model: str = 'gpt-4o-mini-tts'
     tts_voice: str = 'coral'
+    tts_ppojjugi_voice: str = 'coral'
+    tts_japan_voice: str = 'cedar'
 
     openai_monthly_budget_usd: float = 22.0
     openai_budget_ledger: Path = Path('output/openai-cost-ledger.json')
