@@ -40,6 +40,7 @@ on:
           - execute_media
           - produce_daily_shorts
           - retry_revision
+          - regenerate_review
           - repair_video
           - verify_youtube_auth
       source_run_id:
@@ -154,6 +155,18 @@ jobs:
           ENABLE_MEDIA_GENERATION: 'true'
           AUTO_PRIVATE_YOUTUBE_UPLOAD: 'true'
         run: python -m app.main channel "${{ inputs.channel }}" --limit 1 --require-item --retry-revision
+
+      - name: Regenerate one exact Shorts review without YouTube upload
+        if: ${{ inputs.mode == 'regenerate_review' && inputs.channel != 'naver_blog' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
+          ENABLE_WEB_RESEARCH: 'true'
+          ENABLE_MEDIA_GENERATION: 'true'
+          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
+        run: |
+          test -n "${{ inputs.page_id }}"
+          python -m app.main page "${{ inputs.channel }}" "${{ inputs.page_id }}" --retry-revision
 
       - name: Verify both YouTube OAuth channel identities without uploading
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'verify_youtube_auth' }}
