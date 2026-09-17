@@ -142,7 +142,7 @@ def concat_scene_audio(parts: list[Path], out_path: Path) -> tuple[Path, list[fl
         raise RuntimeError('ffmpeg is required for narration timing')
     out_path.parent.mkdir(parents=True, exist_ok=True)
     concat_file = out_path.parent / 'narration_concat.txt'
-    concat_file.write_text(''.join(f"file '{part.resolve().as_posix()}'\\n" for part in parts), encoding='utf-8')
+    concat_file.write_text(''.join(f"file '{part.resolve().as_posix()}'\n" for part in parts), encoding='utf-8')
     subprocess.run([
         'ffmpeg', '-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0',
         '-i', str(concat_file), '-c:a', 'libmp3lame', '-b:a', '192k', str(out_path),
