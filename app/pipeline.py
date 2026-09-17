@@ -7,7 +7,7 @@ from typing import Any
 from .ai import AIClient
 from .budget import BudgetGuard
 from .config import ChannelConfig
-from .media import MediaGenerator, compose_short_video, make_srt, render_blog_cards, save_manifest
+from .media import MediaGenerator, compose_short_video, concat_scene_audio, make_srt, render_blog_cards, save_manifest
 from .notion_client import NotionClient, compact_page_context, extract_page_title, result_blocks
 from .settings import Settings
 from .state import StateStore
@@ -182,16 +182,39 @@ class Pipeline:
         scenes = generated.get('scenes') or []
         if not scenes:
             raise ValueError('No scenes to render')
+        scene_narrations = [str(scene.get('narration') or '').strip() for scene in scenes]
+        if any(not text for text in scene_narrations):
+            raise ValueError('Every Shorts scene must include its exact narration segment')
         images = media.generate_scene_images(scenes, job_dir / 'scenes')
-        audio = media.generate_tts(str(generated.get('narration') or ''), job_dir / 'narration.mp3')
-        srt = make_srt(scenes, job_dir / 'captions.srt')
+        total_characters = max(sum(len(text) for text in scene_narrations), 1)
+        audio_parts: list[Path] = []
+        for index, text in enumerate(scene_narrations, 1):
+            share = self.s.openai_tts_estimated_cost_usd * len(text) / total_characters
+            audio_parts.append(media.generate_tts(
+                text,
+                job_dir / 'narration_scenes' / f'{index:02d}.mp3',
+                estimated_cost_usd=share,
+            ))
+        audio, durations = concat_scene_audio(audio_parts, job_dir / 'narration.mp3')
+        timed_scenes = [
+            {**scene, 'seconds': round(duration, 3)}
+            for scene, duration in zip(scenes, durations)
+        ]
+        generated['scenes'] = timed_scenes
+        srt = make_srt(timed_scenes, job_dir / 'captions.srt')
         video = compose_short_video(
-            images, scenes, audio, srt, job_dir / 'short.mp4',
+            images, timed_scenes, audio, srt, job_dir / 'short.mp4',
             channel_style=channel_style,
             hook=str(generated.get('hook') or ''),
             font_path=self.s.card_font_path,
         )
-        return {'images': [str(x) for x in images], 'audio': str(audio), 'srt': str(srt), 'video': str(video)}
+        return {
+            'images': [str(x) for x in images],
+            'audio': str(audio),
+            'srt': str(srt),
+            'video': str(video),
+            'scene_durations': durations,
+        }
 
     def _upload_private(self, channel_name: str, generated: dict[str, Any], video: Path) -> str:
         if self.budget:
