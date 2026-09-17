@@ -1,4 +1,6 @@
 from pathlib import Path
+import json
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import Mock
 import logging
@@ -9,6 +11,7 @@ import pytest
 from app.ai import AIClient
 from app.config import load_channels
 from app.pipeline import Pipeline
+from app.notion_client import result_blocks
 from app.settings import Settings
 from app.state import StateStore
 
@@ -47,15 +50,17 @@ class FakeNotion:
         self.paths = {f'https://asset.invalid/{p.name}': p for p in paths}
 
     def append_blocks(self, page_id, blocks):
-        self.blocks.extend(blocks)
+        self.blocks.extend({**block, 'id': f'block-{len(self.blocks)}-{i}'} for i, block in enumerate(blocks))
+
+    def archive_blocks(self, ids):
+        self.blocks = [block for block in self.blocks if block['id'] not in ids]
 
 
 def make_pipeline(tmp_path, monkeypatch, visual_pass=True):
     notion = FakeNotion()
     ai = Mock()
     ai.generate.return_value = ({'title': '검증 원고', 'body_markdown': '본문 전체', 'card_news': [{'card': i} for i in range(1, 6)]}, {})
-    ai.qa.side_effect = [({'pass': True, 'blocking_issues': []}, {}),
-                         ({'pass': visual_pass, 'blocking_issues': [] if visual_pass else ['card 3 overlaps']}, {})]
+    ai.qa.return_value = ({'pass': visual_pass, 'blocking_issues': [] if visual_pass else ['card 3 overlaps']}, {})
     paths = [tmp_path / f'card_{i:02d}.png' for i in range(1, 6)]
     for i, path in enumerate(paths):
         path.write_bytes(f'image-{i}'.encode())
@@ -148,3 +153,36 @@ def test_successful_readback_does_not_log_signed_asset_urls(tmp_path, monkeypatc
     assert result['output_verified'] is True
     assert 'private-value' not in caplog.text
     assert 'asset.invalid' not in caplog.text
+
+
+def test_resume_reuses_text_and_replaces_only_matching_failed_output(tmp_path, monkeypatch):
+    pipeline, _ = make_pipeline(tmp_path, monkeypatch)
+    generated = pipeline.ai.generate.return_value[0]
+    prior = {'page_id': 'one', 'channel': 'naver_blog', 'generated': generated,
+             'qa': {'pass': False, 'blocking_issues': ['missing old style metadata']}}
+    manifest = tmp_path / 'previous.json'
+    manifest.write_text(json.dumps(prior), encoding='utf-8')
+    pipeline.notion.status = '수정 필요'
+    pipeline.notion.append_blocks('one', result_blocks('naver_blog', generated, prior['qa']))
+    cfg = replace(load_channels()['naver_blog'], ready_status='수정 필요')
+    result = pipeline.process_page(cfg, {'id': 'one'}, resume_manifest=manifest)
+    assert result['qa_pass'] is True and result['output_verified'] is True
+    pipeline.ai.generate.assert_not_called()
+    assert sum(x['type'] == 'divider' for x in pipeline.notion.blocks) == 1
+
+
+def test_resume_does_not_overwrite_manual_edit_or_call_ai(tmp_path, monkeypatch):
+    pipeline, _ = make_pipeline(tmp_path, monkeypatch)
+    prior = {'page_id': 'one', 'channel': 'naver_blog',
+             'generated': pipeline.ai.generate.return_value[0], 'qa': {'pass': False}}
+    manifest = tmp_path / 'previous.json'
+    manifest.write_text(json.dumps(prior), encoding='utf-8')
+    pipeline.notion.status = '수정 필요'
+    pipeline.notion.append_blocks('one', result_blocks('naver_blog', prior['generated'], prior['qa']))
+    pipeline.notion.blocks.append({'type': 'paragraph', 'paragraph': {'rich_text': [{'plain_text': 'user edit'}]}, 'id': 'manual'})
+    cfg = replace(load_channels()['naver_blog'], ready_status='수정 필요')
+    result = pipeline.process_page(cfg, {'id': 'one'}, resume_manifest=manifest)
+    assert result['status'] == 'failed' and 'MANUAL_EDIT_CONFLICT' in result['error']
+    pipeline.ai.generate.assert_not_called()
+    pipeline.ai.qa.assert_not_called()
+    assert pipeline.notion.blocks[-1]['id'] == 'manual'

@@ -181,6 +181,11 @@ class NotionClient:
             r = self.client.patch(f'/blocks/{page_id}/children', json={'children': blocks[i:i+100]})
             r.raise_for_status()
 
+    def archive_blocks(self, block_ids: list[str]) -> None:
+        for block_id in block_ids:
+            response = self.client.patch(f'/blocks/{block_id}', json={'archived': True})
+            response.raise_for_status()
+
     def upload_small_file(self, path: Path) -> str:
         if path.stat().st_size > 20 * 1024 * 1024:
             raise ValueError(f'File is larger than Notion single-part limit: {path}')

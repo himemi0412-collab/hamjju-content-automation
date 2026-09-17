@@ -63,7 +63,7 @@ def expected_channels(event: str, schedule: str, mode: str, channel: str) -> dic
         return {'naver_blog': 3} if schedule == '0 1 * * *' else {'ppojjugi_shorts': 1, 'japan_shorts': 1}
     if mode == 'produce_daily_shorts':
         return {'ppojjugi_shorts': 1, 'japan_shorts': 1}
-    return {'naver_blog' if mode == 'recover_blog' else channel: 1}
+    return {'naver_blog' if mode in {'recover_blog', 'resume_blog'} else channel: 1}
 
 
 def markdown_report(data: dict, expected: dict[str, int], run_status: str, run_url: str) -> str:

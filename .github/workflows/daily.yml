@@ -38,6 +38,7 @@ on:
           - dry_run
           - execute_text
           - recover_blog
+          - resume_blog
           - execute_media
           - produce_daily_shorts
           - retry_revision
@@ -45,11 +46,11 @@ on:
           - repair_video
           - verify_youtube_auth
       source_run_id:
-        description: Previous Actions run ID used only for repair_video
+        description: Previous Actions artifact run ID for resume_blog or repair_video
         required: false
         type: string
       page_id:
-        description: Exact existing Notion page ID for recover_blog, regenerate_review, or repair_video
+        description: Exact existing Notion page ID for recovery, resume, regeneration, or repair
         required: false
         type: string
 
@@ -156,6 +157,24 @@ jobs:
         run: |
           test -n "$RECOVERY_PAGE_ID"
           python -m app.main page naver_blog "$RECOVERY_PAGE_ID"
+
+      - name: Resume one existing blog artifact without regenerating its text
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'resume_blog' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
+          ENABLE_WEB_RESEARCH: 'true'
+          ENABLE_MEDIA_GENERATION: 'false'
+          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          RESUME_PAGE_ID: ${{ inputs.page_id }}
+        run: |
+          [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$RESUME_PAGE_ID" =~ ^[0-9a-fA-F-]{32,36}$ ]]
+          page_folder="$(printf '%s' "$RESUME_PAGE_ID" | tr -d '-' | cut -c1-16)"
+          gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "hamjju-output-$SOURCE_RUN_ID" --dir recovered
+          python -m app.main resume-blog "$RESUME_PAGE_ID" "recovered/$page_folder/manifest.json"
 
       - name: Produce today's two reviewed Shorts
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'produce_daily_shorts' }}

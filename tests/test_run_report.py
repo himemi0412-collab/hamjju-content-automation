@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from app.run_report import is_production_run, markdown_report, record_results
+from app.run_report import expected_channels
 
 
 def good_blog():
@@ -71,3 +72,15 @@ def test_workflow_keeps_second_shorts_after_first_failure_and_preserves_budget()
     budget_save = workflow.split('- name: Save charged budget', 1)[1].split('\n      - name:', 1)[0]
     assert 'always()' in budget_save
     assert 'actions/cache/save@v6' in budget_save
+
+
+def test_resume_workflow_reuses_one_repository_artifact_without_seeding():
+    workflow = Path('.github/workflows/daily.yml').read_text(encoding='utf-8')
+    resume = workflow.split('- name: Resume one existing blog artifact', 1)[1].split('\n      - name:', 1)[0]
+    assert 'seed-topics' not in resume
+    assert 'SOURCE_RUN_ID: ${{ inputs.source_run_id }}' in resume
+    assert 'RESUME_PAGE_ID: ${{ inputs.page_id }}' in resume
+    assert '--repo "$GITHUB_REPOSITORY"' in resume
+    assert 'resume-blog "$RESUME_PAGE_ID" "recovered/$page_folder/manifest.json"' in resume
+    assert "AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'" in resume
+    assert expected_channels('workflow_dispatch', '', 'resume_blog', 'japan_shorts') == {'naver_blog': 1}

@@ -53,15 +53,15 @@ class Pipeline:
             results.append(self.process_page(cfg, page, dry_run=dry_run))
         return results
 
-    def process_page(self, cfg: ChannelConfig, page_stub: dict[str, Any], dry_run: bool = False) -> dict[str, Any]:
+    def process_page(self, cfg: ChannelConfig, page_stub: dict[str, Any], dry_run: bool = False, resume_manifest: Path | None = None) -> dict[str, Any]:
         # Read/claim failures belong to this item, not to every remaining item.
         try:
-            result = self._process_page(cfg, page_stub, dry_run=dry_run)
+            result = self._process_page(cfg, page_stub, dry_run=dry_run, resume_manifest=resume_manifest)
         except Exception as exc:
             result = {'page_id': page_stub.get('id'), 'status': 'failed', 'error': repr(exc)}
         return {'channel': cfg.name, **result}
 
-    def _process_page(self, cfg: ChannelConfig, page_stub: dict[str, Any], dry_run: bool = False) -> dict[str, Any]:
+    def _process_page(self, cfg: ChannelConfig, page_stub: dict[str, Any], dry_run: bool = False, resume_manifest: Path | None = None) -> dict[str, Any]:
         page_id = page_stub['id']
         page = self.notion.retrieve_page(page_id)
         page_text = self.notion.read_page_text(page_id)
@@ -80,6 +80,21 @@ class Pipeline:
         }
         if not page_is_eligible(cfg, context):
             return {'page_id': page_id, 'status': 'skipped', 'reason': 'eligibility_changed'}
+        previous = None
+        prior_files = page.get('properties', {}).get('생성 이미지', {}).get('files', [])
+        if resume_manifest is not None:
+            previous = json.loads(resume_manifest.read_text(encoding='utf-8'))
+            if previous.get('page_id') != page_id or previous.get('channel') != 'naver_blog' or cfg.name != 'naver_blog':
+                raise ValueError('Resume manifest does not match the exact blog page')
+            if not previous.get('generated') or not previous.get('qa'):
+                raise ValueError('Resume manifest is missing the original manuscript or review')
+            self._match_prior_blog_blocks(page_id, previous)
+            expected_names = [Path(p).name for p in previous.get('media', {}).get('cards', [])]
+            if [f.get('name') for f in prior_files] != expected_names:
+                raise RuntimeError('MANUAL_EDIT_CONFLICT: attached files differ from the previous automation output')
+            # The matched page is a prior machine output, not new source notes.
+            # Avoid feeding its obsolete QA verdict back into the fresh review.
+            context['existing_page_text'] = ''
         key = f"{page_id}:{page.get('last_edited_time')}:{cfg.name}:v1"
         if self.state.succeeded(key):
             return {'page_id': page_id, 'status': 'skipped', 'reason': 'idempotency'}
@@ -99,8 +114,16 @@ class Pipeline:
         try:
             self.notion.update_status(page_id, cfg.processing_status)
             use_web = cfg.name in {'naver_blog', 'japan_shorts'}
-            generated, gen_usage = self.ai.generate(cfg.prompt_file, context, use_web=use_web)
-            qa, qa_usage = self.ai.qa(generated, {'channel': cfg.name, **context})
+            if previous:
+                generated = previous['generated']
+                gen_usage = {'reused_from_manifest': True}
+            else:
+                generated, gen_usage = self.ai.generate(cfg.prompt_file, context, use_web=use_web)
+            if cfg.content_kind == 'blog':
+                # Blog QA sees the finished images and manuscript together.
+                qa, qa_usage = {'pass': False, 'status': 'PENDING_RENDER_REVIEW'}, {}
+            else:
+                qa, qa_usage = self.ai.qa(generated, {'channel': cfg.name, **context})
             passed = qa.get('pass') is True and not qa.get('blocking_issues')
 
             job_dir = self.s.output_dir / page_id.replace('-', '')[:16]
@@ -117,7 +140,7 @@ class Pipeline:
             save_manifest(job_dir / 'manifest.json', manifest)
 
             media: dict[str, Any] = {}
-            if cfg.content_kind == 'blog' and passed:
+            if cfg.content_kind == 'blog':
                 card_news = generated.get('card_news') or []
                 if len(card_news) != 5:
                     raise RuntimeError('Blog output did not contain exactly five card-news items')
@@ -125,10 +148,10 @@ class Pipeline:
                 if len(cards) != 5:
                     raise RuntimeError('Blog card-news render did not produce exactly five images')
                 media['cards'] = [str(x) for x in cards]
-                manifest['text_qa'] = qa
                 qa, image_qa_usage = self.ai.qa(generated, {
                     'channel': cfg.name, **context,
-                    'automation_scope': {'mode': 'blog_cards', 'stage': 'rendered_cards', 'media_expected': True},
+                    'automation_scope': {**context['automation_scope'], 'mode': 'blog_cards', 'stage': 'rendered_cards', 'media_expected': True,
+                        'renderer': '1080 square; 3 pastel colors plus dark ink; white background; measured text boxes; cover/flow/comparison/checklist/decision; Cafe24 title font'},
                 }, image_paths=cards)
                 passed = qa.get('pass') is True and not qa.get('blocking_issues')
                 media['rendered_card_qa_pass'] = passed
@@ -136,6 +159,8 @@ class Pipeline:
                 manifest['usage']['rendered_card_qa'] = image_qa_usage
                 save_manifest(job_dir / 'manifest.json', manifest)
                 try:
+                    if previous:
+                        self._match_prior_blog_blocks(page_id, previous)
                     self.notion.attach_files(page_id, '생성 이미지', cards)
                     media['notion_cards_attached'] = True
                 except Exception as exc:
@@ -168,6 +193,11 @@ class Pipeline:
                         })
 
             blocks = result_blocks(cfg.name, generated, qa)
+            if previous:
+                prior_blocks = self._match_prior_blog_blocks(page_id, previous)
+                # Only replace a byte-equivalent previous automation section.
+                # If a person edited the page, stop instead of overwriting it.
+                self.notion.archive_blocks([block['id'] for block in prior_blocks])
             self.notion.append_blocks(page_id, blocks)
             final_status = cfg.success_status if passed else cfg.revision_status
             if media.get('budget_blocked'):
@@ -202,6 +232,15 @@ class Pipeline:
                 pass
             self.state.finish(key, 'failed', repr(exc))
             return {'page_id': page_id, 'title': page_title, 'status': 'failed', 'error': repr(exc)}
+
+    def _match_prior_blog_blocks(self, page_id: str, previous: dict[str, Any]) -> list[dict[str, Any]]:
+        observed = self.notion.read_page_blocks(page_id)
+        expected = result_blocks('naver_blog', previous['generated'], previous['qa'])
+        if [block_signature(x) for x in observed] != [block_signature(x) for x in expected]:
+            raise RuntimeError('MANUAL_EDIT_CONFLICT: current page does not match the previous automation output')
+        if any(not block.get('id') for block in observed):
+            raise RuntimeError('Resume block identities are unavailable')
+        return observed
 
     def _verify_blog_output(self, page_id: str, page_title: str, status: str, expected_blocks: list[dict[str, Any]], cards: list[Path]) -> dict[str, Any]:
         page = self.notion.retrieve_page(page_id)

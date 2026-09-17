@@ -134,3 +134,44 @@ def test_sufficient_blog_backlog_does_not_pay_for_new_topic_research(monkeypatch
     monkeypatch.setattr(main, 'build', lambda: (settings, notion, ai, None, None))
     monkeypatch.setattr(main, 'missing_blog_topics', lambda *_a: 0)
     main.seed_topics(blog_count=3, ppojjugi_count=0, japan_count=0)
+
+
+@pytest.mark.parametrize('change', [{'page_id': 'other-page'}, {'channel': 'japan_shorts'}, {'generated': {}}])
+def test_resume_blog_rejects_wrong_artifact_before_any_connection(monkeypatch, tmp_path, change):
+    import json
+    import typer
+    import app.main as main
+
+    manifest = tmp_path / 'manifest.json'
+    source = {'page_id': 'exact-page', 'channel': 'naver_blog', 'generated': {'body_markdown': 'Saved original'}}
+    source.update(change)
+    manifest.write_text(json.dumps(source), encoding='utf-8')
+    monkeypatch.setattr(main, 'build', lambda: pytest.fail('Invalid artifact must not connect or write'))
+    with pytest.raises(typer.BadParameter):
+        main.resume_blog('exact-page', manifest)
+
+
+def test_resume_blog_processes_only_original_manifest_and_records_readback(monkeypatch, tmp_path):
+    import json
+    from types import SimpleNamespace
+    import app.main as main
+
+    manifest = tmp_path / 'manifest.json'
+    manifest.write_text(json.dumps({
+        'page_id': 'exact-page', 'channel': 'naver_blog', 'generated': {'body_markdown': 'Saved original'},
+    }), encoding='utf-8')
+    settings = SimpleNamespace(output_dir=tmp_path / 'output')
+    notion = SimpleNamespace(retrieve_page=lambda page_id: {'id': page_id}, close=lambda: None)
+    def process(cfg, page, *, resume_manifest):
+        assert cfg.ready_status == '수정 필요'
+        assert page == {'id': 'exact-page'}
+        assert resume_manifest == manifest
+        return {
+            'channel': 'naver_blog', 'page_id': page['id'], 'qa_pass': True,
+            'notion_page_updated': True, 'output_verified': True, 'status': 'CODEX_HANDOFF_READY',
+        }
+    pipeline = SimpleNamespace(process_page=process)
+    monkeypatch.setattr(main, 'build', lambda: (settings, notion, None, None, pipeline))
+    main.resume_blog('exact-page', manifest)
+    data = json.loads((settings.output_dir / 'production-results.json').read_text(encoding='utf-8'))
+    assert data['batches'][0]['reviewed_outputs'] == 1

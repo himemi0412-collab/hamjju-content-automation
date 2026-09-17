@@ -213,6 +213,29 @@ def process_exact_page(name: str, page_id: str, retry_revision: bool = False):
     validate_results(result, require_item=True, dry_run=False)
 
 
+@app.command('resume-blog')
+def resume_blog(page_id: str, manifest: Path):
+    """Resume one existing blog artifact without researching or rewriting it."""
+    source = json.loads(manifest.read_text(encoding='utf-8'))
+    if source.get('page_id') != page_id or source.get('channel') != 'naver_blog':
+        raise typer.BadParameter('Resume manifest does not match the exact blog page and channel')
+    if not isinstance(source.get('generated'), dict) or not source['generated'].get('body_markdown'):
+        raise typer.BadParameter('Resume manifest has no generated blog body')
+    s, notion, _, _, pipeline = build()
+    cfg = load_channels()['naver_blog']
+    cfg = replace(cfg, ready_status=cfg.revision_status)
+    try:
+        page = notion.retrieve_page(page_id)
+        result = [pipeline.process_page(cfg, page, resume_manifest=manifest)]
+    except Exception as exc:
+        result = [{'page_id': page_id, 'channel': 'naver_blog', 'status': 'failed', 'error': repr(exc)}]
+    finally:
+        notion.close()
+    print_json(result)
+    record_results(s.output_dir, 'naver_blog', result, 1)
+    validate_results(result, require_item=True, dry_run=False)
+
+
 def validate_results(
     results: list[dict], require_item: bool = False, dry_run: bool = False,
     expected_count: int | None = None,
