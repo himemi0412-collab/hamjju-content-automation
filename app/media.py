@@ -48,9 +48,33 @@ class MediaGenerator:
         self.image_estimated_cost_usd = image_estimated_cost_usd
         self.tts_estimated_cost_usd = tts_estimated_cost_usd
 
-    def generate_scene_images(self, scenes: list[dict[str, Any]], out_dir: Path) -> list[Path]:
+    def generate_scene_images(
+        self,
+        scenes: list[dict[str, Any]],
+        out_dir: Path,
+        channel_style: str,
+    ) -> list[Path]:
         out_dir.mkdir(parents=True, exist_ok=True)
         paths: list[Path] = []
+        if channel_style == 'ppojjugi_shorts':
+            image_size = '1536x1024'
+            style_suffix = (
+                'Landscape 3:2 hand-drawn 2D animation still for the center panel. '
+                'Keep the complete hamster character small enough that ears, head, body, and feet stay visible. '
+                'Thin slightly imperfect pencil line, flat muted pastel colors, minimal soft shading, quiet everyday background. '
+                'No text, no photorealism, no 3D, no glossy advertising look, no yellow cast, no sepia.'
+            )
+        elif channel_style == 'japan_shorts':
+            image_size = '1024x1536'
+            style_suffix = (
+                'Vertical 2:3 Japanese hand-drawn watercolor and colored-pencil story illustration. '
+                'Visible soft paper grain, delicate pencil outlines, restrained realistic proportions, quiet Showa-era atmosphere. '
+                'Not a photograph and not photorealistic; no camera, lens, cinematic photo, or glossy advertising style. '
+                'Cool white natural light with muted gray-blue, faded green, lavender, and soft brown. '
+                'No text, no yellow cast, no mustard, no gold filter, no sepia.'
+            )
+        else:
+            raise ValueError(f'Unknown Shorts image style: {channel_style}')
         for i, scene in enumerate(scenes, 1):
             prompt = str(scene.get('image_prompt') or scene.get('caption') or '')
             if self.budget:
@@ -61,8 +85,8 @@ class MediaGenerator:
                 )
             response = self.client.images.generate(
                 model=self.image_model,
-                prompt=prompt + '\nVertical composition. Clean natural color. No yellow cast. No sepia filter.',
-                size='1024x1536',
+                prompt=prompt + '\n' + style_suffix,
+                size=image_size,
                 quality=self.image_quality,
             )
             item = response.data[0]
@@ -74,7 +98,13 @@ class MediaGenerator:
             paths.append(path)
         return paths
 
-    def generate_tts(self, text: str, out_path: Path, estimated_cost_usd: float | None = None) -> Path:
+    def generate_tts(
+        self,
+        text: str,
+        out_path: Path,
+        estimated_cost_usd: float | None = None,
+        instructions: str = '',
+    ) -> Path:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         if self.budget:
             self.budget.reserve(
@@ -86,6 +116,7 @@ class MediaGenerator:
             model=self.tts_model,
             voice=self.voice,
             input=text,
+            instructions=instructions,
         ) as response:
             response.stream_to_file(out_path)
         return out_path
