@@ -4,7 +4,7 @@ import hashlib
 import pytest
 from PIL import Image, ImageDraw
 
-from app.media import render_blog_cards
+from app.media import _blog_distinct_item_symbols, render_blog_cards
 
 
 def sample_cards():
@@ -93,6 +93,23 @@ def test_other_visual_family_token_is_not_accepted_as_illustration(tmp_path):
     cards[1]['illustration'] = 'contract_notebook'
 
     with pytest.raises(ValueError, match='unsupported explanatory illustration'):
+        render_blog_cards(cards, tmp_path)
+
+
+def test_comparison_uses_distinct_semantic_objects_instead_of_one_generic_icon():
+    items = [
+        {'label': '스티머가 맞는 경우', 'detail': '걸어 둔 셔츠의 잔주름 손질'},
+        {'label': '다리미가 맞는 경우', 'detail': '다림질판에서 깊은 주름 정리'},
+    ]
+
+    assert _blog_distinct_item_symbols(items, 'diagram') == ['steamer', 'iron']
+
+
+def test_unknown_item_illustration_fails_closed(tmp_path):
+    cards = sample_cards()
+    cards[2]['items'][0]['illustration'] = 'generic_decoration'
+
+    with pytest.raises(ValueError, match='item has an unsupported explanatory illustration'):
         render_blog_cards(cards, tmp_path)
 
 

@@ -21,6 +21,10 @@ PALETTE = [
 ]
 TEXT = '#20242C'
 ACCENT = '#5B67D8'
+BLOG_SYMBOLS = {
+    'bubbles', 'laundry', 'wifi', 'document', 'appliance', 'measurement',
+    'home', 'diagram', 'garment', 'steamer', 'iron', 'care_label', 'wrinkle',
+}
 
 SHORTS_GUIDE_VERSION = '2026-09-17-master-video-v1'
 PPOJJUGI_REFERENCE_LAYOUT = 'blurred-background/white-horizontal-panel/top-brand/scene-number/bottom-caption'
@@ -285,10 +289,7 @@ def render_blog_cards(
             'playful_diagram': 'diagram',
             'clipboard_checklist': 'document',
         }.get(illustration, illustration)
-        if illustration not in {
-            'bubbles', 'laundry', 'wifi', 'document', 'appliance',
-            'measurement', 'home', 'diagram', 'garment', 'steamer',
-        }:
+        if illustration not in BLOG_SYMBOLS:
             raise ValueError(f'Card {i} has an unsupported explanatory illustration')
         items = card.get('items')
         minimum, maximum = {'cover': (2, 2), 'flow': (3, 3), 'comparison': (2, 2),
@@ -300,6 +301,8 @@ def render_blog_cards(
                 raise ValueError(f'Card {i} item must contain label and detail')
             _blog_required_text(item.get('label'), f'card {i} item label')
             _blog_required_text(item.get('detail'), f'card {i} item detail')
+            if item.get('illustration') is not None and item['illustration'] not in BLOG_SYMBOLS:
+                raise ValueError(f'Card {i} item has an unsupported explanatory illustration')
         im = Image.new('RGB', (width, height), '#FFFFFF')
         draw = ImageDraw.Draw(im)
         _blog_family_decor(draw, visual_family, width, height, primary, secondary, tertiary, ink)
@@ -313,52 +316,77 @@ def render_blog_cards(
         _blog_text(draw, copy, box((64, 306, 1016, 396)), font_path, size(33), ink, 2)
 
         if layout == 'cover':
-            draw.ellipse(box((312, 418, 768, 822)), fill=primary)
-            _blog_symbol(draw, illustration, point((540, 610)), size(245), ink, '#FFFFFF')
+            # A concrete lifestyle scene, not a floating decorative icon.
+            draw.rounded_rectangle(box((160, 414, 920, 814)), radius=size(34), fill='#F5F2FC', outline=ink, width=size(4))
+            draw.arc(box((270, 456, 530, 675)), 175, 356, fill=secondary, width=size(8))
+            _blog_symbol(draw, illustration, point((455, 618)), size(270), ink, '#FFFFFF')
+            companion = _blog_companion_symbol(illustration)
+            draw.ellipse(box((620, 536, 828, 744)), fill=tertiary)
+            _blog_symbol(draw, companion, point((724, 640)), size(128), ink, '#FFFFFF')
+            _blog_arrow(draw, point((585, 650)), point((640, 650)), ink)
             for j, item in enumerate(items):
                 x = 64 + j * 500
                 draw.rounded_rectangle(box((x, 824, x + 452, 984)), radius=size(24), fill=(secondary, tertiary)[j])
                 _blog_text(draw, item['label'], box((x + 24, 846, x + 428, 892)), font_path, size(34), ink, 1, title=True)
                 _blog_text(draw, item['detail'], box((x + 24, 907, x + 428, 970)), font_path, size(27), ink, 2)
         elif layout == 'flow':
+            draw.rounded_rectangle(box((48, 405, 1032, 974)), radius=size(34), fill='#FBFAFE', outline=ink, width=size(4))
+            for ring_x in range(150, 950, 125):
+                draw.rounded_rectangle(box((ring_x, 388, ring_x + 26, 432)), radius=size(10), fill=ink)
+            step_symbols = _blog_flow_symbols(illustration)
             for j, item in enumerate(items):
-                y = 438 + j * 181
+                x = 72 + j * 320
                 color = (primary, secondary, tertiary)[j]
-                draw.ellipse(box((66, y + 15, 164, y + 113)), fill=color)
-                _blog_text(draw, str(j + 1), box((99, y + 34, 143, y + 92)), font_path, size(43), ink, 1, title=True)
-                draw.line(box((196, y + 18, 196, y + 132)), fill=color, width=size(8))
-                _blog_text(draw, item['label'], box((224, y + 2, 998, y + 53)), font_path, size(39), ink, 1, title=True)
-                _blog_text(draw, item['detail'], box((224, y + 67, 998, y + 144)), font_path, size(30), ink, 2)
+                draw.rounded_rectangle(box((x, 470, x + 296, 938)), radius=size(26), fill=color)
+                draw.ellipse(box((x + 18, 488, x + 82, 552)), fill='#FFFFFF', outline=ink, width=size(3))
+                _blog_text(draw, str(j + 1), box((x + 39, 500, x + 70, 540)), font_path, size(29), ink, 1, title=True)
+                _blog_symbol(draw, step_symbols[j], point((x + 148, 642)), size(155), ink, '#FFFFFF')
+                _blog_text(draw, item['label'], box((x + 22, 744, x + 274, 820)), font_path, size(29), ink, 2, title=True)
+                _blog_text(draw, item['detail'], box((x + 22, 826, x + 274, 926)), font_path, size(21), ink, 3)
                 if j < 2:
-                    _blog_arrow(draw, point((115, y + 132)), point((115, y + 169)), ink)
+                    _blog_arrow(draw, point((x + 298, 684)), point((x + 318, 684)), ink)
         elif layout == 'comparison':
+            symbols = _blog_distinct_item_symbols(items, illustration)
             for j, item in enumerate(items):
                 x = 64 + j * 500
                 color = (primary, secondary)[j]
-                draw.rounded_rectangle(box((x, 436, x + 452, 970)), radius=size(28), fill=color)
-                _blog_text(draw, item['label'], box((x + 26, 466, x + 426, 570)), font_path, size(42), ink, 2, title=True)
-                # Two columns share the same visual and scale: no invented
-                # better/worse score or unverified product appearance.
-                _blog_symbol(draw, illustration, point((x + 226, 651)), size(117), ink, '#FFFFFF')
-                _blog_text(draw, item['detail'], box((x + 30, 749, x + 422, 944)), font_path, size(31), ink, 5)
+                draw.rounded_rectangle(box((x, 426, x + 452, 970)), radius=size(30), fill=color, outline=ink, width=size(4))
+                draw.rounded_rectangle(box((x + 26, 454, x + 426, 560)), radius=size(22), fill='#FFFFFF')
+                _blog_text(draw, item['label'], box((x + 48, 478, x + 404, 548)), font_path, size(34), ink, 2, title=True)
+                _blog_symbol(draw, symbols[j], point((x + 226, 671)), size(175), ink, '#FFFFFF')
+                _blog_text(draw, item['detail'], box((x + 34, 788, x + 418, 936)), font_path, size(28), ink, 4)
+            draw.ellipse(box((506, 625, 574, 693)), fill='#FFFFFF', outline=ink, width=size(3))
+            _blog_text(draw, 'VS', box((522, 641, 560, 681)), font_path, size(26), ink, 1, title=True)
         elif layout == 'checklist':
-            item_height = 132 if len(items) == 4 else 173
+            draw.rounded_rectangle(box((48, 405, 1032, 980)), radius=size(34), fill='#F9FBFC', outline=ink, width=size(4))
+            draw.rounded_rectangle(box((420, 388, 660, 445)), radius=size(18), fill=primary, outline=ink, width=size(3))
+            item_height = 130 if len(items) == 4 else 168
+            symbols = _blog_distinct_item_symbols(items, illustration)
             for j, item in enumerate(items):
-                y = 426 + j * item_height
-                draw.rounded_rectangle(box((64, y + 9, 133, y + 78)), radius=size(16), fill=primary)
-                draw.line([point((83, y + 40)), point((98, y + 55)), point((117, y + 30))], fill=ink, width=size(6))
-                _blog_text(draw, item['label'], box((164, y + 4, 1005, y + 48)), font_path, size(34), ink, 1, title=True)
-                _blog_text(draw, item['detail'], box((164, y + 59, 1005, y + item_height - 5)), font_path, size(28), ink, 2)
+                y = 452 + j * item_height
+                color = (primary, secondary, tertiary, '#DCE8F5')[j]
+                draw.rounded_rectangle(box((70, y + 5, 1010, y + item_height - 10)), radius=size(22), fill=color)
+                draw.ellipse(box((92, y + 22, 192, y + 122)), fill='#FFFFFF', outline=ink, width=size(3))
+                _blog_symbol(draw, symbols[j], point((142, y + 72)), size(62), ink, '#FFFFFF')
+                _blog_text(draw, item['label'], box((220, y + 18, 985, y + 61)), font_path, size(31), ink, 1, title=True)
+                _blog_text(draw, item['detail'], box((220, y + 68, 985, y + item_height - 19)), font_path, size(26), ink, 2)
                 if j < len(items) - 1:
-                    draw.line(box((165, y + item_height - 4, 1007, y + item_height - 4)), fill=tertiary, width=size(2))
-        else:  # decision: three labeled stops on a reading path.
-            draw.line(box((107, 486, 107, 883)), fill=primary, width=size(12))
+                    draw.line(box((175, y + item_height - 4, 905, y + item_height - 4)), fill='#FFFFFF', width=size(3))
+        else:  # decision: three visually distinct branches, not a report timeline.
+            symbols = _blog_distinct_item_symbols(items, illustration)
+            draw.rounded_rectangle(box((384, 410, 696, 474)), radius=size(22), fill='#FFFFFF', outline=ink, width=size(4))
+            _blog_text(draw, '내 상황은 어디에 가까울까?', box((404, 430, 686, 460)), font_path, size(19), ink, 1, title=True)
+            branch_centers = (210, 540, 870)
+            for cx in branch_centers:
+                draw.line((point((540, 474)), point((cx, 523))), fill=ink, width=size(4))
             for j, item in enumerate(items):
-                y = 429 + j * 180
-                draw.ellipse(box((76, y + 20, 138, y + 82)), fill=(primary, secondary, tertiary)[j], outline=ink, width=size(3))
-                _blog_text(draw, str(j + 1), box((95, y + 30, 127, y + 71)), font_path, size(29), ink, 1)
-                _blog_text(draw, item['label'], box((178, y + 1, 1009, y + 54)), font_path, size(40), ink, 1, title=True)
-                _blog_text(draw, item['detail'], box((178, y + 71, 1009, y + 144)), font_path, size(30), ink, 2)
+                x = 64 + j * 330
+                color = (primary, secondary, tertiary)[j]
+                draw.rounded_rectangle(box((x, 520, x + 292, 950)), radius=size(28), fill=color, outline=ink, width=size(4))
+                draw.ellipse(box((x + 76, 555, x + 216, 695)), fill='#FFFFFF')
+                _blog_symbol(draw, symbols[j], point((x + 146, 625)), size(90), ink, '#FFFFFF')
+                _blog_text(draw, item['label'], box((x + 20, 724, x + 272, 804)), font_path, size(29), ink, 2, title=True)
+                _blog_text(draw, item['detail'], box((x + 20, 818, x + 272, 930)), font_path, size(24), ink, 4)
         draw.line(box((64, 1012, 1016, 1012)), fill=ink, width=size(2))
         _blog_text(draw, '이해를 돕는 설명 도식 · 실제 제품 사진 아님', box((64, 1030, 1016, 1065)), font_path, size(22), ink, 1)
         rendered.append(im)
@@ -432,6 +460,69 @@ def _blog_arrow(draw, start, end, color):
     draw.line(((x - 10, y - 10), (x, y), (x + 10, y - 10)), fill=color, width=5)
 
 
+def _blog_companion_symbol(symbol: str) -> str:
+    """Return a second concrete object so the cover reads as a scene."""
+    return {
+        'garment': 'steamer',
+        'steamer': 'garment',
+        'wifi': 'home',
+        'home': 'wifi',
+        'measurement': 'home',
+        'bubbles': 'appliance',
+        'laundry': 'care_label',
+        'document': 'care_label',
+        'appliance': 'document',
+        'diagram': 'document',
+    }.get(symbol, 'document')
+
+
+def _blog_flow_symbols(symbol: str) -> tuple[str, str, str]:
+    """Three related, distinct objects for a real process rather than numbers alone."""
+    return {
+        'steamer': ('home', 'steamer', 'garment'),
+        'garment': ('garment', 'steamer', 'wrinkle'),
+        'wifi': ('home', 'wifi', 'measurement'),
+        'bubbles': ('document', 'bubbles', 'appliance'),
+        'laundry': ('care_label', 'laundry', 'garment'),
+        'measurement': ('home', 'measurement', 'document'),
+        'appliance': ('document', 'appliance', 'care_label'),
+        'document': ('home', 'document', 'care_label'),
+    }.get(symbol, ('document', symbol, 'diagram'))
+
+
+def _blog_item_symbol(item: dict[str, Any], fallback: str) -> str:
+    text = f"{item.get('label', '')} {item.get('detail', '')}".lower()
+    rules = (
+        (('다리미', '다림질판'), 'iron'),
+        (('스티머', '스팀'), 'steamer'),
+        (('라벨', '설명서', '지침', '계약', '표시'), 'care_label'),
+        (('치수', '폭 ', '깊이', '공간', '설치'), 'measurement'),
+        (('셔츠', '재킷', '니트', '옷', '의류', '옷감'), 'garment'),
+        (('주름', '구김'), 'wrinkle'),
+        (('와이파이', '통신', '공유기'), 'wifi'),
+        (('세제', '거품'), 'bubbles'),
+        (('세탁', '빨래', '침구'), 'laundry'),
+        (('집', '방', '생활 공간'), 'home'),
+        (('가전', '기기', '식기세척기'), 'appliance'),
+    )
+    for needles, symbol in rules:
+        if any(needle in text for needle in needles):
+            return symbol
+    return fallback
+
+
+def _blog_distinct_item_symbols(items: list[dict[str, Any]], fallback: str) -> list[str]:
+    """Prefer semantic item icons and forbid a comparison from repeating one generic mark."""
+    alternatives = ('document', 'measurement', 'home', 'garment', 'care_label', 'diagram')
+    symbols: list[str] = []
+    for index, item in enumerate(items):
+        symbol = item.get('illustration') or _blog_item_symbol(item, fallback)
+        if symbol in symbols:
+            symbol = next(candidate for candidate in alternatives if candidate not in symbols)
+        symbols.append(symbol)
+    return symbols
+
+
 def _blog_symbol(draw, symbol, center, size, ink, paper):
     """Original abstract explanatory marks, not drawings of particular models."""
     x, y = center
@@ -485,6 +576,29 @@ def _blog_symbol(draw, symbol, center, size, ink, paper):
         draw.line((x - r * .2, y - r * .05, x - r * .55, y - r * .55, x + r * .15, y - r * .72), fill=ink, width=7)
         for offset in (-.42, 0, .42):
             draw.arc((x + r * offset, y - r * 1.18, x + r * (offset + .36), y - r * .55), 110, 255, fill=ink, width=4)
+    elif symbol == 'iron':
+        draw.rounded_rectangle((x - r * .72, y + r * .18, x + r * .72, y + r * .62), radius=14, fill=paper, outline=ink, width=5)
+        draw.polygon(((x - r * .72, y + r * .18), (x + r * .28, y - r * .72),
+                      (x + r * .65, y + r * .18)), fill=paper, outline=ink)
+        draw.arc((x - r * .12, y - r * .72, x + r * .52, y - r * .05), 180, 350, fill=ink, width=6)
+        for dx in (-.34, 0, .34):
+            draw.ellipse((x + dx * r - 4, y + r * .34 - 4, x + dx * r + 4, y + r * .34 + 4), fill=ink)
+    elif symbol == 'care_label':
+        draw.rounded_rectangle((x - r * .72, y - r, x + r * .72, y + r), radius=12, fill=paper, outline=ink, width=5)
+        draw.line((x - r * .42, y - r * .48, x + r * .42, y - r * .48), fill=ink, width=4)
+        draw.ellipse((x - r * .4, y - r * .12, x - r * .05, y + r * .22), outline=ink, width=4)
+        draw.polygon(((x + r * .12, y + r * .22), (x + r * .28, y - r * .14),
+                      (x + r * .48, y + r * .22)), outline=ink)
+        draw.line((x - r * .42, y + r * .52, x + r * .42, y + r * .52), fill=ink, width=4)
+    elif symbol == 'wrinkle':
+        draw.rounded_rectangle((x - r, y - r * .76, x + r, y + r * .76), radius=16, fill=paper, outline=ink, width=5)
+        for offset in (-.42, 0, .42):
+            points = []
+            for step in range(7):
+                px = x - r * .76 + step * r * .25
+                py = y + offset * r + (r * .10 if step % 2 else -r * .10)
+                points.append((px, py))
+            draw.line(points, fill=ink, width=4)
     else:
         draw.rounded_rectangle((x - r * .7, y - r, x + r * .7, y + r), radius=12, fill=paper, outline=ink, width=5)
         for dy in (-.48, 0, .48):

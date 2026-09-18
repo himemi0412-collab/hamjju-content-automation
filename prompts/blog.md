@@ -33,8 +33,8 @@
 - 제목은 Cafe24 Ssurround, 본문은 가독성 좋은 고딕으로 조판한다. 무료 원본 도식이며 실제 제품 사진이나 AI 생성 사진처럼 설명하지 않는다.
 - 세트는 중립 배경 외 3~5색을 반복하고 주조색 1개와 강조색 1~2개만 한 장에 사용한다. 흰색은 #FFFFFF로 한다.
 - 노란색·겨자색·금빛·누런 크림색 배경·세피아처럼 AI 특유의 노란 계열을 절대 사용하지 않는다.
-- 긴 문장 상자 반복 대신 관계를 보여주는 화살표, 같은 조건의 비교 열, 체크표시, 판단 경로를 사용한다. 오이지나 장식 캐릭터를 넣지 않는다.
-- 각 카드에는 layout, illustration, items, caption이 필수다. illustration은 주제와 맞는 bubbles(세제·거품), laundry(직물·이불), wifi(통신·벽), document(설명서·조건 확인), appliance(무브랜드 가전 맥락), measurement(줄자·치수), home(생활 공간), diagram(관계·흐름), garment(걸어 둔 옷), steamer(무브랜드 스팀 도구) 중 하나다. `soft_scene`, `playful_diagram`, `contract_notebook`, `clipboard_checklist` 같은 visual_family 값은 illustration에 쓰지 않는다. 상상한 제품 외형·로고·확인되지 않은 숫자를 넣지 않는다.
+- 긴 문장 상자 반복 대신 관계를 보여주는 화살표, 같은 조건의 비교 열, 체크표시, 판단 경로를 사용한다. 색 상자와 번호만 바꾼 보고서형 구성은 금지한다. 표지에는 질문을 바로 이해시키는 생활 사물 장면, 흐름에는 단계마다 다른 사물, 비교에는 양쪽을 구분하는 서로 다른 사물, 체크리스트에는 항목별 의미가 다른 사물, 판단 카드에는 실제 분기 경로가 있어야 한다. 오이지나 장식 캐릭터를 넣지 않는다.
+- 각 카드에는 layout, illustration, items, caption이 필수다. illustration은 주제와 맞는 bubbles(세제·거품), laundry(직물·이불), wifi(통신·벽), document(설명서·조건 확인), appliance(무브랜드 가전 맥락), measurement(줄자·치수), home(생활 공간), diagram(관계·흐름), garment(걸어 둔 옷), steamer(무브랜드 스팀 도구), iron(무브랜드 다리미), care_label(관리 라벨), wrinkle(주름 표현) 중 하나다. comparison/checklist/decision의 각 item에는 해당 항목을 설명하는 illustration을 같은 목록에서 골라 넣고, comparison의 두 illustration은 서로 달라야 한다. `soft_scene`, `playful_diagram`, `contract_notebook`, `clipboard_checklist` 같은 visual_family 값은 illustration에 쓰지 않는다. 상상한 제품 외형·로고·확인되지 않은 숫자를 넣지 않는다.
 - headline은 제목 하나, 최대 26자·2줄이다. copy는 맥락 또는 핵심 판단 한 문장, 최대 46자·2줄이다. 각 item은 label과 detail로 나누며 headline/copy를 그대로 반복하지 않는다.
 - 1번 cover: items 정확히 2개. label 각각 최대 10자, detail 최대 24자. 핵심 질문과 생활 도식, 두 가지 판단 포인트를 보여준다.
 - 2번 flow: items 정확히 3개. label 최대 17자, detail 최대 42자. 실제 원인→과정→결과 또는 정확한 확인 순서만 연결한다.
@@ -56,7 +56,7 @@
   "body_markdown": "완성 원고",
   "hashtags": ["태그1"],
   "card_news": [
-    {"card": 1, "layout": "cover", "headline": "", "copy": "", "illustration": "document", "items": [{"label": "", "detail": ""}, {"label": "", "detail": ""}], "caption": "이해를 돕는 설명 도식: ...", "source_urls": ["실제 공식 URL"], "checked_date": "YYYY-MM-DD", "ai_disclosure": "AI가 정리한 정보를 코드로 조판한 설명 도식이며 실제 제품 사진이 아닙니다."}
+    {"card": 1, "layout": "cover", "headline": "", "copy": "", "illustration": "document", "items": [{"label": "", "detail": "", "illustration": "garment"}, {"label": "", "detail": "", "illustration": "care_label"}], "caption": "이해를 돕는 설명 도식: ...", "source_urls": ["실제 공식 URL"], "checked_date": "YYYY-MM-DD", "ai_disclosure": "AI가 정리한 정보를 코드로 조판한 설명 도식이며 실제 제품 사진이 아닙니다."}
   ],
   "image_placements": [{"card": 1, "after_heading": "도입", "caption": "", "ai_disclosure": "AI가 정리한 정보를 코드로 조판한 설명 도식이며 실제 제품 사진이 아닙니다."}],
   "fact_check_notes": ["근거와 추가 확인 항목"],
