@@ -66,6 +66,36 @@ def test_unknown_visual_family_fails_closed(tmp_path):
         render_blog_cards(sample_cards(), tmp_path, visual_family='generic_corporate')
 
 
+def test_playful_diagram_illustration_alias_renders_as_safe_neutral_diagram(tmp_path):
+    cards = sample_cards()
+    cards[1]['illustration'] = 'playful_diagram'
+
+    paths = render_blog_cards(
+        cards, tmp_path, card_format='square', visual_family='playful_diagram',
+    )
+
+    assert len(paths) == 5
+
+
+def test_clipboard_checklist_illustration_alias_renders_as_safe_document(tmp_path):
+    cards = sample_cards()
+    cards[3]['illustration'] = 'clipboard_checklist'
+
+    paths = render_blog_cards(
+        cards, tmp_path, card_format='square', visual_family='clipboard_checklist',
+    )
+
+    assert len(paths) == 5
+
+
+def test_other_visual_family_token_is_not_accepted_as_illustration(tmp_path):
+    cards = sample_cards()
+    cards[1]['illustration'] = 'contract_notebook'
+
+    with pytest.raises(ValueError, match='unsupported explanatory illustration'):
+        render_blog_cards(cards, tmp_path)
+
+
 def test_text_overflow_fails_before_any_card_is_written(tmp_path):
     cards = sample_cards()
     cards[-1]['items'][-1]['detail'] = '긴 정보가 반복됩니다. ' * 80

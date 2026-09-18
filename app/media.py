@@ -277,7 +277,18 @@ def render_blog_cards(
         headline = _blog_required_text(card.get('headline'), f'card {i} headline')
         copy = _blog_required_text(card.get('copy'), f'card {i} copy')
         illustration = card.get('illustration')
-        if illustration not in {'bubbles', 'laundry', 'wifi', 'document', 'appliance', 'measurement', 'home'}:
+        # A model may occasionally repeat one of these visual-family tokens in
+        # the illustration slot. Normalize only the two unambiguous cases to a
+        # neutral explanatory symbol; neither mapping adds product or factual
+        # detail. Ambiguous family tokens remain fail-closed.
+        illustration = {
+            'playful_diagram': 'diagram',
+            'clipboard_checklist': 'document',
+        }.get(illustration, illustration)
+        if illustration not in {
+            'bubbles', 'laundry', 'wifi', 'document', 'appliance',
+            'measurement', 'home', 'diagram', 'garment', 'steamer',
+        }:
             raise ValueError(f'Card {i} has an unsupported explanatory illustration')
         items = card.get('items')
         minimum, maximum = {'cover': (2, 2), 'flow': (3, 3), 'comparison': (2, 2),
@@ -458,6 +469,22 @@ def _blog_symbol(draw, symbol, center, size, ink, paper):
         draw.line((x - r, y - r * .15, x, y - r, x + r, y - r * .15), fill=ink, width=6)
         draw.rounded_rectangle((x - r * .78, y - r * .15, x + r * .78, y + r), radius=10, fill=paper, outline=ink, width=5)
         draw.rectangle((x - r * .18, y + r * .36, x + r * .18, y + r), outline=ink, width=4)
+    elif symbol == 'diagram':
+        points = ((x - r * .65, y + r * .45), (x, y - r * .55), (x + r * .65, y + r * .45))
+        _blog_arrow(draw, points[0], points[1], ink)
+        _blog_arrow(draw, points[1], points[2], ink)
+        for cx, cy in points:
+            rr = r * .28
+            draw.ellipse((cx - rr, cy - rr, cx + rr, cy + rr), fill=paper, outline=ink, width=5)
+    elif symbol == 'garment':
+        draw.arc((x - r * .28, y - r, x + r * .28, y - r * .45), 170, 350, fill=ink, width=5)
+        draw.line((x, y - r * .48, x - r * .88, y + r * .12, x + r * .88, y + r * .12, x, y - r * .48), fill=ink, width=5)
+        draw.rounded_rectangle((x - r * .72, y + r * .12, x + r * .72, y + r * .82), radius=14, fill=paper, outline=ink, width=5)
+    elif symbol == 'steamer':
+        draw.rounded_rectangle((x - r * .28, y - r * .05, x + r * .28, y + r), radius=16, fill=paper, outline=ink, width=5)
+        draw.line((x - r * .2, y - r * .05, x - r * .55, y - r * .55, x + r * .15, y - r * .72), fill=ink, width=7)
+        for offset in (-.42, 0, .42):
+            draw.arc((x + r * offset, y - r * 1.18, x + r * (offset + .36), y - r * .55), 110, 255, fill=ink, width=4)
     else:
         draw.rounded_rectangle((x - r * .7, y - r, x + r * .7, y + r), radius=12, fill=paper, outline=ink, width=5)
         for dy in (-.48, 0, .48):
