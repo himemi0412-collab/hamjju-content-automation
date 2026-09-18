@@ -141,6 +141,10 @@ def test_shorts_master_video_guides_are_enforced_in_prompts_and_composer():
     assert '20대 여성·60~70대 여성·20대 남성·60~70대 남성' in japan
     assert '한 편 안에서는 선택한 단일 화자를 끝까지 유지' in japan
     assert 'docs/japan_voice_reference.md' in japan
+    assert '자연스러운 한국어 반말' in ppojjugi
+    assert '`です・ます`체의 딱딱한 존댓말은 기본 대본에 사용하지 않는다' in japan
+    assert '자연스러운 한국어 반말' in qa
+    assert '친근하고 따뜻한 보통체' in qa
     assert 'channel_style=channel_style' in pipeline
     assert '마스터 가이드' in qa
     assert "ImageOps.fit(source, (1080, 1920)" in media
