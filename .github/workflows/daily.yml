@@ -15,9 +15,9 @@ on:
     # GitHub cron is UTC: 01:00=10:00 KST, 12:00=21:00 KST
     - cron: '0 1 * * *'
     - cron: '0 12 * * *'
-    # One-time live scheduler verification: 2026-09-18 13:10 KST.
+    # One-time live scheduler verification: 2026-09-18 13:45 KST.
     # Remove after the observed run so it cannot repeat next year.
-    - cron: '10 4 18 9 *'
+    - cron: '45 4 18 9 *'
   push:
     branches:
       - main
@@ -260,7 +260,7 @@ jobs:
             python -m app.main seed-topics --blog-count 0 --ppojjugi-count 1 --japan-count 1 || result=1
             ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=false python -m app.main channel ppojjugi_shorts --limit 1 || result=1
             ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=false python -m app.main channel japan_shorts --limit 1 || result=1
-          elif [ "$schedule_expr" = "10 4 18 9 *" ]; then
+          elif [ "$schedule_expr" = "45 4 18 9 *" ]; then
             python -m app.main seed-topics --blog-count 1 --ppojjugi-count 0 --japan-count 0 || result=1
             ENABLE_MEDIA_GENERATION=false python -m app.main channel naver_blog --limit 1 || result=1
           else
