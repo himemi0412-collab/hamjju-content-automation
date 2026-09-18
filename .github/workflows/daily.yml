@@ -97,6 +97,10 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Run safety tests
+        env:
+          # Tests exercise the report writer with fixtures. Never let those
+          # fixture summaries leak into the real GitHub run summary.
+          GITHUB_STEP_SUMMARY: ''
         run: pytest -q
       - name: Materialize YouTube OAuth files
         if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 12 * * *') || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'execute_media' || inputs.mode == 'produce_daily_shorts' || inputs.mode == 'retry_revision' || inputs.mode == 'verify_youtube_auth')) }}
@@ -303,7 +307,7 @@ jobs:
         run: python -m app.run_report
 
       - name: Keep generated files for inspection
-        if: always()
+        if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
         uses: actions/upload-artifact@v7
         with:
           name: hamjju-output-${{ github.run_id }}

@@ -89,6 +89,17 @@ def test_temporary_schedule_is_removed_and_unknown_schedule_fails_closed():
     assert expected_channels('schedule', 'unexpected', '', '') == {}
 
 
+def test_push_safety_checks_cannot_publish_fixture_summary_or_artifacts():
+    workflow = Path('.github/workflows/daily.yml').read_text(encoding='utf-8')
+    safety = workflow.split('- name: Run safety tests', 1)[1].split('\n      - name:', 1)[0]
+    artifacts = workflow.split('- name: Keep generated files for inspection', 1)[1].split('\n      - name:', 1)[0]
+
+    assert "GITHUB_STEP_SUMMARY: ''" in safety
+    assert "github.event_name == 'schedule'" in artifacts
+    assert "github.event_name == 'workflow_dispatch'" in artifacts
+    assert "github.event_name == 'push'" not in artifacts
+
+
 def test_resume_workflow_reuses_one_repository_artifact_without_seeding():
     workflow = Path('.github/workflows/daily.yml').read_text(encoding='utf-8')
     resume = workflow.split('- name: Resume one existing blog artifact', 1)[1].split('\n      - name:', 1)[0]
@@ -209,6 +220,7 @@ def test_invalid_prior_evidence_falls_back_to_current_run_without_daily_completi
         'GITHUB_RUN_ID': '35300000000', 'GITHUB_REPOSITORY': 'org/repo', 'RUN_STATUS': 'success',
     }.items():
         monkeypatch.setenv(key, value)
+    monkeypatch.delenv('GITHUB_STEP_SUMMARY', raising=False)
     module.main()
     report = (current_dir / 'production-summary.md').read_text(encoding='utf-8')
     assert '**1/1편**' in report
