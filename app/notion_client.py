@@ -298,6 +298,7 @@ def naver_handoff_blocks(
     source_version: str,
     card_upload_ids: list[str],
     card_names: list[str],
+    _legacy_paragraph_order: bool = False,
 ) -> list[dict[str, Any]]:
     """Build the strict, reviewable contract consumed by the local Naver draft saver."""
     cards = list(generated.get('card_news') or [])
@@ -395,7 +396,7 @@ def naver_handoff_blocks(
         # "정리하면") is a section boundary too. Flush the current section's
         # summary card before that paragraph so card order cannot become 5, 4
         # when the preceding section is also the document's final heading.
-        if line_index in by_line:
+        if line_index in by_line and not _legacy_paragraph_order:
             append_section_images(current_section)
         body_blocks.extend(_markdown_line_blocks(line))
         if line_index in by_line:

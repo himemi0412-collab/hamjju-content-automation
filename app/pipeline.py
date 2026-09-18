@@ -11,7 +11,7 @@ from .ai import AIClient
 from .budget import BudgetGuard
 from .config import ChannelConfig
 from .media import MediaGenerator, compose_short_video, concat_scene_audio, make_srt, render_blog_cards, save_manifest
-from .notion_client import NotionClient, compact_page_context, extract_page_title, result_blocks
+from .notion_client import NotionClient, compact_page_context, extract_page_title, naver_handoff_blocks, result_blocks
 from .settings import Settings
 from .state import StateStore
 from .youtube import YouTubePrivateUploader
@@ -379,8 +379,21 @@ class Pipeline:
                 'card_names': [Path(x).name for x in prior_media.get('cards', [])],
             }
         expected = result_blocks('naver_blog', prior_output['generated'], prior_qa, naver_handoff=prior_handoff)
-        if [block_signature(x) for x in observed] != [block_signature(x) for x in expected]:
-            raise RuntimeError('MANUAL_EDIT_CONFLICT: current page does not match the previous automation output')
+        observed_signatures = [block_signature(x) for x in observed]
+        expected_signatures = [block_signature(x) for x in expected]
+        if observed_signatures != expected_signatures:
+            # Runs created before the final-section ordering fix placed a
+            # paragraph-targeted decision card before the preceding section's
+            # summary card. Accept only that exact historical machine output;
+            # every other difference remains a manual-edit conflict.
+            if prior_handoff is None:
+                raise RuntimeError('MANUAL_EDIT_CONFLICT: current page does not match the previous automation output')
+            legacy_expected = naver_handoff_blocks(
+                prior_output['generated'], prior_qa, **prior_handoff,
+                _legacy_paragraph_order=True,
+            )
+            if observed_signatures != [block_signature(x) for x in legacy_expected]:
+                raise RuntimeError('MANUAL_EDIT_CONFLICT: current page does not match the previous automation output')
         if any(not block.get('id') for block in observed):
             raise RuntimeError('Resume block identities are unavailable')
         return observed

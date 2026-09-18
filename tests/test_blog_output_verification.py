@@ -186,6 +186,39 @@ def test_last_section_card_stays_before_paragraph_targeted_decision_card():
     assert observed_uploads == [f'upload-{i}' for i in range(1, 6)]
 
 
+def test_legacy_last_section_order_can_be_reconstructed_for_exact_resume_matching():
+    generated = {
+        'body_markdown': '도입\n\n## 구매 전 확인\n체크 본문\n\n정리하면 결론입니다.',
+        'card_news': [
+            {'card': i, 'caption': f'카드 {i} 캡션', 'ai_disclosure': 'AI 설명 도식입니다.'}
+            for i in range(1, 6)
+        ],
+        'image_placements': [
+            {'card': 1, 'after_heading': '도입'},
+            {'card': 2, 'after_heading': '도입'},
+            {'card': 3, 'after_heading': '도입'},
+            {'card': 4, 'after_heading': '구매 전 확인'},
+            {'card': 5, 'after_heading': '정리하면'},
+        ],
+    }
+
+    blocks = naver_handoff_blocks(
+        generated,
+        {'pass': True, 'score': 96, 'blocking_issues': []},
+        document_id='page-id',
+        source_version='sha256-version',
+        card_upload_ids=[f'upload-{i}' for i in range(1, 6)],
+        card_names=[f'card_{i:02d}.png' for i in range(1, 6)],
+        _legacy_paragraph_order=True,
+    )
+
+    observed_uploads = [
+        block['image']['file_upload']['id']
+        for block in blocks if block['type'] == 'image'
+    ]
+    assert observed_uploads == ['upload-1', 'upload-2', 'upload-3', 'upload-5', 'upload-4']
+
+
 def test_visual_rejection_is_preserved_and_not_a_state_success(tmp_path, monkeypatch):
     pipeline, _ = make_pipeline(tmp_path, monkeypatch, visual_pass=False)
     result = pipeline.process_page(load_channels()['naver_blog'], {'id': 'one'})
