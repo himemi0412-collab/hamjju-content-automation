@@ -1,12 +1,13 @@
 import json
 import hashlib
+import shutil
 from pathlib import Path
 
 import pytest
 
 from app.run_report import is_production_run, markdown_report, record_results
 from app.run_report import expected_channels
-from app.run_report import merge_resumed_blog_batch
+from app.run_report import merge_resumed_blog_batch, original_batch_run_id
 from app.manuscript_repair import manuscript_hash
 
 
@@ -202,3 +203,85 @@ def test_invalid_prior_evidence_falls_back_to_current_run_without_daily_completi
     assert '오늘 전체 완료 수는 미확인' in report
     assert '**3/3편**' not in report
     assert not (current_dir / 'batch-recovery-results.json').exists()
+
+
+def multi_recovery_fixture(tmp_path, legacy=False):
+    original, first, ids, original_data, first_data = recovery_fixture(tmp_path)
+    row = first_data['batches'][0]['results'][0]
+    row.update(status='수정 필요', qa_pass=False)
+    folder = first / ids[2].replace('-', '')[:16]
+    manifest = json.loads((folder / 'manifest.json').read_text(encoding='utf-8'))
+    manifest.update(qa={'pass': False, 'blocking_issues': ['card needs clarification']}, final_status='수정 필요')
+    (folder / 'manifest.json').write_text(json.dumps(manifest), encoding='utf-8')
+    readback = json.loads((folder / 'notion-readback.json').read_text(encoding='utf-8'))
+    readback['status'] = '수정 필요'
+    (folder / 'notion-readback.json').write_text(json.dumps(readback), encoding='utf-8')
+    first_merged = merge_resumed_blog_batch(first_data, original, first, ids[2], '35294118274', '35301346758')
+    if legacy:
+        first_merged['recovery'].pop('manuscript_chain')
+        first_merged['recovery'].pop('previous_run_id')
+        shutil.rmtree(first / 'batch-origin')
+    (first / 'production-results.json').write_text(json.dumps(first_data), encoding='utf-8')
+    (first / 'batch-recovery-results.json').write_text(json.dumps(first_merged), encoding='utf-8')
+    second = tmp_path / 'second-output'
+    second_row, _ = artifact_row(second, ids[2], True, manifest['manuscript_sha256'])
+    second_data = {'batches': [{'channel': 'naver_blog', 'expected': 1, 'results': [second_row]}],
+                   'updated_at': '2026-09-18T05:00:00+00:00'}
+    return original, first, second, ids, second_data
+
+
+def test_second_resume_restores_original_batch_and_binds_to_latest_failed_manuscript(tmp_path):
+    original, first, second, ids, current = multi_recovery_fixture(tmp_path, legacy=True)
+    assert original_batch_run_id(first, '35301346758', ids[2]) == '35294118274'
+    merged = merge_resumed_blog_batch(current, first, second, ids[2], '35301346758', '35302000000', original_dir=original)
+    assert merged['batches'][0]['expected'] == 3
+    assert merged['batches'][0]['reviewed_outputs'] == 3
+    assert [row['evidence_run_id'] for row in merged['batches'][0]['results']] == ['35294118274', '35294118274', '35302000000']
+    assert [link['run_id'] for link in merged['recovery']['manuscript_chain']] == ['35294118274', '35301346758', '35302000000']
+    assert (second / 'batch-origin' / ids[0].replace('-', '')[:16] / 'cards/card_01.png').exists()
+    assert not (second / 'batch-origin/state.db').exists()
+    report = markdown_report(merged, {'naver_blog': 3}, 'success', 'https://example.org/runs/35302000000')
+    assert 'https://example.org/runs/35294118274' in report
+    assert '직전 재개 실행: https://example.org/runs/35301346758' in report
+
+
+def test_later_resume_uses_bundled_original_evidence_without_old_artifact_download(tmp_path):
+    original, first, second, ids, current = multi_recovery_fixture(tmp_path)
+    assert original_batch_run_id(first, '35301346758', ids[2]) == ''
+    shutil.rmtree(original)
+    merged = merge_resumed_blog_batch(current, first, second, ids[2], '35301346758', '35302000000')
+    assert merged['batches'][0]['reviewed_outputs'] == 3
+
+
+@pytest.mark.parametrize('damage', ['retained_row', 'target_page', 'lineage', 'latest_source_hash', 'original_hash', 'duplicate'])
+def test_second_resume_rejects_changed_history_or_original_evidence(tmp_path, damage):
+    original, first, second, ids, current = multi_recovery_fixture(tmp_path)
+    history_path = first / 'batch-recovery-results.json'
+    history = json.loads(history_path.read_text(encoding='utf-8'))
+    if damage == 'retained_row':
+        history['batches'][0]['results'][0]['title'] = 'another manuscript'
+    elif damage == 'target_page':
+        history['recovery']['page_id'] = ids[0]
+    elif damage == 'lineage':
+        history['recovery']['manuscript_chain'][-1]['source_sha256'] = 'changed'
+    elif damage == 'duplicate':
+        history['batches'][0]['results'][1] = history['batches'][0]['results'][0]
+    else:
+        root = second if damage == 'latest_source_hash' else first / 'batch-origin'
+        page_id = ids[2] if damage == 'latest_source_hash' else ids[0]
+        manifest_path = root / page_id.replace('-', '')[:16] / 'manifest.json'
+        manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+        field = 'resume_source_manuscript_sha256' if damage == 'latest_source_hash' else 'manuscript_sha256'
+        manifest[field] = 'changed'
+        manifest_path.write_text(json.dumps(manifest), encoding='utf-8')
+    history_path.write_text(json.dumps(history), encoding='utf-8')
+    with pytest.raises(ValueError):
+        merge_resumed_blog_batch(current, first, second, ids[2], '35301346758', '35302000000')
+
+
+def test_workflow_restores_original_batch_evidence_before_repeated_resume():
+    workflow = Path('.github/workflows/daily.yml').read_text(encoding='utf-8')
+    resume = workflow.split('- name: Resume one existing blog artifact', 1)[1].split('\n      - name:', 1)[0]
+    assert 'original_batch_run_id' in resume
+    assert 'gh run download "$original_run_id" --repo "$GITHUB_REPOSITORY"' in resume
+    assert '--dir recovered-original' in resume

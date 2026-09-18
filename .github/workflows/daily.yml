@@ -173,6 +173,10 @@ jobs:
           [[ "$RESUME_PAGE_ID" =~ ^[0-9a-fA-F-]{32,36}$ ]]
           page_folder="$(printf '%s' "$RESUME_PAGE_ID" | tr -d '-' | cut -c1-16)"
           gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "hamjju-output-$SOURCE_RUN_ID" --dir recovered
+          original_run_id="$(python -c 'import os; from pathlib import Path; from app.run_report import original_batch_run_id; print(original_batch_run_id(Path("recovered"), os.environ["SOURCE_RUN_ID"], os.environ["RESUME_PAGE_ID"]))')"
+          if [ -n "$original_run_id" ]; then
+            gh run download "$original_run_id" --repo "$GITHUB_REPOSITORY" --name "hamjju-output-$original_run_id" --dir recovered-original
+          fi
           python -m app.main resume-blog "$RESUME_PAGE_ID" "recovered/$page_folder/manifest.json"
 
       - name: Produce today's two reviewed Shorts

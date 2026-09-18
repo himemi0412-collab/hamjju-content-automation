@@ -5,6 +5,7 @@ import json
 import hashlib
 import os
 import re
+import shutil
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -135,15 +136,98 @@ def _artifact_evidence(root: Path, row: dict) -> dict:
     return manifest
 
 
+def original_batch_run_id(prior_dir: Path, source_run_id: str, page_id: str) -> str:
+    """Return a missing original artifact's run ID, never an arbitrary download path."""
+    path = prior_dir / 'batch-recovery-results.json'
+    if not path.exists():
+        return ''
+    history = json.loads(path.read_text(encoding='utf-8'))
+    recovery = history.get('recovery') or {}
+    original_id = str(recovery.get('source_run_id') or '')
+    if (recovery.get('run_id') != source_run_id or recovery.get('page_id') != page_id
+            or not original_id.isdigit() or original_id == source_run_id):
+        raise ValueError('Recovery history does not identify the exact original batch')
+    _blog_rows(history)
+    return '' if (prior_dir / 'batch-origin/production-results.json').is_file() else original_id
+
+
+def _without_provenance(row: dict) -> dict:
+    return {key: value for key, value in row.items() if key != 'evidence_run_id'}
+
+
+def _preserve_origin(origin_dir: Path, current_dir: Path, rows: list[dict]) -> None:
+    """Keep only verified production evidence for later retries, not budget/state files."""
+    target = current_dir / 'batch-origin'
+    target.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(origin_dir / 'production-results.json', target / 'production-results.json')
+    for row in rows:
+        folder = row['page_id'].replace('-', '')[:16]
+        (target / folder).mkdir(exist_ok=True)
+        for name in ('manifest.json', 'notion-readback.json'):
+            source = origin_dir / folder / name
+            if source.exists():
+                shutil.copy2(source, target / folder / name)
+        cards = origin_dir / folder / 'cards'
+        if cards.is_dir():
+            shutil.copytree(cards, target / folder / 'cards', dirs_exist_ok=True)
+
+
 def merge_resumed_blog_batch(
     current: dict, prior_dir: Path, current_dir: Path, page_id: str,
-    source_run_id: str, run_id: str,
+    source_run_id: str, run_id: str, original_dir: Path | None = None,
 ) -> dict:
     """Merge reporting evidence only; no queue selection, generation or writes to Notion."""
     if not source_run_id.isdigit() or not run_id.isdigit() or source_run_id == run_id:
         raise ValueError('Distinct original and recovery run identities are required')
     prior = json.loads((prior_dir / 'production-results.json').read_text(encoding='utf-8'))
     previous_rows, expected = _blog_rows(prior)
+    origin, origin_dir, original_run_id = prior, prior_dir, source_run_id
+    chain = []
+    history_path = prior_dir / 'batch-recovery-results.json'
+    if history_path.exists():
+        original_batch_run_id(prior_dir, source_run_id, page_id)
+        history = json.loads(history_path.read_text(encoding='utf-8'))
+        history_rows, history_expected = _blog_rows(history)
+        recovery = history['recovery']
+        original_run_id = recovery['source_run_id']
+        origin_dir = prior_dir / 'batch-origin'
+        if not (origin_dir / 'production-results.json').is_file():
+            if original_dir is None:
+                raise ValueError('Original three-item evidence is unavailable')
+            origin_dir = original_dir
+        origin = json.loads((origin_dir / 'production-results.json').read_text(encoding='utf-8'))
+        origin_rows, origin_expected = _blog_rows(origin)
+        if len(previous_rows) != 1 or expected != 1 or previous_rows[0]['page_id'] != page_id:
+            raise ValueError('Previous recovery must contain only the same target page')
+        expected_history = {row['page_id']: row for row in origin_rows}
+        if page_id not in expected_history or reviewed_output(expected_history[page_id]):
+            raise ValueError('Original batch did not contain this unfinished page')
+        expected_history[page_id] = previous_rows[0]
+        if (history_expected != origin_expected or set(expected_history) != {row['page_id'] for row in history_rows}
+                or any(_without_provenance(row) != _without_provenance(expected_history[row['page_id']]) for row in history_rows)):
+            raise ValueError('Prior recovery changed retained pages or duplicated completions')
+        # Every retained completion remains bound to its original local evidence.
+        origin_manifests = {row['page_id']: _artifact_evidence(origin_dir, row) for row in origin_rows}
+        previous_manifest = _artifact_evidence(prior_dir, previous_rows[0])
+        origin_hash = origin_manifests[page_id]['manuscript_sha256']
+        chain = recovery.get('manuscript_chain') or [
+            {'run_id': original_run_id, 'sha256': origin_hash},
+            {'run_id': source_run_id, 'source_sha256': previous_manifest.get('resume_source_manuscript_sha256'),
+             'sha256': previous_manifest['manuscript_sha256']},
+        ]
+        if not isinstance(chain, list) or len(chain) < 2 or chain[0] != {'run_id': original_run_id, 'sha256': origin_hash}:
+            raise ValueError('Original manuscript lineage changed')
+        seen = {original_run_id}
+        for earlier, later in zip(chain, chain[1:]):
+            if (not str(later.get('run_id', '')).isdigit() or later['run_id'] in seen
+                    or later.get('source_sha256') != earlier.get('sha256')):
+                raise ValueError('Recovery manuscript lineage is broken')
+            seen.add(later['run_id'])
+        if (chain[-1].get('run_id') != source_run_id
+                or chain[-1].get('sha256') != previous_manifest['manuscript_sha256']
+                or chain[-1].get('source_sha256') != previous_manifest.get('resume_source_manuscript_sha256')):
+            raise ValueError('Most recent recovery manuscript does not match its lineage')
+        previous_rows, expected = history_rows, origin_expected
     new_rows, new_expected = _blog_rows(current)
     if len(new_rows) != 1 or new_expected != 1 or new_rows[0]['page_id'] != page_id:
         raise ValueError('Recovery must contain exactly the requested existing page')
@@ -152,25 +236,34 @@ def merge_resumed_blog_batch(
         raise ValueError('Recovered page is not in the original batch')
     if reviewed_output(previous[page_id]):
         raise ValueError('Already completed page must not be counted as a new recovery')
-    previous_manifests = {row['page_id']: _artifact_evidence(prior_dir, row) for row in previous_rows}
+    previous_manifest = _artifact_evidence(prior_dir, previous[page_id])
+    if not history_path.exists():
+        for row in previous_rows:
+            _artifact_evidence(origin_dir, row)
+        chain = [{'run_id': original_run_id, 'sha256': previous_manifest['manuscript_sha256']}]
     resumed = new_rows[0]
-    if reviewed_output(resumed):
+    if resumed['output_verified']:
         manifest = _artifact_evidence(current_dir, resumed)
-        source_hash = previous_manifests[page_id]['manuscript_sha256']
+        source_hash = previous_manifest['manuscript_sha256']
         if manifest.get('resume_source_manuscript_sha256') != source_hash:
             raise ValueError('Recovery does not prove the exact original manuscript version')
+        if run_id in {entry['run_id'] for entry in chain}:
+            raise ValueError('A recovery run cannot appear twice in the lineage')
+        chain.append({'run_id': run_id, 'source_sha256': source_hash, 'sha256': manifest['manuscript_sha256']})
     merged = [{**(resumed if row['page_id'] == page_id else row),
-               'evidence_run_id': run_id if row['page_id'] == page_id else source_run_id}
+               'evidence_run_id': run_id if row['page_id'] == page_id else original_run_id}
               for row in previous_rows]
-    source_time = datetime.fromisoformat(prior['updated_at'])
+    source_time = datetime.fromisoformat(origin['updated_at'])
     if source_time.tzinfo is None:
         raise ValueError('Original batch time has no timezone')
+    _preserve_origin(origin_dir, current_dir, _blog_rows(origin)[0])
     return {
         'schema_version': 1, 'updated_at': current.get('updated_at'),
         'batches': [{'channel': 'naver_blog', 'expected': expected, 'processed': len(merged),
                      'reviewed_outputs': sum(reviewed_output(row) for row in merged),
                      'missing': max(expected - len(merged), 0), 'results': merged}],
-        'recovery': {'source_run_id': source_run_id, 'run_id': run_id, 'page_id': page_id,
+        'recovery': {'source_run_id': original_run_id, 'previous_run_id': source_run_id,
+                     'run_id': run_id, 'page_id': page_id, 'manuscript_chain': chain,
                      'batch_date_kst': source_time.astimezone(timezone(timedelta(hours=9))).date().isoformat(),
                      'current_reviewed_outputs': int(reviewed_output(resumed)), 'current_expected': 1},
     }
@@ -205,6 +298,9 @@ def markdown_report(data: dict, expected: dict[str, int], run_status: str, run_u
             f'- 원본 예약 실행: {source_url}',
             '- 원본 실행의 실패 기록은 유지하며, 동일 원고의 재검수 결과만 반영했습니다.',
         ]
+        if recovery.get('previous_run_id') and recovery['previous_run_id'] != recovery['source_run_id']:
+            previous_url = run_url.rsplit('/', 1)[0] + '/' + recovery['previous_run_id']
+            lines.insert(6, f'- 직전 재개 실행: {previous_url}')
     for name, count in expected.items():
         items = by_channel[name]
         lines.append(f'| {name} | {count} | {len(items)} | {sum(reviewed_output(x) for x in items)} |')
@@ -243,6 +339,7 @@ def main() -> None:
             data = merge_resumed_blog_batch(
                 data, Path('recovered'), Path('output'), os.getenv('RESUME_PAGE_ID', ''),
                 os.getenv('SOURCE_RUN_ID', ''), os.getenv('GITHUB_RUN_ID', ''),
+                original_dir=Path('recovered-original'),
             )
             expected = {'naver_blog': data['batches'][0]['expected']}
             Path('output/batch-recovery-results.json').write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
