@@ -380,23 +380,29 @@ def naver_handoff_blocks(
     body_blocks: list[dict[str, Any]] = []
     current_section = '도입'
     used_cards: set[int] = set()
+
+    def append_section_images(section: str) -> None:
+        for item in by_section.pop(section, []):
+            body_blocks.extend(image_blocks(item))
+            used_cards.add(item[0])
+
     for line_index, line in enumerate(body_lines):
         heading = re.match(r'^#{1,3}\s+(.+)$', line)
         if heading:
-            if current_section in by_section:
-                for item in by_section[current_section]:
-                    body_blocks.extend(image_blocks(item))
-                    used_cards.add(item[0])
+            append_section_images(current_section)
             current_section = heading.group(1).strip()
+        # A paragraph-targeted card (for example the final decision card at
+        # "정리하면") is a section boundary too. Flush the current section's
+        # summary card before that paragraph so card order cannot become 5, 4
+        # when the preceding section is also the document's final heading.
+        if line_index in by_line:
+            append_section_images(current_section)
         body_blocks.extend(_markdown_line_blocks(line))
         if line_index in by_line:
             for item in by_line[line_index]:
                 body_blocks.extend(image_blocks(item))
                 used_cards.add(item[0])
-    if current_section in by_section:
-        for item in by_section[current_section]:
-            body_blocks.extend(image_blocks(item))
-            used_cards.add(item[0])
+    append_section_images(current_section)
     missing = sorted(set(range(1, 6)) - used_cards)
     if missing:
         raise ValueError('Naver handoff image placements were not applied: ' + ', '.join(map(str, missing)))
