@@ -30,4 +30,3 @@ def test_concept_exploration_renders_twenty_independent_covers_and_five_sheets(t
     assert manifest['selection_required_before_production'] is True
     assert [item['design_language'] for item in manifest['covers']] == list(SUPPORTED_DESIGN_LANGUAGES)
     assert manifest['fixed_copy'] == {'title': DEFAULT_TITLE, 'subtitle': DEFAULT_SUBTITLE}
-
