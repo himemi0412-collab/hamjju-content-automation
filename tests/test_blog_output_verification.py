@@ -16,6 +16,7 @@ from app.notion_client import naver_handoff_blocks, result_blocks
 from app.settings import Settings
 from app.state import StateStore
 from app.manuscript_repair import manuscript_hash
+from app.blog_reference import load_blog_reference
 
 
 class FakeNotion:
@@ -63,6 +64,9 @@ def make_pipeline(tmp_path, monkeypatch, visual_pass=True):
     notion = FakeNotion()
     ai = Mock()
     ai.generate.return_value = ({
+        'reference_profile_id': 'HAMZZU_NAVER_REFERENCE_V1',
+        'card_format': 'square',
+        'visual_family': 'playful_diagram',
         'title': '검증 원고',
         'body_markdown': '도입 문장\n\n## 구간 1\n본문 전체',
         'hashtags': ['#검증'],
@@ -83,7 +87,7 @@ def make_pipeline(tmp_path, monkeypatch, visual_pass=True):
     paths = [tmp_path / f'card_{i:02d}.png' for i in range(1, 6)]
     for i, path in enumerate(paths):
         path.write_bytes(f'image-{i}'.encode())
-    monkeypatch.setattr('app.pipeline.render_blog_cards', lambda *args: paths)
+    monkeypatch.setattr('app.pipeline.render_blog_cards', lambda *args, **kwargs: paths)
     monkeypatch.setattr('app.pipeline.httpx.get', lambda url, **kwargs: SimpleNamespace(content=notion.paths[url].read_bytes(), raise_for_status=lambda: None))
     settings = Settings(_env_file=None, output_dir=tmp_path / 'output')
     state = StateStore(tmp_path / 'state.db')
@@ -98,7 +102,22 @@ def test_success_requires_visual_qa_and_exact_remote_card_bytes(tmp_path, monkey
     assert result['status'] == '네이버 저장 요청'
     assert result['media']['rendered_card_qa_pass'] is True
     assert pipeline.ai.qa.call_args.kwargs['image_paths'] == paths
+    qa_context = pipeline.ai.qa.call_args.args[1]
+    assert qa_context['reference_baseline']['id'] == 'HAMZZU_NAVER_REFERENCE_V1'
+    assert len(qa_context['reference_baseline']['source_urls']) == 4
     assert (tmp_path / 'output' / 'one' / 'notion-readback.json').exists()
+
+
+def test_missing_reference_acknowledgement_fails_before_handoff(tmp_path, monkeypatch):
+    pipeline, _ = make_pipeline(tmp_path, monkeypatch)
+    pipeline.ai.generate.return_value[0].pop('reference_profile_id')
+
+    result = pipeline.process_page(load_channels()['naver_blog'], {'id': 'one'})
+
+    assert result['status'] == 'failed'
+    assert 'REFERENCE_PROFILE_MISSING' in result['error']
+    pipeline.ai.qa.assert_not_called()
+    assert pipeline.notion.status != '네이버 저장 요청'
 
 
 def test_naver_handoff_has_one_ready_contract_and_five_ordered_images():
@@ -232,6 +251,8 @@ def test_resume_reuses_pass_for_identical_reviewed_manuscript_and_card_bytes(tmp
     prior_qa = {'pass': True, 'score': 94, 'blocking_issues': [], 'recommended_status': 'PASS'}
     prior = {
         'page_id': 'one', 'channel': 'naver_blog', 'generated': generated, 'qa': prior_qa,
+        'reference_baseline_id': load_blog_reference()['id'],
+        'reference_baseline_sha256': load_blog_reference()['sha256'],
         'media': {
             'cards': [str(p) for p in cards],
             'rendered_card_qa_pass': True,
@@ -269,6 +290,8 @@ def test_repeated_resume_restores_pass_only_from_identical_original_review(tmp_p
     reviewed = {
         'page_id': 'one', 'channel': 'naver_blog', 'generated': generated,
         'qa': {'pass': True, 'score': 94, 'blocking_issues': []},
+        'reference_baseline_id': load_blog_reference()['id'],
+        'reference_baseline_sha256': load_blog_reference()['sha256'],
         'media': {'cards': [str(p) for p in cards], 'rendered_card_qa_pass': True},
     }
     current_dir = tmp_path / 'current'

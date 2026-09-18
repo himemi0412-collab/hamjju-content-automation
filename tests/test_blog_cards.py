@@ -48,6 +48,24 @@ def test_complete_five_card_set_has_distinct_square_layouts(tmp_path):
             assert len(im.getcolors(1080 * 1080)) > 100
 
 
+def test_approved_reference_family_can_render_landscape_set(tmp_path):
+    paths = render_blog_cards(
+        sample_cards(), tmp_path, card_format='landscape_4_3',
+        visual_family='contract_notebook',
+    )
+
+    assert len(paths) == 5
+    for path in paths:
+        with Image.open(path) as im:
+            assert im.size == (1448, 1086)
+            assert im.getpixel((0, 0)) == (255, 255, 255)
+
+
+def test_unknown_visual_family_fails_closed(tmp_path):
+    with pytest.raises(ValueError, match='visual family'):
+        render_blog_cards(sample_cards(), tmp_path, visual_family='generic_corporate')
+
+
 def test_text_overflow_fails_before_any_card_is_written(tmp_path):
     cards = sample_cards()
     cards[-1]['items'][-1]['detail'] = '긴 정보가 반복됩니다. ' * 80

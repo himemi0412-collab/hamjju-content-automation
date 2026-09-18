@@ -18,6 +18,7 @@
 - 블로그는 `선별 상태=추천`, `모델 확인=공식 확인`, `진행 순서>0`을 모두 만족해야 자동 실행 후보가 됩니다.
 - 후보가 여러 개면 생성 시각이 아니라 `진행 순서` 오름차순으로 1건을 고릅니다.
 - 카드뉴스는 AI 이미지 호출이 아니라 Pillow로 직접 만들어 비용을 줄입니다.
+- 블로그 제작은 `references/naver_blog_baseline.md`의 `HAMZZU_NAVER_REFERENCE_V1`을 매 실행 로드합니다. 이 파일에는 사용자가 지정한 공개 글 4개와 원고·카드뉴스 공통 기준이 버전 관리되며, ID/URL/생성 응답 계약이 빠지면 Notion 전달 전에 실패합니다.
 - 색 구성은 밝은 화이트/블루/퍼플/핑크/민트 계열이며 누런/세피아 배경을 쓰지 않습니다.
 - 네이버 공개/예약 발행 기능은 없습니다.
 
@@ -172,6 +173,8 @@ GitHub 저장소의 Actions secrets에 다음 값을 넣습니다.
 현재 블로그·쇼츠 Data Source ID는 코드 기본값에 들어 있으므로 중복 입력하지 않습니다. 대기열을 교체할 때만 Repository Variables로 별도 관리합니다.
 
 `execute_text`는 채널 1건의 원고를 만들며, 블로그에서는 설명 도식 카드 5장도 렌더링합니다. `recover_blog`는 `page_id`로 지정한 기존 작성 요청 블로그 1편만 제작하고 새 주제를 만들지 않습니다. `resume_blog`는 `수정 필요` 또는 과거 `CODEX_HANDOFF_READY` 페이지의 원고·블록·카드 바이트가 기존 artifact와 정확히 일치할 때만 같은 페이지를 재검수해 새 네이버 전달 계약으로 바꿉니다. `execute_media`는 이미 검토 대상이 된 쇼츠 1건의 MP4를 만듭니다. `produce_daily_shorts`는 새 주제를 조사해 삐죽이·일본 쇼츠를 각각 1건씩 준비합니다. 독립 QA에서 멈춘 쇼츠는 원인을 보완한 뒤 `retry_revision`으로 1건만 다시 제작할 수 있습니다. 과거 artifact의 합성 파일만 복구할 때는 `repair_video`가 전체 장면 길이로 다시 합성해 같은 Notion 항목의 검토 영상을 교체합니다.
+
+새 블로그와 과거 artifact 재검수 모두 현재 reference baseline을 통과해야 합니다. manifest에는 reference ID·SHA-256·원문 URL 4개를 남깁니다. 이전 QA를 재사용하는 경로도 현재 baseline SHA-256과 정확히 일치할 때만 허용하므로, 기준 변경 전에 만든 카드가 새 기준 검수 없이 통과하지 않습니다. 카드 세트는 주제에 따라 1080×1080 또는 1448×1086을 선택하고, 네 승인 레퍼런스에서 추출한 네 시각 계열 중 하나를 사용합니다. 공개 본문에는 별도 요청이 없는 한 형식적인 `공식 확인 링크` 섹션을 붙이지 않으며 근거는 내부 검수 필드에 보존합니다.
 
 미디어 생성은 쇼츠 실행에서만 켜집니다. 예약 쇼츠 제작, `execute_media`, `produce_daily_shorts`, `retry_revision`은 고정 채널 ID를 검사한 뒤 YouTube에 `private`로 올립니다. `regenerate_review`와 영상 복구는 MP4·Notion 검토 기록에서 멈추고 업로드하지 않습니다. `verify_youtube_auth`는 업로드 없이 두 OAuth 연결의 채널 ID와 이름만 검사합니다.
 

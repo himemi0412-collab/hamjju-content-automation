@@ -16,6 +16,7 @@ from .settings import Settings
 from .state import StateStore
 from .youtube import YouTubePrivateUploader
 from .manuscript_repair import apply_reviewed_corrections, manuscript_hash
+from .blog_reference import load_blog_reference, validate_generated_reference_contract
 
 
 class Pipeline:
@@ -88,6 +89,11 @@ class Pipeline:
             'media_expected': media_expected,
             'youtube_upload_expected': bool(media_expected and self.s.auto_private_youtube_upload),
         }
+        if cfg.content_kind == 'blog':
+            # GitHub-hosted runs do not inherit local Codex memories or user
+            # skills. Load the versioned Hamzzu baseline on every blog run so
+            # reference fidelity is an explicit input, not remembered context.
+            context['reference_baseline'] = load_blog_reference()
         if not page_is_eligible(cfg, context):
             return {'page_id': page_id, 'status': 'skipped', 'reason': 'eligibility_changed'}
         previous = None
@@ -185,6 +191,7 @@ class Pipeline:
             else:
                 generated, gen_usage = self.ai.generate(cfg.prompt_file, context, use_web=use_web)
             if cfg.content_kind == 'blog':
+                validate_generated_reference_contract(generated, context['reference_baseline'])
                 # Blog QA sees the finished images and manuscript together.
                 qa, qa_usage = {'pass': False, 'status': 'PENDING_RENDER_REVIEW'}, {}
             else:
@@ -203,6 +210,10 @@ class Pipeline:
                 'created_at': datetime.now(timezone.utc).isoformat(),
                 'manuscript_sha256': manuscript_hash(generated),
             }
+            if cfg.content_kind == 'blog':
+                manifest['reference_baseline_id'] = context['reference_baseline']['id']
+                manifest['reference_baseline_sha256'] = context['reference_baseline']['sha256']
+                manifest['reference_source_urls'] = context['reference_baseline']['source_urls']
             if previous:
                 manifest['resume_source_manuscript_sha256'] = manuscript_hash(previous['generated'])
             save_manifest(job_dir / 'manifest.json', manifest)
@@ -212,7 +223,10 @@ class Pipeline:
                 card_news = generated.get('card_news') or []
                 if len(card_news) != 5:
                     raise RuntimeError('Blog output did not contain exactly five card-news items')
-                cards = render_blog_cards(card_news, job_dir / 'cards', self.s.card_font_path)
+                cards = render_blog_cards(
+                    card_news, job_dir / 'cards', self.s.card_font_path,
+                    card_format=generated['card_format'], visual_family=generated['visual_family'],
+                )
                 if len(cards) != 5:
                     raise RuntimeError('Blog card-news render did not produce exactly five images')
                 media['cards'] = [str(x) for x in cards]
@@ -223,6 +237,8 @@ class Pipeline:
                     and manuscript_hash(generated) == manuscript_hash(reviewed_previous['generated'])
                     and prior_qa.get('pass') is True
                     and not prior_qa.get('blocking_issues')
+                    and reviewed_previous.get('reference_baseline_id') == context['reference_baseline']['id']
+                    and reviewed_previous.get('reference_baseline_sha256') == context['reference_baseline']['sha256']
                     and reviewed_previous.get('media', {}).get('rendered_card_qa_pass') is True
                     and len(prior_reviewed_cards) == 5
                     and all(

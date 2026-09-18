@@ -231,7 +231,10 @@ def concat_scene_audio(parts: list[Path], out_path: Path) -> tuple[Path, list[fl
     return out_path, [probe_media_duration(part) for part in parts]
 
 
-def render_blog_cards(cards: list[dict[str, Any]], out_dir: Path, font_path: str | None = None) -> list[Path]:
+def render_blog_cards(
+    cards: list[dict[str, Any]], out_dir: Path, font_path: str | None = None,
+    *, card_format: str = 'square', visual_family: str = 'playful_diagram',
+) -> list[Path]:
     """Typeset five original explanatory diagrams; never invent product photos.
 
     All text is measured before files are saved. A missing structure or overflow
@@ -240,14 +243,32 @@ def render_blog_cards(cards: list[dict[str, Any]], out_dir: Path, font_path: str
     layouts = ('cover', 'flow', 'comparison', 'checklist', 'decision')
     if len(cards) != 5:
         raise ValueError('Blog card set must contain exactly five cards')
+    formats = {'square': (1080, 1080), 'landscape_4_3': (1448, 1086)}
+    if card_format not in formats:
+        raise ValueError('Blog card format must be square or landscape_4_3')
+    family_palettes = {
+        'soft_scene': ('#DCD8F4', '#F4CBC7', '#DCE8F5', '#303047'),
+        'playful_diagram': ('#C9B8E8', '#A7DDCE', '#F7A6A6', '#202329'),
+        'contract_notebook': ('#D8B7E5', '#D9E3A6', '#B9D7F3', '#302735'),
+        'clipboard_checklist': ('#B9D3A8', '#B9D7F3', '#E7D2B0', '#173C2B'),
+    }
+    if visual_family not in family_palettes:
+        raise ValueError('Unsupported Hamzzu blog visual family')
+    width, height = formats[card_format]
+    sx, sy = width / 1080, height / 1080
+    sf = min(sx, sy)
+
+    def box(values):
+        return tuple(int(v * (sx if i % 2 == 0 else sy)) for i, v in enumerate(values))
+
+    def point(values):
+        return int(values[0] * sx), int(values[1] * sy)
+
+    def size(value):
+        return max(1, int(value * sf))
+
     rendered: list[Image.Image] = []
-    # Rotate a restrained topic palette, while keeping a coherent set.
-    palette_sets = [
-        ('#B8E4D8', '#F6C3A5', '#B9C4EE', '#294B46'),
-        ('#F3B2C6', '#A9D8DC', '#D9E3A6', '#49394C'),
-        ('#B9D7F3', '#C9B8E8', '#F7A6A6', '#293F57'),
-    ]
-    palette = palette_sets[sum(map(ord, str(cards[0].get('headline', '')))) % len(palette_sets)]
+    palette = family_palettes[visual_family]
     primary, secondary, tertiary, ink = palette
     for i, card in enumerate(cards, 1):
         layout = card.get('layout')
@@ -256,7 +277,7 @@ def render_blog_cards(cards: list[dict[str, Any]], out_dir: Path, font_path: str
         headline = _blog_required_text(card.get('headline'), f'card {i} headline')
         copy = _blog_required_text(card.get('copy'), f'card {i} copy')
         illustration = card.get('illustration')
-        if illustration not in {'bubbles', 'laundry', 'wifi', 'document'}:
+        if illustration not in {'bubbles', 'laundry', 'wifi', 'document', 'appliance', 'measurement', 'home'}:
             raise ValueError(f'Card {i} has an unsupported explanatory illustration')
         items = card.get('items')
         minimum, maximum = {'cover': (2, 2), 'flow': (3, 3), 'comparison': (2, 2),
@@ -268,64 +289,67 @@ def render_blog_cards(cards: list[dict[str, Any]], out_dir: Path, font_path: str
                 raise ValueError(f'Card {i} item must contain label and detail')
             _blog_required_text(item.get('label'), f'card {i} item label')
             _blog_required_text(item.get('detail'), f'card {i} item detail')
-        im = Image.new('RGB', (1080, 1080), '#FFFFFF')
+        im = Image.new('RGB', (width, height), '#FFFFFF')
         draw = ImageDraw.Draw(im)
-        role = ('질문 하나', '원리 살펴보기', '같은 기준으로 비교', '실행 전 체크', '선택 기준 정리')[i - 1]
-        draw.rounded_rectangle((62, 48, 390, 102), radius=20, fill=primary)
-        _blog_text(draw, role, (84, 60, 370, 92), font_path, 25, ink, 1)
-        _blog_text(draw, f'{i:02d} / 05', (868, 60, 1018, 92), font_path, 25, ink, 1)
-        _blog_text(draw, headline, (62, 140, 1018, 292), font_path, 64, ink, 2, title=True)
-        _blog_text(draw, copy, (64, 306, 1016, 396), font_path, 33, ink, 2)
+        _blog_family_decor(draw, visual_family, width, height, primary, secondary, tertiary, ink)
+        role = ('먼저 답', '왜 그런지', '같은 조건 비교', '지금 확인', '마지막 판단')[i - 1]
+        draw.rounded_rectangle(box((62, 48, 390, 102)), radius=size(20), fill=primary)
+        _blog_text(draw, role, box((84, 60, 370, 92)), font_path, size(25), ink, 1)
+        _blog_text(draw, f'{i:02d} / 05', box((868, 60, 1018, 92)), font_path, size(25), ink, 1)
+        if visual_family == 'contract_notebook':
+            draw.rounded_rectangle(box((54, 128, 1026, 300)), radius=size(18), fill='#F2EAF6')
+        _blog_text(draw, headline, box((62, 140, 1018, 292)), font_path, size(64), ink, 2, title=True)
+        _blog_text(draw, copy, box((64, 306, 1016, 396)), font_path, size(33), ink, 2)
 
         if layout == 'cover':
-            draw.ellipse((312, 418, 768, 822), fill=primary)
-            _blog_symbol(draw, illustration, (540, 610), 245, ink, '#FFFFFF')
+            draw.ellipse(box((312, 418, 768, 822)), fill=primary)
+            _blog_symbol(draw, illustration, point((540, 610)), size(245), ink, '#FFFFFF')
             for j, item in enumerate(items):
                 x = 64 + j * 500
-                draw.rounded_rectangle((x, 824, x + 452, 984), radius=24, fill=(secondary, tertiary)[j])
-                _blog_text(draw, item['label'], (x + 24, 846, x + 428, 892), font_path, 34, ink, 1, title=True)
-                _blog_text(draw, item['detail'], (x + 24, 907, x + 428, 970), font_path, 27, ink, 2)
+                draw.rounded_rectangle(box((x, 824, x + 452, 984)), radius=size(24), fill=(secondary, tertiary)[j])
+                _blog_text(draw, item['label'], box((x + 24, 846, x + 428, 892)), font_path, size(34), ink, 1, title=True)
+                _blog_text(draw, item['detail'], box((x + 24, 907, x + 428, 970)), font_path, size(27), ink, 2)
         elif layout == 'flow':
             for j, item in enumerate(items):
                 y = 438 + j * 181
                 color = (primary, secondary, tertiary)[j]
-                draw.ellipse((66, y + 15, 164, y + 113), fill=color)
-                _blog_text(draw, str(j + 1), (99, y + 34, 143, y + 92), font_path, 43, ink, 1, title=True)
-                draw.line((196, y + 18, 196, y + 132), fill=color, width=8)
-                _blog_text(draw, item['label'], (224, y + 2, 998, y + 53), font_path, 39, ink, 1, title=True)
-                _blog_text(draw, item['detail'], (224, y + 67, 998, y + 144), font_path, 30, ink, 2)
+                draw.ellipse(box((66, y + 15, 164, y + 113)), fill=color)
+                _blog_text(draw, str(j + 1), box((99, y + 34, 143, y + 92)), font_path, size(43), ink, 1, title=True)
+                draw.line(box((196, y + 18, 196, y + 132)), fill=color, width=size(8))
+                _blog_text(draw, item['label'], box((224, y + 2, 998, y + 53)), font_path, size(39), ink, 1, title=True)
+                _blog_text(draw, item['detail'], box((224, y + 67, 998, y + 144)), font_path, size(30), ink, 2)
                 if j < 2:
-                    _blog_arrow(draw, (115, y + 132), (115, y + 169), ink)
+                    _blog_arrow(draw, point((115, y + 132)), point((115, y + 169)), ink)
         elif layout == 'comparison':
             for j, item in enumerate(items):
                 x = 64 + j * 500
                 color = (primary, secondary)[j]
-                draw.rounded_rectangle((x, 436, x + 452, 970), radius=28, fill=color)
-                _blog_text(draw, item['label'], (x + 26, 466, x + 426, 570), font_path, 42, ink, 2, title=True)
+                draw.rounded_rectangle(box((x, 436, x + 452, 970)), radius=size(28), fill=color)
+                _blog_text(draw, item['label'], box((x + 26, 466, x + 426, 570)), font_path, size(42), ink, 2, title=True)
                 # Two columns share the same visual and scale: no invented
                 # better/worse score or unverified product appearance.
-                _blog_symbol(draw, illustration, (x + 226, 651), 117, ink, '#FFFFFF')
-                _blog_text(draw, item['detail'], (x + 30, 749, x + 422, 944), font_path, 31, ink, 5)
+                _blog_symbol(draw, illustration, point((x + 226, 651)), size(117), ink, '#FFFFFF')
+                _blog_text(draw, item['detail'], box((x + 30, 749, x + 422, 944)), font_path, size(31), ink, 5)
         elif layout == 'checklist':
-            height = 132 if len(items) == 4 else 173
+            item_height = 132 if len(items) == 4 else 173
             for j, item in enumerate(items):
-                y = 426 + j * height
-                draw.rounded_rectangle((64, y + 9, 133, y + 78), radius=16, fill=primary)
-                draw.line([(83, y + 40), (98, y + 55), (117, y + 30)], fill=ink, width=6)
-                _blog_text(draw, item['label'], (164, y + 4, 1005, y + 48), font_path, 34, ink, 1, title=True)
-                _blog_text(draw, item['detail'], (164, y + 59, 1005, y + height - 5), font_path, 28, ink, 2)
+                y = 426 + j * item_height
+                draw.rounded_rectangle(box((64, y + 9, 133, y + 78)), radius=size(16), fill=primary)
+                draw.line([point((83, y + 40)), point((98, y + 55)), point((117, y + 30))], fill=ink, width=size(6))
+                _blog_text(draw, item['label'], box((164, y + 4, 1005, y + 48)), font_path, size(34), ink, 1, title=True)
+                _blog_text(draw, item['detail'], box((164, y + 59, 1005, y + item_height - 5)), font_path, size(28), ink, 2)
                 if j < len(items) - 1:
-                    draw.line((165, y + height - 4, 1007, y + height - 4), fill=tertiary, width=2)
+                    draw.line(box((165, y + item_height - 4, 1007, y + item_height - 4)), fill=tertiary, width=size(2))
         else:  # decision: three labeled stops on a reading path.
-            draw.line((107, 486, 107, 883), fill=primary, width=12)
+            draw.line(box((107, 486, 107, 883)), fill=primary, width=size(12))
             for j, item in enumerate(items):
                 y = 429 + j * 180
-                draw.ellipse((76, y + 20, 138, y + 82), fill=(primary, secondary, tertiary)[j], outline=ink, width=3)
-                _blog_text(draw, str(j + 1), (95, y + 30, 127, y + 71), font_path, 29, ink, 1)
-                _blog_text(draw, item['label'], (178, y + 1, 1009, y + 54), font_path, 40, ink, 1, title=True)
-                _blog_text(draw, item['detail'], (178, y + 71, 1009, y + 144), font_path, 30, ink, 2)
-        draw.line((64, 1012, 1016, 1012), fill=ink, width=2)
-        _blog_text(draw, '이해를 돕는 설명 도식 · 실제 제품 사진 아님', (64, 1030, 1016, 1065), font_path, 22, ink, 1)
+                draw.ellipse(box((76, y + 20, 138, y + 82)), fill=(primary, secondary, tertiary)[j], outline=ink, width=size(3))
+                _blog_text(draw, str(j + 1), box((95, y + 30, 127, y + 71)), font_path, size(29), ink, 1)
+                _blog_text(draw, item['label'], box((178, y + 1, 1009, y + 54)), font_path, size(40), ink, 1, title=True)
+                _blog_text(draw, item['detail'], box((178, y + 71, 1009, y + 144)), font_path, size(30), ink, 2)
+        draw.line(box((64, 1012, 1016, 1012)), fill=ink, width=size(2))
+        _blog_text(draw, '이해를 돕는 설명 도식 · 실제 제품 사진 아님', box((64, 1030, 1016, 1065)), font_path, size(22), ink, 1)
         rendered.append(im)
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -335,6 +359,21 @@ def render_blog_cards(cards: list[dict[str, Any]], out_dir: Path, font_path: str
         im.save(path)
         paths.append(path)
     return paths
+
+
+def _blog_family_decor(draw, family, width, height, primary, secondary, tertiary, ink):
+    """Small functional editorial cues distilled from the approved references."""
+    if family == 'soft_scene':
+        draw.ellipse((int(width * .64), int(height * .37), int(width * 1.02), int(height * .78)), fill='#F5F3FB')
+        draw.arc((int(width * .74), int(height * .18), int(width * .96), int(height * .40)), 190, 285, fill=secondary, width=4)
+    elif family == 'playful_diagram':
+        draw.line((int(width * .035), int(height * .12), int(width * .075), int(height * .10)), fill=secondary, width=7)
+        draw.line((int(width * .93), int(height * .34), int(width * .97), int(height * .31)), fill=tertiary, width=7)
+    elif family == 'contract_notebook':
+        draw.line((int(width * .05), int(height * .025), int(width * .95), int(height * .025)), fill=primary, width=8)
+    else:  # clipboard_checklist
+        draw.rounded_rectangle((int(width * .018), int(height * .018), int(width * .982), int(height * .982)), radius=24, outline=ink, width=4)
+        draw.rounded_rectangle((int(width * .43), int(height * .012), int(width * .57), int(height * .052)), radius=12, fill=primary, outline=ink, width=3)
 
 
 def _blog_required_text(value: Any, field: str) -> str:
@@ -403,6 +442,22 @@ def _blog_symbol(draw, symbol, center, size, ink, paper):
         for dx in (-.48, 0, .48):
             draw.line((x + dx * r, y - r * .65, x + dx * r, y + r * .65), fill=ink, width=3)
         draw.line((x - r * .92, y + r * .35, x + r * .9, y + r * .35), fill=ink, width=3)
+    elif symbol == 'appliance':
+        draw.rounded_rectangle((x - r * .82, y - r, x + r * .82, y + r), radius=18, fill=paper, outline=ink, width=5)
+        draw.ellipse((x - r * .48, y - r * .38, x + r * .48, y + r * .58), outline=ink, width=6)
+        draw.ellipse((x - r * .55, y - r * .78, x - r * .43, y - r * .66), fill=ink)
+        draw.ellipse((x - r * .28, y - r * .78, x - r * .16, y - r * .66), fill=ink)
+    elif symbol == 'measurement':
+        draw.line((x - r, y, x + r, y), fill=ink, width=6)
+        draw.line((x - r, y - r * .28, x - r, y + r * .28), fill=ink, width=6)
+        draw.line((x + r, y - r * .28, x + r, y + r * .28), fill=ink, width=6)
+        for dx in (-.65, -.3, .05, .4, .75):
+            draw.line((x + dx * r, y, x + dx * r, y + r * .24), fill=ink, width=3)
+        draw.line((x - r, y - r * .5, x + r, y - r * .5), fill=ink, width=4)
+    elif symbol == 'home':
+        draw.line((x - r, y - r * .15, x, y - r, x + r, y - r * .15), fill=ink, width=6)
+        draw.rounded_rectangle((x - r * .78, y - r * .15, x + r * .78, y + r), radius=10, fill=paper, outline=ink, width=5)
+        draw.rectangle((x - r * .18, y + r * .36, x + r * .18, y + r), outline=ink, width=4)
     else:
         draw.rounded_rectangle((x - r * .7, y - r, x + r * .7, y + r), radius=12, fill=paper, outline=ink, width=5)
         for dy in (-.48, 0, .48):
