@@ -95,6 +95,7 @@ def test_resume_workflow_reuses_one_repository_artifact_without_seeding():
     resume = workflow.split('- name: Resume one existing blog artifact', 1)[1].split('\n      - name:', 1)[0]
     assert 'seed-topics' not in resume
     assert 'SOURCE_RUN_ID: ${{ inputs.source_run_id }}' in resume
+    assert 'REVIEWED_RUN_ID: ${{ inputs.reviewed_run_id }}' in resume
     assert 'RESUME_PAGE_ID: ${{ inputs.page_id }}' in resume
     assert '--repo "$GITHUB_REPOSITORY"' in resume
     assert 'resume-blog "$RESUME_PAGE_ID" "recovered/$page_folder/manifest.json"' in resume
@@ -298,3 +299,4 @@ def test_workflow_restores_original_batch_evidence_before_repeated_resume():
     assert 'gh run download "$original_run_id" --repo "$GITHUB_REPOSITORY"' in resume
     assert '--dir recovered-original' in resume
     assert '--reviewed-manifest "recovered-original/$page_folder/manifest.json"' in resume
+    assert 'original_run_id="$REVIEWED_RUN_ID"' in resume
