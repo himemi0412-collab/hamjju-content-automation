@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import hashlib
 from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -14,6 +15,7 @@ from app.pipeline import Pipeline
 from app.notion_client import result_blocks
 from app.settings import Settings
 from app.state import StateStore
+from app.manuscript_repair import manuscript_hash
 
 
 class FakeNotion:
@@ -186,3 +188,91 @@ def test_resume_does_not_overwrite_manual_edit_or_call_ai(tmp_path, monkeypatch)
     pipeline.ai.generate.assert_not_called()
     pipeline.ai.qa.assert_not_called()
     assert pipeline.notion.blocks[-1]['id'] == 'manual'
+
+
+@pytest.mark.parametrize('changed', [False, True])
+def test_resume_checks_attached_bytes_even_when_filenames_match(tmp_path, monkeypatch, changed):
+    pipeline, cards = make_pipeline(tmp_path, monkeypatch)
+    generated = pipeline.ai.generate.return_value[0]
+    prior = {'page_id': 'one', 'channel': 'naver_blog', 'generated': generated,
+             'qa': {'pass': False}, 'media': {'cards': [str(p) for p in cards]}}
+    saved_cards = tmp_path / 'cards'
+    saved_cards.mkdir()
+    for card in cards:
+        (saved_cards / card.name).write_bytes(card.read_bytes())
+    manifest = tmp_path / 'previous.json'
+    manifest.write_text(json.dumps(prior), encoding='utf-8')
+    pipeline.notion.status = '수정 필요'
+    pipeline.notion.append_blocks('one', result_blocks('naver_blog', generated, prior['qa']))
+    pipeline.notion.attach_files('one', '생성 이미지', cards)
+    if changed:
+        cards[2].write_bytes(b'user-edited-card-under-original-name')
+    cfg = replace(load_channels()['naver_blog'], ready_status='수정 필요')
+    result = pipeline.process_page(cfg, {'id': 'one'}, resume_manifest=manifest)
+    if changed:
+        assert result['status'] == 'failed' and 'MANUAL_EDIT_CONFLICT' in result['error']
+        pipeline.ai.qa.assert_not_called()
+        assert pipeline.notion.status == '수정 필요'
+    else:
+        assert result['output_verified'] is True
+    pipeline.ai.generate.assert_not_called()
+
+
+@pytest.mark.parametrize('receipt_valid', [True, False])
+def test_same_name_interrupted_upload_requires_source_bound_receipt(tmp_path, monkeypatch, receipt_valid):
+    pipeline, cards = make_pipeline(tmp_path, monkeypatch)
+    generated = pipeline.ai.generate.return_value[0]
+    prior = {'page_id': 'one', 'channel': 'naver_blog', 'generated': generated,
+             'qa': {'pass': False}, 'media': {'cards': [str(p) for p in cards]}}
+    saved = tmp_path / 'cards'
+    saved.mkdir()
+    for card in cards:
+        (saved / card.name).write_bytes(card.read_bytes())
+    cards[2].write_bytes(b'reviewed-interrupted-upload')
+    pipeline.notion.status = '수정 필요'
+    pipeline.notion.append_blocks('one', result_blocks('naver_blog', generated, prior['qa']))
+    pipeline.notion.attach_files('one', '생성 이미지', cards)
+    source = tmp_path / 'previous.json'
+    source.write_text(json.dumps(prior), encoding='utf-8')
+    repairs = tmp_path / 'repairs'
+    repairs.mkdir()
+    (repairs / 'one.json').write_text(json.dumps({
+        'page_id': 'one', 'source_sha256': manuscript_hash(generated) if receipt_valid else 'wrong-source',
+        'attached_cards': [{'name': p.name, 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()} for p in cards],
+    }), encoding='utf-8')
+    cfg = replace(load_channels()['naver_blog'], ready_status='수정 필요')
+    monkeypatch.chdir(tmp_path)
+    result = pipeline.process_page(cfg, {'id': 'one'}, resume_manifest=source)
+    if receipt_valid:
+        assert result['output_verified'] is True
+        written = json.loads((tmp_path / 'output/one/manifest.json').read_text(encoding='utf-8'))
+        assert written['resume_source_manuscript_sha256'] == manuscript_hash(generated)
+    else:
+        assert result['status'] == 'failed'
+        pipeline.ai.qa.assert_not_called()
+
+
+def test_resume_rechecks_image_bytes_after_qa_before_overwriting(tmp_path, monkeypatch):
+    pipeline, cards = make_pipeline(tmp_path, monkeypatch)
+    generated = pipeline.ai.generate.return_value[0]
+    prior = {'page_id': 'one', 'channel': 'naver_blog', 'generated': generated,
+             'qa': {'pass': False}, 'media': {'cards': [str(p) for p in cards]}}
+    saved = tmp_path / 'cards'
+    saved.mkdir()
+    for card in cards:
+        (saved / card.name).write_bytes(card.read_bytes())
+    pipeline.notion.status = '수정 필요'
+    pipeline.notion.append_blocks('one', result_blocks('naver_blog', generated, prior['qa']))
+    pipeline.notion.attach_files('one', '생성 이미지', cards)
+    pipeline.notion.attach_files = Mock()
+    def edit_during_qa(*args, **kwargs):
+        cards[2].write_bytes(b'manual-edit-during-review')
+        return {'pass': True}, {}
+    pipeline.ai.qa.side_effect = edit_during_qa
+    source = tmp_path / 'previous.json'
+    source.write_text(json.dumps(prior), encoding='utf-8')
+    cfg = replace(load_channels()['naver_blog'], ready_status='수정 필요')
+    result = pipeline.process_page(cfg, {'id': 'one'}, resume_manifest=source)
+    assert result['status'] == 'failed'
+    pipeline.notion.attach_files.assert_not_called()
+    assert cards[2].read_bytes() == b'manual-edit-during-review'

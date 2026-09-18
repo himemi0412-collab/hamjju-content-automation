@@ -1,0 +1,138 @@
+{
+  "page_id": "3df15789-1194-8190-b208-fa108e77356c",
+  "source_sha256": "065e40349ae7bad24a940802ccf9a49ddde23a9b495888105ab69dcb0434d63e",
+  "target_sha256": "39b825f722c438330c48f3991b0325d6909e80a30ad93950b28d248beb751d55",
+  "reason": "Independent food-safety review: preserve cooling deadlines, temperature measurement timing and food-specific exceptions in manuscript and all cards. Full rendered-card QA required before handoff.",
+  "replacements": [
+    {
+      "old": "냉장고 안에 온도계가 있다면 전원이 복구된 뒤 냉장실이 4℃ 이하였는지, 냉동실 식품이 4℃ 이하였는지를 확인합니다. 온도계가 없다면 냉동 식품마다 얼음 결정이 남아 있는지, 완전히 녹아 미지근해졌는지를 차례로 살펴보세요.",
+      "new": "전원이 복구되면 다시 냉각되기 전에 기기용 온도계로 냉장실과 냉동 식품의 온도를 확인합니다. 이미 다시 차가워진 현재 온도만으로 정전 중에도 안전했다고 판단하면 안 됩니다. 온도계가 없다면 냉동 식품에 얼음 결정이 남아 있는지 확인하되, 손으로 만진 느낌만으로 안전을 판단하지 마세요.",
+      "expected_count": 1
+    },
+    {
+      "old": "정전이 4시간을 넘길 것으로 예상되면 고기, 생선, 달걀, 우유, 요구르트, 남은 음식, 조리한 반찬, 배달 음식처럼 상하기 쉬운 식품을 얼음이나 아이스팩이 들어 있는 보냉박스로 옮기는 방법을 검토해야 합니다. 보냉박스 내부도 4℃ 이하로 유지되어야 하며, 얼음이 녹으면 추가해야 합니다.",
+      "new": "정전이 길어질 것으로 예상되면 고기, 생선, 달걀, 우유, 요구르트, 남은 음식처럼 상하기 쉬운 식품은 4시간 안에 얼음이나 아이스팩이 든 보냉박스로 옮겨 4℃ 이하로 유지하세요. 이는 아직 안전하게 차갑게 보관된 식품을 계속 냉각하는 조치입니다. 이미 안전 보관 시간을 넘긴 식품을 나중에 차갑게 만든다고 되살릴 수는 없습니다.",
+      "expected_count": 1
+    },
+    {
+      "old": "반대로 통째로 있는 과일과 채소, 빵, 잼, 피클, 머스터드, 버터, 단단한 치즈처럼 원래 냉장 보관이 꼭 필요하지 않은 식품은 제품 상태와 표시사항을 따로 확인할 수 있습니다.",
+      "new": "통째로 있는 과일과 채소, 빵, 잼, 피클, 버터, 단단한 치즈 등은 정전 후 보관 가능 여부를 품목별 표와 제품 표시사항으로 확인합니다. 일부가 정전 후 보관 가능한 품목이라는 것이 평소 냉장 보관도 필요 없다는 뜻은 아닙니다.",
+      "expected_count": 1
+    },
+    {
+      "old": "식품에 얼음 결정이 남아 있고 냉장 식품처럼 충분히 차갑다면 다시 얼릴 수 있습니다. 이때 안전성은 유지될 수 있지만 식감이나 품질은 떨어질 수 있어요. 완전히 녹았고 4℃를 넘긴 상태가 2시간 이상 지속된 것으로 보이면 고기, 생선, 가금류 등은 버리는 것이 안전합니다. 주변 온도가 약 32℃를 넘는 환경이라면 기준은 1시간으로 더 짧아집니다.",
+      "new": "많은 냉동 식품은 얼음 결정이 남아 있거나 측정 온도가 4℃ 이하이면 다시 얼릴 수 있지만, 품목별 예외를 확인해야 합니다. 해동·부분 해동된 아이스크림과 프로즌 요거트는 재냉동하지 않고 폐기하세요. 재냉동 가능한 식품도 식감이나 품질은 떨어질 수 있습니다. 고기·생선·가금류 등 상하기 쉬운 식품이 4℃를 넘긴 채 2시간 이상 있었다면 폐기하세요. 상온에 꺼내 둔 상하기 쉬운 식품은 주변 온도가 약 32℃를 넘으면 1시간 이상 방치하지 않습니다. 이 1시간은 냉동실의 정전 유지 시간을 뜻하지 않습니다.",
+      "expected_count": 1
+    },
+    {
+      "old": "정전 직후\n확인 순서",
+      "new": "정전 발생부터\n확인할 순서",
+      "expected_count": 1
+    },
+    {
+      "old": "온도와 얼음 결정 뒤 식품별로 분류합니다",
+      "new": "복구 직후, 다시 냉각되기 전 온도를 봅니다",
+      "expected_count": 1
+    },
+    {
+      "old": "4시간 이상이면 육류·유제품·조리식품부터 폐기 검토",
+      "new": "4시간 이상·추가 냉각 없음: 육류·유제품·조리식품 폐기",
+      "expected_count": 1
+    },
+    {
+      "old": "얼음 결정이 남거나 4℃ 이하라면 재냉동 가능",
+      "new": "얼음 결정 또는 4℃ 이하: 재냉동은 품목별 예외 확인",
+      "expected_count": 1
+    },
+    {
+      "old": "냉장실 4시간 초과 여부를 확인합니다",
+      "new": "냉장실 4시간 이상·추가 냉각 여부 확인",
+      "expected_count": 1
+    },
+    {
+      "old": "얼음 결정과 차가운 온도가 남았는지 봅니다",
+      "new": "얼음 결정 또는 측정 온도 4℃ 이하인지 확인",
+      "expected_count": 1
+    },
+    {
+      "old": "시간이 길어질수록 보냉박스와 폐기를 나눠 판단합니다",
+      "new": "미리 차갑게 보관하기와 늦은 뒤 폐기를 구분하세요",
+      "expected_count": 1
+    },
+    {
+      "old": "4시간 이내",
+      "new": "정전이 길어질 때",
+      "expected_count": 1
+    },
+    {
+      "old": "문을 닫고 전원 복구 뒤 온도를 확인합니다",
+      "new": "4시간 안에 보냉박스로 옮겨 4℃ 이하 유지",
+      "expected_count": 1
+    },
+    {
+      "old": "4시간 초과",
+      "new": "4시간 이상·냉각 없음",
+      "expected_count": 1
+    },
+    {
+      "old": "상하기 쉬운 냉장 식품은 보냉박스로 옮깁니다",
+      "new": "상하기 쉬운 냉장 식품은 폐기합니다",
+      "expected_count": 1
+    },
+    {
+      "old": "냉동 식품은 얼음 결정이 남아 있거나 4℃ 이하라면 재냉동할 수 있으나 품질 저하가 있을 수 있다는 USDA 안내를 반영했습니다.",
+      "new": "CDC의 얼음 결정 또는 4℃ 이하 기준과 FoodSafety.gov의 품목별 예외를 함께 반영했습니다. 해동·부분 해동된 아이스크림과 프로즌 요거트는 폐기합니다.",
+      "expected_count": 1
+    },
+    {
+      "old": "식품이 4℃를 넘긴 상태로 2시간 이상 있었거나 주변 온도가 약 32℃를 넘는 경우 1시간 이상 노출됐다면 폐기하는 기준을 반영했습니다.",
+      "new": "상하기 쉬운 식품이 4℃를 넘긴 채 2시간 이상 있었다면 폐기합니다. 약 32℃ 초과 환경의 1시간 기준은 상온에 꺼내 둔 상하기 쉬운 식품에 적용하며 냉동실 정전 유지 시간과 구별했습니다.",
+      "expected_count": 1
+    },
+    {
+      "old": "https://www.fsis.usda.gov/food-safety/safe-food-handling-and-preparation/emergencies/keep-your-food-safe-during-emergencies",
+      "new": "https://www.cdc.gov/food-safety/foods/keep-food-safe-after-emergency.html",
+      "expected_count": 4
+    },
+    {
+      "old": "https://www.fsis.usda.gov/food-safety/safe-food-handling-and-preparation/food-safety-basics/keeping-food-safe-during",
+      "new": "https://www.foodsafety.gov/food-safety-charts/food-safety-during-power-outage",
+      "expected_count": 3
+    },
+    {
+      "old": "https://ask.fsis.usda.gov/article/How-do-you-keep-food-safe-during-a-power-failure",
+      "new": "https://www.fda.gov/food/food-safety-during-emergencies/power-outages-key-tips-consumers-about-food-safety",
+      "expected_count": 2
+    },
+    {
+      "old": "USDA FSIS, Keep Your Food Safe During Emergencies",
+      "new": "CDC, Keep Food Safe After a Disaster or Emergency",
+      "expected_count": 1
+    },
+    {
+      "old": "USDA FSIS, Keeping Food Safe During an Emergency",
+      "new": "FoodSafety.gov, Food Safety During Power Outage",
+      "expected_count": 1
+    },
+    {
+      "old": "USDA FSIS, How do you keep food safe during a power failure?",
+      "new": "FDA, Power Outages: Key Tips for Consumers About Food Safety",
+      "expected_count": 1
+    },
+    {
+      "old": "USDA FSIS 공식 안내를 기준으로",
+      "new": "CDC·FoodSafety.gov·FDA 공식 안내를 기준으로",
+      "expected_count": 1
+    },
+    {
+      "old": "정전 후 음식의 냄새나 맛을 보며 안전 여부를 판단하지 말라는 USDA 안내를 반영했습니다.",
+      "new": "정전 후 음식의 냄새나 맛으로 안전 여부를 판단하지 말라는 CDC 안내를 반영했습니다.",
+      "expected_count": 1
+    },
+    {
+      "old": "정전 중 문을 닫아두는 원칙과 냉동실 용량별 보관 시간",
+      "new": "문을 닫아두는 원칙과 복구 직후 온도·재냉동 기준",
+      "expected_count": 1
+    }
+  ]
+}

@@ -277,6 +277,8 @@ jobs:
           SCHEDULE_EXPR: ${{ github.event.schedule }}
           DISPATCH_MODE: ${{ inputs.mode }}
           DISPATCH_CHANNEL: ${{ inputs.channel }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          RESUME_PAGE_ID: ${{ inputs.page_id }}
         run: python -m app.run_report
 
       - name: Keep generated files for inspection

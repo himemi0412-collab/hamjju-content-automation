@@ -82,6 +82,7 @@ class Pipeline:
         if not page_is_eligible(cfg, context):
             return {'page_id': page_id, 'status': 'skipped', 'reason': 'eligibility_changed'}
         previous = None
+        prior_card_receipt = None
         prior_files = page.get('properties', {}).get('생성 이미지', {}).get('files', [])
         if resume_manifest is not None:
             previous = json.loads(resume_manifest.read_text(encoding='utf-8'))
@@ -99,7 +100,28 @@ class Pipeline:
                 receipt = json.loads(receipt_path.read_text(encoding='utf-8')) if receipt_path.exists() else {}
                 if receipt.get('page_id') != page_id or receipt.get('source_sha256') != manuscript_hash(previous['generated']):
                     raise RuntimeError('MANUAL_EDIT_CONFLICT: attached files differ from the previous automation output')
-                match_attached_cards(prior_files, receipt.get('attached_cards', []))
+                prior_card_receipt = receipt.get('attached_cards', [])
+                match_attached_cards(prior_files, prior_card_receipt)
+            elif expected_names:
+                original_cards = [resume_manifest.parent / 'cards' / name for name in expected_names]
+                if any(not path.is_file() for path in original_cards):
+                    raise RuntimeError('Resume artifact is missing original image bytes')
+                prior_card_receipt = [
+                    {'name': path.name, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+                    for path in original_cards
+                ]
+                try:
+                    match_attached_cards(prior_files, prior_card_receipt)
+                except RuntimeError as exc:
+                    # A reviewed interrupted-upload receipt may have the same
+                    # filenames as the older cards, but different exact bytes.
+                    receipt_path = Path('repairs') / f'{page_id}.json'
+                    receipt = json.loads(receipt_path.read_text(encoding='utf-8')) if receipt_path.exists() else {}
+                    if ('MANUAL_EDIT_CONFLICT' not in str(exc) or receipt.get('page_id') != page_id
+                            or receipt.get('source_sha256') != manuscript_hash(previous['generated'])):
+                        raise
+                    prior_card_receipt = receipt.get('attached_cards', [])
+                    match_attached_cards(prior_files, prior_card_receipt)
             # The matched page is a prior machine output, not new source notes.
             # Avoid feeding its obsolete QA verdict back into the fresh review.
             context['existing_page_text'] = ''
@@ -149,6 +171,8 @@ class Pipeline:
                 'created_at': datetime.now(timezone.utc).isoformat(),
                 'manuscript_sha256': manuscript_hash(generated),
             }
+            if previous:
+                manifest['resume_source_manuscript_sha256'] = manuscript_hash(previous['generated'])
             save_manifest(job_dir / 'manifest.json', manifest)
 
             media: dict[str, Any] = {}
@@ -174,6 +198,11 @@ class Pipeline:
                 try:
                     if previous:
                         self._match_prior_blog_blocks(page_id, previous)
+                        latest_files = self.notion.retrieve_page(page_id).get('properties', {}).get('생성 이미지', {}).get('files', [])
+                        if prior_card_receipt is not None:
+                            match_attached_cards(latest_files, prior_card_receipt)
+                        elif latest_files:
+                            raise RuntimeError('MANUAL_EDIT_CONFLICT: images were added during review')
                     self.notion.attach_files(page_id, '생성 이미지', cards)
                     media['notion_cards_attached'] = True
                     manifest['media'] = media

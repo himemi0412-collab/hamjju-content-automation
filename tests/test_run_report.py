@@ -1,10 +1,13 @@
 import json
+import hashlib
 from pathlib import Path
 
 import pytest
 
 from app.run_report import is_production_run, markdown_report, record_results
 from app.run_report import expected_channels
+from app.run_report import merge_resumed_blog_batch
+from app.manuscript_repair import manuscript_hash
 
 
 def good_blog():
@@ -84,3 +87,118 @@ def test_resume_workflow_reuses_one_repository_artifact_without_seeding():
     assert 'resume-blog "$RESUME_PAGE_ID" "recovered/$page_folder/manifest.json"' in resume
     assert "AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'" in resume
     assert expected_channels('workflow_dispatch', '', 'resume_blog', 'japan_shorts') == {'naver_blog': 1}
+
+
+def artifact_row(root, page_id, passed, source_hash=None):
+    folder = root / page_id.replace('-', '')[:16]
+    (folder / 'cards').mkdir(parents=True)
+    names = [f'card_{i:02d}.png' for i in range(1, 6)]
+    cards = []
+    for name in names:
+        content = (page_id + name).encode()
+        (folder / 'cards' / name).write_bytes(content)
+        cards.append({'name': name, 'sha256': hashlib.sha256(content).hexdigest()})
+    row = {
+        'channel': 'naver_blog', 'page_id': page_id, 'title': f'원고 {page_id[:8]}',
+        'status': 'CODEX_HANDOFF_READY' if passed else '수정 필요',
+        'qa_pass': passed, 'notion_page_updated': True, 'output_verified': True,
+        'budget_blocked': False, 'card_count': 5, 'cards_attached': True,
+        'video_attached': False, 'naver_draft_verified': False,
+    }
+    generated = {'title': row['title'], 'body_markdown': '원문' if not source_hash else '검수한 수정 원문'}
+    manifest = {
+        'page_id': page_id, 'channel': 'naver_blog', 'generated': generated,
+        'manuscript_sha256': manuscript_hash(generated),
+        'qa': {'pass': passed, 'blocking_issues': [] if passed else ['수정 필요']},
+        'final_status': row['status'], 'output_verified': True,
+        'media': {'cards': [f'output/{folder.name}/cards/{name}' for name in names], 'notion_cards_attached': True},
+    }
+    if source_hash:
+        manifest['resume_source_manuscript_sha256'] = source_hash
+    (folder / 'manifest.json').write_text(json.dumps(manifest), encoding='utf-8')
+    observation = {key: row[key] for key in ('page_id', 'title', 'status')}
+    observation.update(body_blocks_verified=20, cards_verified=cards, naver_draft_verified=False)
+    (folder / 'notion-readback.json').write_text(json.dumps(observation), encoding='utf-8')
+    return row, manifest
+
+
+def recovery_fixture(tmp_path):
+    prior_dir, current_dir = tmp_path / 'recovered', tmp_path / 'output'
+    ids = [f'{i:08d}-1111-4111-8111-111111111111' for i in range(1, 4)]
+    items = [artifact_row(prior_dir, page_id, i < 2) for i, page_id in enumerate(ids)]
+    prior = {'batches': [{'channel': 'naver_blog', 'expected': 3, 'results': [x[0] for x in items]}],
+             'updated_at': '2026-09-18T01:12:48+00:00'}
+    (prior_dir / 'production-results.json').write_text(json.dumps(prior), encoding='utf-8')
+    current_row, _ = artifact_row(current_dir, ids[2], True, items[2][1]['manuscript_sha256'])
+    current = {'batches': [{'channel': 'naver_blog', 'expected': 1, 'results': [current_row]}],
+               'updated_at': '2026-09-18T04:00:00+00:00'}
+    return prior_dir, current_dir, ids, prior, current
+
+
+def test_resume_summary_combines_two_old_passes_and_one_recovery_without_double_counting(tmp_path):
+    prior_dir, current_dir, ids, prior, current = recovery_fixture(tmp_path)
+    merged = merge_resumed_blog_batch(current, prior_dir, current_dir, ids[2], '35294118274', '35300000000')
+    batch = merged['batches'][0]
+    assert batch['expected'] == 3 and batch['reviewed_outputs'] == 3
+    assert len(batch['results']) == 3
+    assert [x['evidence_run_id'] for x in batch['results']] == ['35294118274', '35294118274', '35300000000']
+    assert current['batches'][0]['expected'] == 1  # The CLI result is untouched.
+    assert prior['batches'][0]['results'][2]['qa_pass'] is False
+    report = markdown_report(merged, {'naver_blog': 3}, 'success', 'https://github.com/org/repo/actions/runs/35300000000')
+    assert '블로그 합계: **3/3편** · 이번 재개: **1/1편**' in report
+    assert 'https://github.com/org/repo/actions/runs/35294118274' in report
+    assert '네이버 임시저장·재열람 확인: **0편**' in report
+
+
+@pytest.mark.parametrize('damage', ['duplicate', 'other_channel', 'manuscript_hash', 'card_hash', 'source_hash', 'already_done'])
+def test_recovery_aggregation_rejects_unproven_or_duplicate_prior_completions(tmp_path, damage):
+    prior_dir, current_dir, ids, prior, current = recovery_fixture(tmp_path)
+    if damage == 'duplicate':
+        prior['batches'][0]['results'][1] = dict(prior['batches'][0]['results'][0])
+    elif damage == 'other_channel':
+        prior['batches'][0]['results'][0]['channel'] = 'japan_shorts'
+    elif damage == 'already_done':
+        prior['batches'][0]['results'][2]['qa_pass'] = True
+        prior['batches'][0]['results'][2]['status'] = 'CODEX_HANDOFF_READY'
+    elif damage in {'manuscript_hash', 'source_hash'}:
+        folder = (prior_dir / ids[0].replace('-', '')[:16]) if damage == 'manuscript_hash' else (current_dir / ids[2].replace('-', '')[:16])
+        path = folder / 'manifest.json'
+        manifest = json.loads(path.read_text(encoding='utf-8'))
+        manifest['manuscript_sha256' if damage == 'manuscript_hash' else 'resume_source_manuscript_sha256'] = 'wrong-hash'
+        path.write_text(json.dumps(manifest), encoding='utf-8')
+    else:
+        (prior_dir / ids[0].replace('-', '')[:16] / 'cards' / 'card_01.png').write_bytes(b'changed')
+    (prior_dir / 'production-results.json').write_text(json.dumps(prior), encoding='utf-8')
+    with pytest.raises(ValueError):
+        merge_resumed_blog_batch(current, prior_dir, current_dir, ids[2], '35294118274', '35300000000')
+
+
+def test_failed_recovery_preserves_two_prior_successes_without_calling_batch_complete(tmp_path):
+    prior_dir, current_dir, ids, prior, current = recovery_fixture(tmp_path)
+    row = current['batches'][0]['results'][0]
+    row.update(status='failed', qa_pass=False, notion_page_updated=False, output_verified=False)
+    merged = merge_resumed_blog_batch(current, prior_dir, current_dir, ids[2], '35294118274', '35300000000')
+    assert merged['batches'][0]['reviewed_outputs'] == 2
+    report = markdown_report(merged, {'naver_blog': 3}, 'failure', 'https://example.org/runs/35300000000')
+    assert '블로그 합계: **2/3편** · 이번 재개: **0/1편**' in report
+    assert '제작 미완료' in report
+
+
+def test_invalid_prior_evidence_falls_back_to_current_run_without_daily_completion_claim(monkeypatch, tmp_path):
+    import app.run_report as module
+    prior_dir, current_dir, ids, _, current = recovery_fixture(tmp_path)
+    (prior_dir / 'production-results.json').write_text('{invalid', encoding='utf-8')
+    (current_dir / 'production-results.json').write_text(json.dumps(current), encoding='utf-8')
+    monkeypatch.chdir(tmp_path)
+    for key, value in {
+        'EVENT_NAME': 'workflow_dispatch', 'DISPATCH_MODE': 'resume_blog',
+        'RESUME_PAGE_ID': ids[2], 'SOURCE_RUN_ID': '35294118274',
+        'GITHUB_RUN_ID': '35300000000', 'GITHUB_REPOSITORY': 'org/repo', 'RUN_STATUS': 'success',
+    }.items():
+        monkeypatch.setenv(key, value)
+    module.main()
+    report = (current_dir / 'production-summary.md').read_text(encoding='utf-8')
+    assert '**1/1편**' in report
+    assert '오늘 전체 완료 수는 미확인' in report
+    assert '**3/3편**' not in report
+    assert not (current_dir / 'batch-recovery-results.json').exists()
