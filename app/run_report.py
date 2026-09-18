@@ -68,7 +68,6 @@ def expected_channels(event: str, schedule: str, mode: str, channel: str) -> dic
         scheduled = {
             '0 1 * * *': {'naver_blog': 3},
             '0 12 * * *': {'ppojjugi_shorts': 1, 'japan_shorts': 1},
-            '45 4 18 9 *': {'naver_blog': 1},
         }
         return scheduled.get(schedule, {})
     if mode == 'produce_daily_shorts':

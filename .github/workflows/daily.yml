@@ -15,9 +15,9 @@ on:
     # GitHub cron is UTC: 01:00=10:00 KST, 12:00=21:00 KST
     - cron: '0 1 * * *'
     - cron: '0 12 * * *'
-    # One-time live scheduler verification: 2026-09-18 13:45 KST.
+    # Zero-cost scheduler probe: no checkout, secrets, APIs, or content generation.
     # Remove after the observed run so it cannot repeat next year.
-    - cron: '45 4 18 9 *'
+    - cron: '*/5 4-5 18 9 *'
   push:
     branches:
       - main
@@ -62,7 +62,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  scheduler-probe:
+    if: ${{ github.event_name == 'schedule' && github.event.schedule == '*/5 4-5 18 9 *' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - name: Record scheduler proof without paid APIs
+        run: |
+          mkdir -p output
+          printf '{"event":"schedule","schedule":"%s","run_id":"%s","sha":"%s"}\n' \
+            "${{ github.event.schedule }}" "${{ github.run_id }}" "${{ github.sha }}" \
+            > output/scheduler-proof.json
+      - name: Upload scheduler proof
+        uses: actions/upload-artifact@v7
+        with:
+          name: scheduler-proof-${{ github.run_id }}
+          path: output/scheduler-proof.json
+          retention-days: 3
+
   run:
+    if: ${{ !(github.event_name == 'schedule' && github.event.schedule == '*/5 4-5 18 9 *') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -260,9 +281,6 @@ jobs:
             python -m app.main seed-topics --blog-count 0 --ppojjugi-count 1 --japan-count 1 || result=1
             ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=false python -m app.main channel ppojjugi_shorts --limit 1 || result=1
             ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=false python -m app.main channel japan_shorts --limit 1 || result=1
-          elif [ "$schedule_expr" = "45 4 18 9 *" ]; then
-            python -m app.main seed-topics --blog-count 1 --ppojjugi-count 0 --japan-count 0 || result=1
-            ENABLE_MEDIA_GENERATION=false python -m app.main channel naver_blog --limit 1 || result=1
           else
             echo "Unsupported schedule expression: $schedule_expr"
             result=1

@@ -78,13 +78,15 @@ def test_workflow_keeps_second_shorts_after_first_failure_and_preserves_budget()
     assert 'actions/cache/save@v6' in budget_save
 
 
-def test_one_time_schedule_runs_one_blog_and_unknown_schedule_fails_closed():
+def test_one_time_schedule_is_a_zero_cost_probe_and_unknown_schedule_fails_closed():
     workflow = Path('.github/workflows/daily.yml').read_text(encoding='utf-8')
-    assert "cron: '45 4 18 9 *'" in workflow
-    assert 'elif [ "$schedule_expr" = "45 4 18 9 *" ]' in workflow
-    assert 'channel naver_blog --limit 1 || result=1' in workflow
+    assert "cron: '*/5 4-5 18 9 *'" in workflow
+    assert 'scheduler-probe:' in workflow
+    assert 'Record scheduler proof without paid APIs' in workflow
+    assert 'scheduler-proof-${{ github.run_id }}' in workflow
+    assert "if: ${{ !(github.event_name == 'schedule' && github.event.schedule == '*/5 4-5 18 9 *') }}" in workflow
     assert 'Unsupported schedule expression' in workflow
-    assert expected_channels('schedule', '45 4 18 9 *', '', '') == {'naver_blog': 1}
+    assert expected_channels('schedule', '*/5 4-5 18 9 *', '', '') == {}
     assert expected_channels('schedule', 'unexpected', '', '') == {}
 
 
