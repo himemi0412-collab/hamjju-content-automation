@@ -379,8 +379,12 @@ class Pipeline:
                 'card_names': [Path(x).name for x in prior_media.get('cards', [])],
             }
         expected = result_blocks('naver_blog', prior_output['generated'], prior_qa, naver_handoff=prior_handoff)
-        observed_signatures = [block_signature(x) for x in observed]
         expected_signatures = [block_signature(x) for x in expected]
+        # Production appends the machine handoff after the user's planning
+        # notes. Match and archive only that exact suffix; never treat the
+        # source notes as automation-owned content.
+        prior_section = observed[-len(expected):] if len(observed) >= len(expected) else []
+        observed_signatures = [block_signature(x) for x in prior_section]
         if observed_signatures != expected_signatures:
             # Runs created before the final-section ordering fix placed a
             # paragraph-targeted decision card before the preceding section's
@@ -392,11 +396,13 @@ class Pipeline:
                 prior_output['generated'], prior_qa, **prior_handoff,
                 _legacy_paragraph_order=True,
             )
+            prior_section = observed[-len(legacy_expected):] if len(observed) >= len(legacy_expected) else []
+            observed_signatures = [block_signature(x) for x in prior_section]
             if observed_signatures != [block_signature(x) for x in legacy_expected]:
                 raise RuntimeError('MANUAL_EDIT_CONFLICT: current page does not match the previous automation output')
-        if any(not block.get('id') for block in observed):
+        if any(not block.get('id') for block in prior_section):
             raise RuntimeError('Resume block identities are unavailable')
-        return observed
+        return prior_section
 
     def _verify_blog_output(self, page_id: str, page_title: str, status: str, expected_blocks: list[dict[str, Any]], cards: list[Path]) -> dict[str, Any]:
         page = self.notion.retrieve_page(page_id)

@@ -397,6 +397,38 @@ def test_resume_does_not_overwrite_manual_edit_or_call_ai(tmp_path, monkeypatch)
     assert pipeline.notion.blocks[-1]['id'] == 'manual'
 
 
+def test_resume_preserves_user_planning_prefix_and_replaces_only_machine_suffix(tmp_path, monkeypatch):
+    pipeline, cards = make_pipeline(tmp_path, monkeypatch)
+    generated = pipeline.ai.generate.return_value[0]
+    prior_qa = {'pass': False, 'blocking_issues': ['old visual review']}
+    prior = {
+        'page_id': 'one', 'channel': 'naver_blog', 'generated': generated,
+        'qa': prior_qa, 'media': {'cards': [str(p) for p in cards]},
+    }
+    saved_cards = tmp_path / 'cards'
+    saved_cards.mkdir()
+    for card in cards:
+        (saved_cards / card.name).write_bytes(card.read_bytes())
+    manifest = tmp_path / 'previous.json'
+    manifest.write_text(json.dumps(prior), encoding='utf-8')
+    planning = {
+        'type': 'paragraph',
+        'paragraph': {'rich_text': [{'plain_text': '사용자 기획 메모'}]},
+        'id': 'planning-prefix',
+    }
+    pipeline.notion.blocks.append(planning)
+    pipeline.notion.append_blocks('one', result_blocks('naver_blog', generated, prior_qa))
+    pipeline.notion.attach_files('one', '생성 이미지', cards)
+    pipeline.notion.status = '수정 필요'
+    cfg = replace(load_channels()['naver_blog'], ready_status='수정 필요')
+
+    result = pipeline.process_page(cfg, {'id': 'one'}, resume_manifest=manifest)
+
+    assert result['qa_pass'] is True and result['output_verified'] is True
+    assert pipeline.notion.blocks[0] == planning
+    assert sum(block.get('id') == 'planning-prefix' for block in pipeline.notion.blocks) == 1
+
+
 @pytest.mark.parametrize('changed', [False, True])
 def test_resume_checks_attached_bytes_even_when_filenames_match(tmp_path, monkeypatch, changed):
     pipeline, cards = make_pipeline(tmp_path, monkeypatch)
