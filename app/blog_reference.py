@@ -4,6 +4,8 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
+from .card_design import validate_named_design_contract
+
 
 REFERENCE_PROFILE_ID = 'HAMZZU_NAVER_REFERENCE_V1'
 REFERENCE_PATH = Path(__file__).resolve().parents[1] / 'references' / 'naver_blog_baseline.md'
@@ -33,12 +35,15 @@ def load_blog_reference(path: str | Path = REFERENCE_PATH) -> dict[str, Any]:
     }
 
 
-def validate_generated_reference_contract(generated: dict[str, Any], baseline: dict[str, Any]) -> None:
+def validate_generated_reference_contract(
+    generated: dict[str, Any], baseline: dict[str, Any], *, require_design_language: bool = True,
+) -> None:
     if generated.get('reference_profile_id') != baseline.get('id'):
         raise RuntimeError('REFERENCE_PROFILE_MISSING: generated blog did not acknowledge the mandatory baseline')
     if generated.get('card_format') not in CARD_FORMATS:
         raise RuntimeError('REFERENCE_FORMAT_INVALID: choose square or landscape_4_3')
     if generated.get('visual_family') not in VISUAL_FAMILIES:
         raise RuntimeError('REFERENCE_VISUAL_FAMILY_INVALID')
+    validate_named_design_contract(generated, required=require_design_language)
     if len(generated.get('card_news') or []) != 5:
         raise RuntimeError('REFERENCE_CARD_COUNT_INVALID')

@@ -30,6 +30,11 @@
 카드뉴스 기준:
 - 정확히 5장: 질문 표지(cover) → 원리 흐름(flow) → 동일 기준 비교(comparison) → 행동 체크(checklist) → 선택 기준 요약(decision). 세트 전체 형식은 `square`(1080×1080) 또는 `landscape_4_3`(1448×1086) 중 주제와 정보 밀도에 맞는 하나를 선택한다.
 - 시각 계열은 `soft_scene`, `playful_diagram`, `contract_notebook`, `clipboard_checklist` 중 하나를 고른다. 이는 고정 템플릿이 아니라 네 레퍼런스에서 추출한 색·여백·생활 사물·정보 장치 방향이다. 안전·침구처럼 한 장면과 여백이 중요한 글은 soft_scene, 설치·치수는 playful_diagram, 계약·비용은 contract_notebook, 단계·소유권·마지막 행동은 clipboard_checklist를 우선 검토한다.
+- `예쁘게`, `깔끔하게` 같은 추상 표현으로 끝내지 않는다. 글의 질문·정보 구조·독자·카드 역할을 보고 아래 이름 중 **한 가지 중심 디자인 언어**를 AI가 직접 선택해 `design_language`에 정확히 기록한다. 사용자에게 고르게 하지 않으며, 20개를 한 세트에 섞지 않는다.
+- 허용 디자인 언어: `Swiss Typography`, `Retro Tech UI`, `Bento Editorial`, `Monochrome Magazine`, `Neo Brutalism`, `Japanese Editorial`, `Quiet Luxury Editorial`, `Newspaper 2.0`, `Technical Manual`, `Screenshot Editorial`, `Prompt Playground`, `Terminal Noir`, `Fluorescent Minimal`, `Soft Swiss`, `Index / Catalogue`, `Cinematic Title Card`, `Zine Collage`, `Split Screen`, `Chrome Accent`, `Modular Poster`.
+- 주제 적합성을 우선한다. 치수·설치·원리는 Technical Manual, 조건이 많은 묶음은 Bento Editorial 또는 Index / Catalogue, 비용·약정은 Newspaper 2.0 또는 Monochrome Magazine, 화면 사용법은 Screenshot Editorial 또는 Prompt Playground, 양쪽 선택 비교는 Split Screen을 먼저 검토하되 기계적으로 고정하지 않는다.
+- 선택한 이름은 장식용 라벨이 아니다. 자동화가 해당 이름에 묶인 `타이포그래피 / 그리드 / 사진·도식·UI 요소 / 여백 / 색상·질감` 토큰을 manifest의 `design_direction`에 주입하고 실제 렌더에 적용한다. 같은 화이트 배경·둥근 박스·아이콘 구성을 이름만 바꿔 반복하면 실패다.
+- `visual_family`는 생활 사물과 정보 역할의 방향이고 `design_language`는 폰트 위계·그리드·면·여백의 디자인 문법이다. 둘을 모두 선택하며 서로 대체하지 않는다.
 - 제목은 Cafe24 Ssurround, 본문은 가독성 좋은 고딕으로 조판한다. 무료 원본 도식이며 실제 제품 사진이나 AI 생성 사진처럼 설명하지 않는다.
 - 세트는 중립 배경 외 3~5색을 반복하고 주조색 1개와 강조색 1~2개만 한 장에 사용한다. 흰색은 #FFFFFF로 한다.
 - 노란색·겨자색·금빛·누런 크림색 배경·세피아처럼 AI 특유의 노란 계열을 절대 사용하지 않는다.
@@ -51,6 +56,7 @@
   "reference_profile_id": "HAMZZU_NAVER_REFERENCE_V1",
   "card_format": "square 또는 landscape_4_3",
   "visual_family": "soft_scene 또는 playful_diagram 또는 contract_notebook 또는 clipboard_checklist",
+  "design_language": "위 20개 허용 이름 중 정확히 하나",
   "title": "제목",
   "summary": "짧은 요약",
   "body_markdown": "완성 원고",

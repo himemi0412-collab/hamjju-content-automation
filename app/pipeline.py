@@ -21,6 +21,7 @@ from .state import StateStore
 from .youtube import YouTubePrivateUploader
 from .manuscript_repair import apply_reviewed_corrections, manuscript_hash
 from .blog_reference import load_blog_reference, validate_generated_reference_contract
+from .card_design import apply_named_design_contract
 from .ownership import load_operating_contract
 
 
@@ -174,6 +175,7 @@ class Pipeline:
             # The matched page is a prior machine output, not new source notes.
             # Avoid feeding its obsolete QA verdict back into the fresh review.
             context['existing_page_text'] = ''
+        context['named_design_language_required'] = not bool(previous)
         key = f"{page_id}:{page.get('last_edited_time')}:{cfg.name}:v1"
         if self.state.succeeded(key):
             return {'page_id': page_id, 'status': 'skipped', 'reason': 'idempotency'}
@@ -208,6 +210,8 @@ class Pipeline:
                 gen_usage = {'reused_from_manifest': True}
             else:
                 generated, gen_usage = self.ai.generate(cfg.prompt_file, context, use_web=use_web)
+                if cfg.content_kind == 'blog':
+                    generated = apply_named_design_contract(generated)
             content_version = manuscript_hash(generated)
             ownership_receipt = self.operating_contract.receipt(
                 cfg.name,
@@ -217,7 +221,10 @@ class Pipeline:
             )
             self.state.record_stage(page_id, cfg.name, content_version, 'github_actions', 'CONTENT_READY', run_id)
             if cfg.content_kind == 'blog':
-                validate_generated_reference_contract(generated, context['reference_baseline'])
+                validate_generated_reference_contract(
+                    generated, context['reference_baseline'],
+                    require_design_language=not bool(previous),
+                )
                 # Blog QA sees the finished images and manuscript together.
                 qa, qa_usage = {'pass': False, 'status': 'PENDING_RENDER_REVIEW'}, {}
             else:
@@ -258,6 +265,7 @@ class Pipeline:
                 cards = render_blog_cards(
                     card_news, job_dir / 'cards', self.s.card_font_path,
                     card_format=generated['card_format'], visual_family=generated['visual_family'],
+                    design_language=generated.get('design_language'),
                 )
                 if len(cards) != 5:
                     raise RuntimeError('Blog card-news render did not produce exactly five images')
@@ -293,7 +301,14 @@ class Pipeline:
                     qa, image_qa_usage = self.ai.qa(generated, {
                         'channel': cfg.name, **context,
                         'automation_scope': {**context['automation_scope'], 'mode': 'blog_cards', 'stage': 'rendered_cards', 'media_expected': True,
-                            'renderer': '1080 square; 3 pastel colors plus dark ink; white background; measured text boxes; cover/flow/comparison/checklist/decision; Cafe24 title font'},
+                            'renderer': (
+                                f"named design language={generated.get('design_language')}; "
+                                f"direction={generated.get('design_direction')}; measured text; "
+                                'cover/flow/comparison/checklist/decision; Cafe24 title font'
+                                if generated.get('design_language') else
+                                'legacy reviewed renderer; preserve original bytes; measured text; '
+                                'cover/flow/comparison/checklist/decision; Cafe24 title font'
+                            )},
                     }, image_paths=cards)
                 passed = qa.get('pass') is True and not qa.get('blocking_issues')
                 if passed:

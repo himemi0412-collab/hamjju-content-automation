@@ -5,6 +5,7 @@ import pytest
 from PIL import Image, ImageDraw
 
 from app.media import _blog_distinct_item_symbols, render_blog_cards
+from app.card_design import SUPPORTED_DESIGN_LANGUAGES
 
 
 def sample_cards():
@@ -64,6 +65,28 @@ def test_approved_reference_family_can_render_landscape_set(tmp_path):
 def test_unknown_visual_family_fails_closed(tmp_path):
     with pytest.raises(ValueError, match='visual family'):
         render_blog_cards(sample_cards(), tmp_path, visual_family='generic_corporate')
+
+
+def test_named_design_languages_change_actual_render_tokens(tmp_path):
+    hashes = {}
+    corners = {}
+    for name in SUPPORTED_DESIGN_LANGUAGES:
+        out_dir = tmp_path / name.replace(' ', '_').replace('/', '_')
+        path = render_blog_cards(sample_cards(), out_dir, design_language=name)[0]
+        hashes[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+        with Image.open(path) as im:
+            corners[name] = im.getpixel((0, 0))
+
+    assert len(SUPPORTED_DESIGN_LANGUAGES) == 20
+    assert len(set(hashes.values())) == 20
+    assert corners['Swiss Typography'] == (255, 255, 255)
+    assert corners['Terminal Noir'] == (9, 13, 17)
+    assert corners['Zine Collage'] == (246, 246, 243)
+
+
+def test_unknown_named_design_language_fails_closed(tmp_path):
+    with pytest.raises(ValueError, match='named card-news design language'):
+        render_blog_cards(sample_cards(), tmp_path, design_language='Pretty AI')
 
 
 def test_playful_diagram_illustration_alias_renders_as_safe_neutral_diagram(tmp_path):

@@ -17,6 +17,7 @@ from app.settings import Settings
 from app.state import StateStore
 from app.manuscript_repair import manuscript_hash
 from app.blog_reference import load_blog_reference
+from app.card_design import apply_named_design_contract
 
 
 class FakeNotion:
@@ -63,10 +64,11 @@ class FakeNotion:
 def make_pipeline(tmp_path, monkeypatch, visual_pass=True):
     notion = FakeNotion()
     ai = Mock()
-    ai.generate.return_value = ({
+    generated = apply_named_design_contract({
         'reference_profile_id': 'HAMZZU_NAVER_REFERENCE_V1',
         'card_format': 'square',
         'visual_family': 'playful_diagram',
+        'design_language': 'Swiss Typography',
         'title': '검증 원고',
         'body_markdown': '도입 문장\n\n## 구간 1\n본문 전체',
         'hashtags': ['#검증'],
@@ -82,7 +84,8 @@ def make_pipeline(tmp_path, monkeypatch, visual_pass=True):
             {'card': 1, 'after_heading': '도입'},
             *[{'card': i, 'after_heading': '구간 1'} for i in range(2, 6)],
         ],
-    }, {})
+    })
+    ai.generate.return_value = (generated, {})
     ai.qa.return_value = ({'pass': visual_pass, 'blocking_issues': [] if visual_pass else ['card 3 overlaps']}, {})
     paths = [tmp_path / f'card_{i:02d}.png' for i in range(1, 6)]
     for i, path in enumerate(paths):

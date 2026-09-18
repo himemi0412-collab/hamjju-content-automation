@@ -27,6 +27,8 @@ This file is a mandatory production input for every new `naver_blog` run. It is 
 - 카드마다 생활 장면·사물·제품 맥락·측정 도식·계약서·체크리스트 중 최소 하나가 정보를 실제로 설명해야 한다.
 - `square`와 `landscape_4_3`을 모두 허용한다. 한 세트 안에서는 하나로 통일하고, 주제와 정보 밀도에 맞게 선택한다.
 - `soft_scene`, `playful_diagram`, `contract_notebook`, `clipboard_checklist` 중 주제에 맞는 한 시각 계열을 선택한다. 계열은 고정 템플릿이 아니라 색·여백·선·정보 장치의 방향이다.
+- `예쁘게 만들어줘`처럼 추상적으로 지시하지 않는다. 주제와 정보 구조에 맞는 구체적인 디자인 언어 이름을 하나 선택하고, 그 이름에 묶인 타이포그래피·그리드·사진/도식/UI 요소·여백·색상/질감을 실제 렌더에 적용한다.
+- 허용 디자인 언어는 Swiss Typography, Retro Tech UI, Bento Editorial, Monochrome Magazine, Neo Brutalism, Japanese Editorial, Quiet Luxury Editorial, Newspaper 2.0, Technical Manual, Screenshot Editorial, Prompt Playground, Terminal Noir, Fluorescent Minimal, Soft Swiss, Index / Catalogue, Cinematic Title Card, Zine Collage, Split Screen, Chrome Accent, Modular Poster다. 한 세트에는 하나만 선택하며 스타일 이름만 바꾼 둥근 상자형 반복은 실패다.
 - 흰색은 `#FFFFFF`, 제목은 Cafe24 Ssurround, 작은 본문은 읽기 쉬운 고딕을 사용한다. 한 장은 중립 배경 외 주조색 1개와 포인트 1~2개, 전체 세트는 3~5색 안에서 반복한다.
 - 큰 질문과 핵심 사물이 모바일 축소 화면에서 먼저 보여야 한다. 긴 설명은 본문으로 보내고 카드에는 짧은 판단 정보만 둔다.
 - 실제 제품 정체성이 중요하면 권리가 확인된 실제/공식 이미지를 우선한다. 불확실하면 무브랜드 설명 도식을 사용하고 실제 제품 사진처럼 설명하지 않는다.

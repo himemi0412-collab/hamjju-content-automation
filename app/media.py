@@ -11,6 +11,7 @@ from openai import OpenAI
 import httpx
 
 from .budget import BudgetGuard
+from .card_design import get_design_language
 
 PALETTE = [
     '#F7F8FB', '#E7F1FF', '#EDE9FE', '#FFE8EF', '#DFF7EE',
@@ -238,6 +239,7 @@ def concat_scene_audio(parts: list[Path], out_path: Path) -> tuple[Path, list[fl
 def render_blog_cards(
     cards: list[dict[str, Any]], out_dir: Path, font_path: str | None = None,
     *, card_format: str = 'square', visual_family: str = 'playful_diagram',
+    design_language: str | None = None,
 ) -> list[Path]:
     """Typeset five original explanatory diagrams; never invent product photos.
 
@@ -258,6 +260,7 @@ def render_blog_cards(
     }
     if visual_family not in family_palettes:
         raise ValueError('Unsupported Hamzzu blog visual family')
+    named_style = get_design_language(design_language) if design_language is not None else None
     width, height = formats[card_format]
     sx, sy = width / 1080, height / 1080
     sf = min(sx, sy)
@@ -272,8 +275,13 @@ def render_blog_cards(
         return max(1, int(value * sf))
 
     rendered: list[Image.Image] = []
-    palette = family_palettes[visual_family]
+    palette = named_style['palette'] if named_style else family_palettes[visual_family]
     primary, secondary, tertiary, ink = palette
+    background = named_style['background'] if named_style else '#FFFFFF'
+    surface = named_style['surface'] if named_style else '#FFFFFF'
+    accent_text = named_style['accent_text'] if named_style else ink
+    title_size = named_style['title_size'] if named_style else 64
+    copy_size = named_style['copy_size'] if named_style else 33
     for i, card in enumerate(cards, 1):
         layout = card.get('layout')
         if layout != layouts[i - 1] or card.get('card') != i:
@@ -313,44 +321,60 @@ def render_blog_cards(
                 raise ValueError(f'Card {i} item has an unsupported explanatory illustration')
             if item_illustration is not None:
                 item['illustration'] = item_illustration
-        im = Image.new('RGB', (width, height), '#FFFFFF')
+        im = Image.new('RGB', (width, height), background)
         draw = ImageDraw.Draw(im)
-        _blog_family_decor(draw, visual_family, width, height, primary, secondary, tertiary, ink)
+        if named_style:
+            _blog_named_style_decor(
+                draw, named_style, width, height, primary, secondary, tertiary, ink,
+            )
+        else:
+            _blog_family_decor(draw, visual_family, width, height, primary, secondary, tertiary, ink)
         role = ('먼저 답', '왜 그런지', '같은 조건 비교', '지금 확인', '마지막 판단')[i - 1]
-        draw.rounded_rectangle(box((62, 48, 390, 102)), radius=size(20), fill=primary)
-        _blog_text(draw, role, box((84, 60, 370, 92)), font_path, size(25), ink, 1)
+        _blog_style_panel(draw, box((62, 48, 390, 102)), named_style, fill=primary, outline=None,
+                          width=size(2), radius=size(20))
+        _blog_text(draw, role, box((84, 60, 370, 92)), font_path, size(25), accent_text, 1)
         _blog_text(draw, f'{i:02d} / 05', box((868, 60, 1018, 92)), font_path, size(25), ink, 1)
         if visual_family == 'contract_notebook':
-            draw.rounded_rectangle(box((54, 128, 1026, 300)), radius=size(18), fill='#F2EAF6')
-        _blog_text(draw, headline, box((62, 140, 1018, 292)), font_path, size(64), ink, 2, title=True)
-        _blog_text(draw, copy, box((64, 306, 1016, 396)), font_path, size(33), ink, 2)
+            _blog_style_panel(draw, box((54, 128, 1026, 300)), named_style,
+                              fill=_blog_style_fill('#F2EAF6', named_style), outline=None,
+                              width=size(2), radius=size(18))
+        _blog_text(draw, headline, box((62, 140, 1018, 292)), font_path, size(title_size), ink, 2, title=True)
+        _blog_text(draw, copy, box((64, 306, 1016, 396)), font_path, size(copy_size), ink, 2)
 
         if layout == 'cover':
             # A concrete lifestyle scene, not a floating decorative icon.
-            draw.rounded_rectangle(box((160, 414, 920, 814)), radius=size(34), fill='#F5F2FC', outline=ink, width=size(4))
+            _blog_style_panel(draw, box((160, 414, 920, 814)), named_style,
+                              fill=_blog_style_fill('#F5F2FC', named_style), outline=ink,
+                              width=size(4), radius=size(34))
             draw.arc(box((270, 456, 530, 675)), 175, 356, fill=secondary, width=size(8))
-            _blog_symbol(draw, illustration, point((455, 618)), size(270), ink, '#FFFFFF')
+            _blog_symbol(draw, illustration, point((455, 618)), size(270), ink, surface)
             companion = _blog_companion_symbol(illustration)
             draw.ellipse(box((620, 536, 828, 744)), fill=tertiary)
-            _blog_symbol(draw, companion, point((724, 640)), size(128), ink, '#FFFFFF')
+            _blog_symbol(draw, companion, point((724, 640)), size(128), ink, surface)
             _blog_arrow(draw, point((585, 650)), point((640, 650)), ink)
             for j, item in enumerate(items):
                 x = 64 + j * 500
-                draw.rounded_rectangle(box((x, 824, x + 452, 984)), radius=size(24), fill=(secondary, tertiary)[j])
+                _blog_style_panel(draw, box((x, 824, x + 452, 984)), named_style,
+                                  fill=(secondary, tertiary)[j], outline=None,
+                                  width=size(2), radius=size(24))
                 _blog_text(draw, item['label'], box((x + 24, 846, x + 428, 892)), font_path, size(34), ink, 1, title=True)
                 _blog_text(draw, item['detail'], box((x + 24, 907, x + 428, 970)), font_path, size(27), ink, 2)
         elif layout == 'flow':
-            draw.rounded_rectangle(box((48, 405, 1032, 974)), radius=size(34), fill='#FBFAFE', outline=ink, width=size(4))
+            _blog_style_panel(draw, box((48, 405, 1032, 974)), named_style,
+                              fill=_blog_style_fill('#FBFAFE', named_style), outline=ink,
+                              width=size(4), radius=size(34))
             for ring_x in range(150, 950, 125):
-                draw.rounded_rectangle(box((ring_x, 388, ring_x + 26, 432)), radius=size(10), fill=ink)
+                _blog_style_panel(draw, box((ring_x, 388, ring_x + 26, 432)), named_style,
+                                  fill=ink, outline=None, width=size(1), radius=size(10))
             step_symbols = _blog_flow_symbols(illustration)
             for j, item in enumerate(items):
                 x = 72 + j * 320
                 color = (primary, secondary, tertiary)[j]
-                draw.rounded_rectangle(box((x, 470, x + 296, 938)), radius=size(26), fill=color)
-                draw.ellipse(box((x + 18, 488, x + 82, 552)), fill='#FFFFFF', outline=ink, width=size(3))
+                _blog_style_panel(draw, box((x, 470, x + 296, 938)), named_style,
+                                  fill=color, outline=None, width=size(2), radius=size(26))
+                draw.ellipse(box((x + 18, 488, x + 82, 552)), fill=surface, outline=ink, width=size(3))
                 _blog_text(draw, str(j + 1), box((x + 39, 500, x + 70, 540)), font_path, size(29), ink, 1, title=True)
-                _blog_symbol(draw, step_symbols[j], point((x + 148, 642)), size(155), ink, '#FFFFFF')
+                _blog_symbol(draw, step_symbols[j], point((x + 148, 642)), size(155), ink, surface)
                 _blog_text(draw, item['label'], box((x + 22, 744, x + 274, 820)), font_path, size(29), ink, 2, title=True)
                 _blog_text(draw, item['detail'], box((x + 22, 826, x + 274, 926)), font_path, size(21), ink, 3)
                 if j < 2:
@@ -360,31 +384,38 @@ def render_blog_cards(
             for j, item in enumerate(items):
                 x = 64 + j * 500
                 color = (primary, secondary)[j]
-                draw.rounded_rectangle(box((x, 426, x + 452, 970)), radius=size(30), fill=color, outline=ink, width=size(4))
-                draw.rounded_rectangle(box((x + 26, 454, x + 426, 560)), radius=size(22), fill='#FFFFFF')
+                _blog_style_panel(draw, box((x, 426, x + 452, 970)), named_style,
+                                  fill=color, outline=ink, width=size(4), radius=size(30))
+                _blog_style_panel(draw, box((x + 26, 454, x + 426, 560)), named_style,
+                                  fill=surface, outline=None, width=size(1), radius=size(22))
                 _blog_text(draw, item['label'], box((x + 48, 478, x + 404, 548)), font_path, size(34), ink, 2, title=True)
-                _blog_symbol(draw, symbols[j], point((x + 226, 671)), size(175), ink, '#FFFFFF')
+                _blog_symbol(draw, symbols[j], point((x + 226, 671)), size(175), ink, surface)
                 _blog_text(draw, item['detail'], box((x + 34, 788, x + 418, 936)), font_path, size(28), ink, 4)
-            draw.ellipse(box((506, 625, 574, 693)), fill='#FFFFFF', outline=ink, width=size(3))
+            draw.ellipse(box((506, 625, 574, 693)), fill=surface, outline=ink, width=size(3))
             _blog_text(draw, 'VS', box((522, 641, 560, 681)), font_path, size(26), ink, 1, title=True)
         elif layout == 'checklist':
-            draw.rounded_rectangle(box((48, 405, 1032, 980)), radius=size(34), fill='#F9FBFC', outline=ink, width=size(4))
-            draw.rounded_rectangle(box((420, 388, 660, 445)), radius=size(18), fill=primary, outline=ink, width=size(3))
+            _blog_style_panel(draw, box((48, 405, 1032, 980)), named_style,
+                              fill=_blog_style_fill('#F9FBFC', named_style), outline=ink,
+                              width=size(4), radius=size(34))
+            _blog_style_panel(draw, box((420, 388, 660, 445)), named_style,
+                              fill=primary, outline=ink, width=size(3), radius=size(18))
             item_height = 130 if len(items) == 4 else 168
             symbols = _blog_distinct_item_symbols(items, illustration)
             for j, item in enumerate(items):
                 y = 452 + j * item_height
                 color = (primary, secondary, tertiary, '#DCE8F5')[j]
-                draw.rounded_rectangle(box((70, y + 5, 1010, y + item_height - 10)), radius=size(22), fill=color)
-                draw.ellipse(box((92, y + 22, 192, y + 122)), fill='#FFFFFF', outline=ink, width=size(3))
-                _blog_symbol(draw, symbols[j], point((142, y + 72)), size(62), ink, '#FFFFFF')
+                _blog_style_panel(draw, box((70, y + 5, 1010, y + item_height - 10)), named_style,
+                                  fill=color, outline=None, width=size(2), radius=size(22))
+                draw.ellipse(box((92, y + 22, 192, y + 122)), fill=surface, outline=ink, width=size(3))
+                _blog_symbol(draw, symbols[j], point((142, y + 72)), size(62), ink, surface)
                 _blog_text(draw, item['label'], box((220, y + 18, 985, y + 61)), font_path, size(31), ink, 1, title=True)
                 _blog_text(draw, item['detail'], box((220, y + 68, 985, y + item_height - 19)), font_path, size(26), ink, 2)
                 if j < len(items) - 1:
                     draw.line(box((175, y + item_height - 4, 905, y + item_height - 4)), fill='#FFFFFF', width=size(3))
         else:  # decision: three visually distinct branches, not a report timeline.
             symbols = _blog_distinct_item_symbols(items, illustration)
-            draw.rounded_rectangle(box((384, 410, 696, 474)), radius=size(22), fill='#FFFFFF', outline=ink, width=size(4))
+            _blog_style_panel(draw, box((384, 410, 696, 474)), named_style,
+                              fill=surface, outline=ink, width=size(4), radius=size(22))
             _blog_text(draw, '내 상황은 어디에 가까울까?', box((404, 430, 686, 460)), font_path, size(19), ink, 1, title=True)
             branch_centers = (210, 540, 870)
             for cx in branch_centers:
@@ -392,9 +423,10 @@ def render_blog_cards(
             for j, item in enumerate(items):
                 x = 64 + j * 330
                 color = (primary, secondary, tertiary)[j]
-                draw.rounded_rectangle(box((x, 520, x + 292, 950)), radius=size(28), fill=color, outline=ink, width=size(4))
-                draw.ellipse(box((x + 76, 555, x + 216, 695)), fill='#FFFFFF')
-                _blog_symbol(draw, symbols[j], point((x + 146, 625)), size(90), ink, '#FFFFFF')
+                _blog_style_panel(draw, box((x, 520, x + 292, 950)), named_style,
+                                  fill=color, outline=ink, width=size(4), radius=size(28))
+                draw.ellipse(box((x + 76, 555, x + 216, 695)), fill=surface)
+                _blog_symbol(draw, symbols[j], point((x + 146, 625)), size(90), ink, surface)
                 _blog_text(draw, item['label'], box((x + 20, 724, x + 272, 804)), font_path, size(29), ink, 2, title=True)
                 _blog_text(draw, item['detail'], box((x + 20, 818, x + 272, 930)), font_path, size(24), ink, 4)
         draw.line(box((64, 1012, 1016, 1012)), fill=ink, width=size(2))
@@ -408,6 +440,135 @@ def render_blog_cards(
         im.save(path)
         paths.append(path)
     return paths
+
+
+def _blog_style_fill(fill: str, style: dict[str, Any] | None) -> str:
+    if not style:
+        return fill
+    if fill.upper() in {'#FFFFFF', '#FBFAFE', '#F9FBFC', '#F5F2FC', '#F2EAF6'}:
+        return style['surface']
+    return fill
+
+
+def _blog_style_panel(
+    draw, coords, style: dict[str, Any] | None, *, fill: str, outline: str | None,
+    width: int, radius: int,
+) -> None:
+    """Draw a panel using the selected named design grammar.
+
+    A missing style deliberately preserves the legacy rounded renderer so old
+    reviewed manifests can be reproduced byte-for-byte during recovery.
+    """
+    if not style:
+        draw.rounded_rectangle(coords, radius=radius, fill=fill, outline=outline, width=width)
+        return
+    panel = style['panel']
+    border = max(width, int(style['border_width']))
+    chosen_radius = min(radius, int(style['radius']))
+    if panel == 'brutal':
+        x1, y1, x2, y2 = coords
+        offset = max(6, border * 2)
+        draw.rectangle((x1 + offset, y1 + offset, x2 + offset, y2 + offset), fill=style['palette'][3])
+        draw.rectangle(coords, fill=fill, outline=outline or style['palette'][3], width=border)
+    elif panel in {'rule', 'sharp', 'modular', 'split'}:
+        draw.rectangle(coords, fill=fill, outline=outline, width=border)
+        if panel == 'rule':
+            draw.line((coords[0], coords[3], coords[2], coords[3]), fill=outline or style['palette'][3], width=border)
+    elif panel == 'window':
+        draw.rounded_rectangle(coords, radius=max(2, chosen_radius), fill=fill,
+                               outline=outline or style['palette'][3], width=border)
+        bar_y = min(coords[3], coords[1] + max(10, border * 5))
+        draw.line((coords[0] + border, bar_y, coords[2] - border, bar_y),
+                  fill=outline or style['palette'][3], width=max(1, border))
+    elif panel == 'tape':
+        draw.rectangle(coords, fill=fill, outline=outline or style['palette'][3], width=border)
+        tape = style['palette'][1]
+        span = max(18, int((coords[2] - coords[0]) * .12))
+        center = int((coords[0] + coords[2]) / 2)
+        draw.rectangle((center - span, coords[1] - border * 2, center + span, coords[1] + border * 3), fill=tape)
+    elif panel == 'chrome':
+        draw.rounded_rectangle(coords, radius=max(4, chosen_radius), fill=fill,
+                               outline=outline or style['palette'][1], width=border)
+        draw.line((coords[0] + border * 3, coords[1] + border * 3,
+                   coords[2] - border * 3, coords[1] + border * 3),
+                  fill='#FFFFFF', width=max(1, border))
+    else:  # soft and bento
+        draw.rounded_rectangle(coords, radius=max(6, chosen_radius), fill=fill,
+                               outline=outline, width=border)
+
+
+def _blog_named_style_decor(draw, style, width, height, primary, secondary, tertiary, ink):
+    """Functional style cues; these are never decorative product claims."""
+    motif = style['motif']
+    if motif == 'swiss':
+        draw.line((int(width * .055), 0, int(width * .055), height), fill='#E3E5E8', width=2)
+        draw.rectangle((int(width * .88), int(height * .12), int(width * .94), int(height * .18)), fill=primary)
+    elif motif == 'retro_ui':
+        draw.rectangle((0, 0, width, int(height * .035)), fill=primary)
+        for x in (.025, .05, .075):
+            draw.rectangle((int(width * x), int(height * .012), int(width * (x + .012)), int(height * .024)), fill=ink)
+    elif motif == 'bento':
+        draw.rounded_rectangle((int(width * .72), int(height * .025), int(width * .96), int(height * .09)), radius=12, fill=secondary)
+        draw.rounded_rectangle((int(width * .88), int(height * .31), int(width * .98), int(height * .38)), radius=12, fill=tertiary)
+    elif motif == 'magazine':
+        draw.line((int(width * .04), int(height * .02), int(width * .04), int(height * .98)), fill=ink, width=4)
+        draw.line((int(width * .045), int(height * .115), int(width * .96), int(height * .115)), fill=ink, width=2)
+    elif motif == 'brutal':
+        draw.rectangle((int(width * .84), int(height * .02), int(width * .98), int(height * .09)), fill=secondary, outline=ink, width=4)
+        draw.rectangle((int(width * .02), int(height * .86), int(width * .08), int(height * .96)), fill=tertiary, outline=ink, width=4)
+    elif motif == 'japanese':
+        draw.line((int(width * .94), int(height * .04), int(width * .94), int(height * .36)), fill=primary, width=3)
+        for y in (.08, .12, .16):
+            draw.ellipse((int(width * .925), int(height * y), int(width * .955), int(height * (y + .03))), fill=secondary)
+    elif motif == 'quiet':
+        draw.rectangle((int(width * .025), int(height * .025), int(width * .975), int(height * .975)), outline=primary, width=1)
+    elif motif == 'newspaper':
+        draw.line((int(width * .04), int(height * .105), int(width * .96), int(height * .105)), fill=ink, width=5)
+        draw.line((int(width * .04), int(height * .12), int(width * .96), int(height * .12)), fill=ink, width=1)
+    elif motif == 'technical':
+        for x in range(0, width, max(40, width // 18)):
+            draw.line((x, 0, x, height), fill='#D9E8F1', width=1)
+        for y in range(0, height, max(40, height // 18)):
+            draw.line((0, y, width, y), fill='#D9E8F1', width=1)
+        draw.line((int(width * .03), int(height * .10), int(width * .03), int(height * .31)), fill=primary, width=3)
+    elif motif == 'screenshot':
+        draw.rounded_rectangle((int(width * .02), int(height * .015), int(width * .98), int(height * .09)), radius=12, fill=style['surface'], outline=ink, width=2)
+        for x, color in zip((.045, .072, .099), (tertiary, secondary, primary)):
+            draw.ellipse((int(width * x), int(height * .04), int(width * (x + .018)), int(height * .058)), fill=color)
+    elif motif == 'prompt':
+        draw.rounded_rectangle((int(width * .68), int(height * .03), int(width * .97), int(height * .09)), radius=12, fill=style['surface'], outline=primary, width=2)
+        draw.line((int(width * .71), int(height * .06), int(width * .73), int(height * .06)), fill=primary, width=4)
+    elif motif == 'terminal':
+        draw.text((int(width * .035), int(height * .025)), '>_', fill=primary)
+        draw.line((int(width * .035), int(height * .105), int(width * .965), int(height * .105)), fill=secondary, width=2)
+    elif motif == 'fluorescent':
+        draw.rectangle((int(width * .69), int(height * .055), int(width * .96), int(height * .072)), fill=primary)
+        draw.rectangle((int(width * .88), int(height * .32), int(width * .97), int(height * .34)), fill=secondary)
+    elif motif == 'soft_swiss':
+        draw.ellipse((int(width * .82), int(height * .03), int(width * .96), int(height * .17)), fill=secondary)
+        draw.line((int(width * .04), int(height * .12), int(width * .24), int(height * .12)), fill=primary, width=5)
+    elif motif == 'index':
+        for i, color in enumerate((primary, secondary, tertiary)):
+            y1 = int(height * (.22 + i * .08))
+            draw.rectangle((int(width * .94), y1, width, y1 + int(height * .055)), fill=color)
+    elif motif == 'cinematic':
+        draw.rectangle((0, 0, width, int(height * .035)), fill='#05070B')
+        draw.rectangle((0, int(height * .965), width, height), fill='#05070B')
+        draw.line((int(width * .06), int(height * .11), int(width * .94), int(height * .11)), fill=primary, width=2)
+    elif motif == 'zine':
+        draw.rectangle((int(width * .77), int(height * .035), int(width * .94), int(height * .065)), fill=secondary)
+        draw.line((int(width * .04), int(height * .13), int(width * .22), int(height * .10)), fill=primary, width=6)
+    elif motif == 'split':
+        draw.rectangle((0, 0, int(width * .5), int(height * .11)), fill=primary)
+        draw.rectangle((int(width * .5), 0, width, int(height * .11)), fill=secondary)
+        draw.line((int(width * .5), int(height * .11), int(width * .5), int(height * .38)), fill=ink, width=3)
+    elif motif == 'chrome':
+        draw.ellipse((int(width * .82), int(height * .025), int(width * .97), int(height * .175)), outline=secondary, width=8)
+        draw.ellipse((int(width * .855), int(height * .06), int(width * .935), int(height * .14)), outline='#FFFFFF', width=3)
+    else:  # modular
+        draw.rectangle((int(width * .74), int(height * .025), int(width * .86), int(height * .085)), fill=primary)
+        draw.rectangle((int(width * .87), int(height * .025), int(width * .97), int(height * .085)), fill=secondary)
+        draw.rectangle((int(width * .90), int(height * .30), int(width * .98), int(height * .38)), fill=tertiary)
 
 
 def _blog_family_decor(draw, family, width, height, primary, secondary, tertiary, ink):
