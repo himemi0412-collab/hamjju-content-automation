@@ -59,7 +59,8 @@ def record_results(output_dir: Path, channel: str, results: list[dict], expected
 
 def is_production_run(event: str, mode: str) -> bool:
     return event == 'schedule' or (
-        event == 'workflow_dispatch' and mode not in {'dry_run', 'verify_youtube_auth', ''}
+        event == 'workflow_dispatch'
+        and mode not in {'dry_run', 'verify_youtube_auth', 'explore_card_design', ''}
     )
 
 
@@ -72,6 +73,8 @@ def expected_channels(event: str, schedule: str, mode: str, channel: str) -> dic
         return scheduled.get(schedule, {})
     if mode == 'produce_daily_shorts':
         return {'ppojjugi_shorts': 1, 'japan_shorts': 1}
+    if mode == 'explore_card_design':
+        return {}
     return {'naver_blog' if mode in {'recover_blog', 'resume_blog'} else channel: 1}
 
 

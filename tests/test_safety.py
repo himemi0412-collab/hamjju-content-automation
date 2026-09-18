@@ -41,6 +41,8 @@ def test_github_action_keeps_blog_local_and_uploads_review_shorts_privately():
     assert "AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'" in workflow
     assert "AUTO_PRIVATE_YOUTUBE_UPLOAD: 'true'" in workflow
     assert 'verify_youtube_auth' in workflow
+    assert 'explore_card_design' in workflow
+    assert 'explore-card-design' in workflow
     assert 'YOUTUBE_CLIENT_SECRET_JSON_B64' in workflow
     assert 'secrets.BLOG_DATA_SOURCE_ID' not in workflow
     assert 'secrets.SHORTS_DATA_SOURCE_ID' not in workflow

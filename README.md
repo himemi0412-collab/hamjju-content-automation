@@ -28,6 +28,7 @@ GitHub Actions는 원고·카드·쇼츠 이미지·음성·영상·QA·Notion �
 - 후보가 여러 개면 생성 시각이 아니라 `진행 순서` 오름차순으로 1건을 고릅니다.
 - 카드뉴스는 AI 이미지 호출이 아니라 Pillow로 직접 만들어 비용을 줄입니다.
 - 신규 카드뉴스는 주제와 정보 역할을 보고 Swiss Typography, Technical Manual, Bento Editorial 등 허용된 20개 이름 중 중심 디자인 언어 하나를 자동 선택합니다. 각 언어에는 색상 토큰뿐 아니라 `표지 구도 → 글꼴 체계 → 이미지 전략 → 재질 → 카드 역할별 확장`을 담은 cover-first blueprint가 있으며, 표지에서 확정한 디자인 시스템을 나머지 네 장에 확장합니다. 스타일 이름만 바꾼 화이트 배경·둥근 박스·아이콘 반복은 독립 QA에서 차단합니다. Screenshot Editorial은 별도 큰 화면 중심 렌더러를 사용해 코드·채팅·파일·체크·분기 화면이 카드마다 실제 정보의 주인공이 되도록 합니다.
+- 디자인 방향을 고르기 전에는 별도의 `concept_exploration` 모드를 사용할 수 있습니다. 이 모드는 같은 제목·부제목을 유지한 채 20개 디자인 언어를 각각 독립된 1080×1350 표지로 만들고, 4개씩 묶은 비교판 5장과 전체 개요를 출력한 뒤 `READY_FOR_USER_REVIEW`에서 멈춥니다. 이 20장은 한 카드뉴스 세트가 아니며, 사용자가 한 스타일을 선택하기 전에는 본편 5장을 제작하지 않습니다.
 - 블로그 제작은 `references/naver_blog_baseline.md`의 `HAMZZU_NAVER_REFERENCE_V1`을 매 실행 로드합니다. 이 파일에는 사용자가 지정한 공개 글 4개와 원고·카드뉴스 공통 기준이 버전 관리되며, ID/URL/생성 응답 계약이 빠지면 Notion 전달 전에 실패합니다.
 - 색 구성은 선택한 디자인 언어의 팔레트를 따르되 한 세트 안에서는 제한된 색만 반복하며, 누런 필터·겨자색 중심·세피아 배경은 쓰지 않습니다.
 - 네이버 공개/예약 발행 기능은 없습니다.
@@ -103,6 +104,17 @@ python -m app.main channel naver_blog --dry-run --limit 1
 python -m app.main channel ppojjugi_shorts --dry-run --limit 1
 python -m app.main channel japan_shorts --dry-run --limit 1
 ```
+
+디자인을 고르기 위한 20개 표지 비교는 Notion·OpenAI API·외부 게시 없이 로컬에서 만들 수 있습니다.
+
+```bash
+python -m app.main explore-card-design \
+  --title "Codex에서 ChatGPT 열어서 토큰 아끼는 법" \
+  --subtitle "Quick Chat 활용" \
+  --output output/card-design-exploration
+```
+
+GitHub Actions의 수동 실행에서는 `mode=explore_card_design`을 선택합니다. 결과 artifact에는 개별 표지 20장, 비교판 5장, 전체 개요와 선택 대기 manifest가 포함됩니다. 이 모드는 제작 상태판·Notion·비용 장부를 변경하지 않습니다.
 
 ## 5. 텍스트 자동화 실행
 

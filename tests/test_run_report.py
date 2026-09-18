@@ -51,6 +51,7 @@ def test_blog_without_readback_does_not_count_as_reviewed_output(tmp_path):
 @pytest.mark.parametrize(('event', 'mode', 'production'), [
     ('push', '', False), ('workflow_dispatch', 'dry_run', False),
     ('workflow_dispatch', 'verify_youtube_auth', False),
+    ('workflow_dispatch', 'explore_card_design', False),
     ('workflow_dispatch', 'recover_blog', True), ('schedule', '', True),
 ])
 def test_safety_checks_cannot_replace_production_state(event, mode, production):

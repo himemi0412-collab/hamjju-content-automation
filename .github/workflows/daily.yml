@@ -44,6 +44,7 @@ on:
           - retry_revision
           - regenerate_review
           - repair_video
+          - explore_card_design
           - verify_youtube_auth
       source_run_id:
         description: Previous Actions artifact run ID for resume_blog or repair_video
@@ -57,6 +58,16 @@ on:
         description: Exact existing Notion page ID for recovery, resume, regeneration, or repair
         required: false
         type: string
+      card_title:
+        description: Fixed Korean title used across all 20 cover concepts
+        required: false
+        type: string
+        default: Codex에서 ChatGPT 열어서 토큰 아끼는 법
+      card_subtitle:
+        description: Fixed subtitle used across all 20 cover concepts
+        required: false
+        type: string
+        default: Quick Chat 활용
 
 concurrency:
   group: hamjju-content-automation
@@ -79,7 +90,7 @@ jobs:
           restore-keys: |
             hamjju-openai-budget-${{ runner.os }}-
       - name: Restore processing checkpoints
-        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth') }}
+        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design') }}
         uses: actions/cache/restore@v6
         with:
           path: output/state.db
@@ -102,6 +113,15 @@ jobs:
           # fixture summaries leak into the real GitHub run summary.
           GITHUB_STEP_SUMMARY: ''
         run: pytest -q
+      - name: Render 20 independent card-cover concepts for selection
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'explore_card_design' }}
+        env:
+          CARD_TITLE: ${{ inputs.card_title }}
+          CARD_SUBTITLE: ${{ inputs.card_subtitle }}
+        run: |
+          test -n "$CARD_TITLE"
+          test -n "$CARD_SUBTITLE"
+          python -m app.main explore-card-design --title "$CARD_TITLE" --subtitle "$CARD_SUBTITLE" --output output/card-design-exploration
       - name: Materialize YouTube OAuth files
         if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 12 * * *') || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'execute_media' || inputs.mode == 'produce_daily_shorts' || inputs.mode == 'retry_revision' || inputs.mode == 'verify_youtube_auth')) }}
         env:
@@ -118,6 +138,7 @@ jobs:
           printf '%s' "$YOUTUBE_PPOJJUGI_TOKEN_JSON_B64" | base64 --decode > secrets/youtube_ppojjugi_token.json
           printf '%s' "$YOUTUBE_JAPAN_TOKEN_JSON_B64" | base64 --decode > secrets/youtube_japan_token.json
       - name: Check configuration
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'explore_card_design' }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           FAL_KEY: ${{ secrets.FAL_KEY }}
@@ -281,21 +302,21 @@ jobs:
           exit "$result"
 
       - name: Save charged budget even when production fails
-        if: ${{ always() && hashFiles('output/openai-cost-ledger.json') != '' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'repair_video' && inputs.mode != 'verify_youtube_auth')) }}
+        if: ${{ always() && hashFiles('output/openai-cost-ledger.json') != '' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'repair_video' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design')) }}
         uses: actions/cache/save@v6
         with:
           path: output/openai-cost-ledger.json
           key: hamjju-openai-budget-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Save processing checkpoints even when one item fails
-        if: ${{ always() && hashFiles('output/state.db') != '' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth')) }}
+        if: ${{ always() && hashFiles('output/state.db') != '' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design')) }}
         uses: actions/cache/save@v6
         with:
           path: output/state.db
           key: hamjju-processing-state-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Summarize actual production evidence
-        if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth')) }}
+        if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design')) }}
         env:
           RUN_STATUS: ${{ job.status }}
           EVENT_NAME: ${{ github.event_name }}
@@ -315,7 +336,7 @@ jobs:
           retention-days: 14
 
       - name: Update production status board
-        if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth')) }}
+        if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design')) }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}

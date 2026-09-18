@@ -17,6 +17,7 @@ from .state import StateStore
 from .youtube import YouTubePrivateUploader
 from .naver import explain as naver_explain
 from .media import compose_short_video
+from .card_exploration import DEFAULT_SUBTITLE, DEFAULT_TITLE, render_design_exploration
 from .notion_client import property_value
 from .run_report import record_results
 
@@ -386,6 +387,28 @@ def repair_short_video(channel: str, page_id: str, source_dir: Path):
 @app.command('naver-status')
 def naver_status():
     print(naver_explain())
+
+
+@app.command('explore-card-design')
+def explore_card_design(
+    title: str = DEFAULT_TITLE,
+    subtitle: str = DEFAULT_SUBTITLE,
+    output: Path = Path('output/card-design-exploration'),
+):
+    """Render 20 independent covers and stop for a human style selection."""
+    result = render_design_exploration(title, output, subtitle)
+    print_json({
+        'mode': 'concept_exploration',
+        'status': 'READY_FOR_USER_REVIEW',
+        'title': title,
+        'subtitle': subtitle,
+        'cover_count': len(result['covers']),
+        'comparison_sheet_count': len(result['comparison_sheets']),
+        'overview': result['overview'],
+        'manifest': result['manifest'],
+        'production_started': False,
+        'selection_required': True,
+    })
 
 
 @app.command('doctor')
