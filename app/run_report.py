@@ -65,7 +65,12 @@ def is_production_run(event: str, mode: str) -> bool:
 
 def expected_channels(event: str, schedule: str, mode: str, channel: str) -> dict[str, int]:
     if event == 'schedule':
-        return {'naver_blog': 3} if schedule == '0 1 * * *' else {'ppojjugi_shorts': 1, 'japan_shorts': 1}
+        scheduled = {
+            '0 1 * * *': {'naver_blog': 3},
+            '0 12 * * *': {'ppojjugi_shorts': 1, 'japan_shorts': 1},
+            '0 4 18 9 *': {'naver_blog': 1},
+        }
+        return scheduled.get(schedule, {})
     if mode == 'produce_daily_shorts':
         return {'ppojjugi_shorts': 1, 'japan_shorts': 1}
     return {'naver_blog' if mode in {'recover_blog', 'resume_blog'} else channel: 1}

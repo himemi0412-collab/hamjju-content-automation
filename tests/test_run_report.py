@@ -78,6 +78,16 @@ def test_workflow_keeps_second_shorts_after_first_failure_and_preserves_budget()
     assert 'actions/cache/save@v6' in budget_save
 
 
+def test_one_time_schedule_runs_one_blog_and_unknown_schedule_fails_closed():
+    workflow = Path('.github/workflows/daily.yml').read_text(encoding='utf-8')
+    assert "cron: '0 4 18 9 *'" in workflow
+    assert 'elif [ "$schedule_expr" = "0 4 18 9 *" ]' in workflow
+    assert 'channel naver_blog --limit 1 || result=1' in workflow
+    assert 'Unsupported schedule expression' in workflow
+    assert expected_channels('schedule', '0 4 18 9 *', '', '') == {'naver_blog': 1}
+    assert expected_channels('schedule', 'unexpected', '', '') == {}
+
+
 def test_resume_workflow_reuses_one_repository_artifact_without_seeding():
     workflow = Path('.github/workflows/daily.yml').read_text(encoding='utf-8')
     resume = workflow.split('- name: Resume one existing blog artifact', 1)[1].split('\n      - name:', 1)[0]
