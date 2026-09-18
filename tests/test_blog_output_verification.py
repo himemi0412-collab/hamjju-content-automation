@@ -12,7 +12,7 @@ import pytest
 from app.ai import AIClient
 from app.config import load_channels
 from app.pipeline import Pipeline
-from app.notion_client import result_blocks
+from app.notion_client import naver_handoff_blocks, result_blocks
 from app.settings import Settings
 from app.state import StateStore
 from app.manuscript_repair import manuscript_hash
@@ -50,6 +50,7 @@ class FakeNotion:
     def attach_files(self, page_id, prop, paths):
         self.files = [{'type': 'file', 'name': p.name, 'file': {'url': f'https://asset.invalid/{p.name}'}} for p in paths]
         self.paths = {f'https://asset.invalid/{p.name}': p for p in paths}
+        return [f'upload-{p.name}' for p in paths]
 
     def append_blocks(self, page_id, blocks):
         self.blocks.extend({**block, 'id': f'block-{len(self.blocks)}-{i}'} for i, block in enumerate(blocks))
@@ -61,7 +62,23 @@ class FakeNotion:
 def make_pipeline(tmp_path, monkeypatch, visual_pass=True):
     notion = FakeNotion()
     ai = Mock()
-    ai.generate.return_value = ({'title': '검증 원고', 'body_markdown': '본문 전체', 'card_news': [{'card': i} for i in range(1, 6)]}, {})
+    ai.generate.return_value = ({
+        'title': '검증 원고',
+        'body_markdown': '도입 문장\n\n## 구간 1\n본문 전체',
+        'hashtags': ['#검증'],
+        'card_news': [
+            {
+                'card': i,
+                'caption': f'카드 {i} 설명',
+                'ai_disclosure': 'AI가 정리한 정보를 코드로 조판한 설명 도식입니다.',
+            }
+            for i in range(1, 6)
+        ],
+        'image_placements': [
+            {'card': 1, 'after_heading': '도입'},
+            *[{'card': i, 'after_heading': '구간 1'} for i in range(2, 6)],
+        ],
+    }, {})
     ai.qa.return_value = ({'pass': visual_pass, 'blocking_issues': [] if visual_pass else ['card 3 overlaps']}, {})
     paths = [tmp_path / f'card_{i:02d}.png' for i in range(1, 6)]
     for i, path in enumerate(paths):
@@ -78,9 +95,44 @@ def test_success_requires_visual_qa_and_exact_remote_card_bytes(tmp_path, monkey
     result = pipeline.process_page(load_channels()['naver_blog'], {'id': 'one'})
     assert result['qa_pass'] is True
     assert result['output_verified'] is True
+    assert result['status'] == '네이버 저장 요청'
     assert result['media']['rendered_card_qa_pass'] is True
     assert pipeline.ai.qa.call_args.kwargs['image_paths'] == paths
     assert (tmp_path / 'output' / 'one' / 'notion-readback.json').exists()
+
+
+def test_naver_handoff_has_one_ready_contract_and_five_ordered_images():
+    generated = {
+        'body_markdown': '도입 문장\n\n## 첫 구간\n본문 **강조**와 [출처](https://example.com)',
+        'hashtags': ['#하나', '#둘'],
+        'card_news': [
+            {'card': i, 'caption': f'카드 {i} 캡션', 'ai_disclosure': 'AI 설명 도식입니다.'}
+            for i in range(1, 6)
+        ],
+        'image_placements': [
+            {'card': 1, 'after_heading': '도입'},
+            *[{'card': i, 'after_heading': '첫 구간'} for i in range(2, 6)],
+        ],
+    }
+    blocks = naver_handoff_blocks(
+        generated,
+        {'pass': True, 'score': 96, 'blocking_issues': []},
+        document_id='page-id',
+        source_version='sha256-version',
+        card_upload_ids=[f'upload-{i}' for i in range(1, 6)],
+        card_names=[f'card_{i:02d}.png' for i in range(1, 6)],
+    )
+    texts = [
+        ''.join(x.get('text', {}).get('content', '') for x in block.get(block['type'], {}).get('rich_text', []))
+        for block in blocks
+    ]
+    assert texts.count('저장 준비 완료: READY_FOR_NAVER_DRAFT') == 1
+    assert texts.count('네이버 본문 시작') == 1
+    assert texts.count('네이버 본문 끝') == 1
+    assert texts.index('네이버 본문 시작') < texts.index('네이버 본문 끝')
+    assert sum(block['type'] == 'image' for block in blocks) == 5
+    assert '#하나 #둘' in texts
+    assert all('발행 금지' in text for text in texts if text.startswith('네이버 임시저장만 허용'))
 
 
 def test_visual_rejection_is_preserved_and_not_a_state_success(tmp_path, monkeypatch):
@@ -119,7 +171,7 @@ def test_read_failure_does_not_abort_next_page(tmp_path, monkeypatch):
         return original(page_id)
     pipeline.notion.retrieve_page = retrieve
     results = pipeline.run_channel(load_channels()['naver_blog'], limit=2)
-    assert [x['status'] for x in results] == ['failed', 'CODEX_HANDOFF_READY']
+    assert [x['status'] for x in results] == ['failed', '네이버 저장 요청']
 
 
 def test_image_qa_sends_actual_png_and_uses_budgeted_response_path(tmp_path):
@@ -141,12 +193,13 @@ def test_successful_readback_does_not_log_signed_asset_urls(tmp_path, monkeypatc
     pipeline, _ = make_pipeline(tmp_path, monkeypatch)
     original_attach = pipeline.notion.attach_files
     def attach(*args):
-        original_attach(*args)
+        upload_ids = original_attach(*args)
         for item in pipeline.notion.files:
             original = item['file']['url']
             signed = original + '?signature=private-value'
             item['file']['url'] = signed
             pipeline.notion.paths[signed] = pipeline.notion.paths[original]
+        return upload_ids
     pipeline.notion.attach_files = attach
     transport = httpx.MockTransport(lambda request: httpx.Response(200, content=pipeline.notion.paths[str(request.url)].read_bytes()))
     with httpx.Client(transport=transport) as client:

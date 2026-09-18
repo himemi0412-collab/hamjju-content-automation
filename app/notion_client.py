@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import mimetypes
+import re
 from pathlib import Path
 from typing import Any
 import httpx
@@ -227,6 +228,31 @@ def rich(text: str) -> list[dict[str, Any]]:
     return [{'type': 'text', 'text': {'content': text[:2000]}}]
 
 
+def markdown_rich(text: str) -> list[dict[str, Any]]:
+    """Convert the small inline Markdown subset used by reviewed blog bodies."""
+    parts: list[dict[str, Any]] = []
+    token = re.compile(r'\*\*(.+?)\*\*|\[([^\]]+)\]\((https?://[^\s)]+)\)')
+    cursor = 0
+    for match in token.finditer(text):
+        if match.start() > cursor:
+            parts.extend(rich(text[cursor:match.start()]))
+        if match.group(1) is not None:
+            parts.append({
+                'type': 'text',
+                'text': {'content': match.group(1)[:2000]},
+                'annotations': {'bold': True},
+            })
+        else:
+            parts.append({
+                'type': 'text',
+                'text': {'content': match.group(2)[:2000], 'link': {'url': match.group(3)}},
+            })
+        cursor = match.end()
+    if cursor < len(text):
+        parts.extend(rich(text[cursor:]))
+    return parts or rich('')
+
+
 def split_text(text: str, limit: int) -> list[str]:
     text = text.strip()
     if not text:
@@ -245,7 +271,174 @@ def split_text(text: str, limit: int) -> list[str]:
     return chunks
 
 
-def result_blocks(channel: str, generated: dict[str, Any], qa: dict[str, Any]) -> list[dict[str, Any]]:
+def _markdown_line_blocks(line: str) -> list[dict[str, Any]]:
+    if not line:
+        return [{'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': []}}]
+    heading = re.match(r'^(#{1,3})\s+(.+)$', line)
+    if heading:
+        kind = f'heading_{len(heading.group(1))}'
+        return [{'object': 'block', 'type': kind, kind: {'rich_text': markdown_rich(heading.group(2))}}]
+    bullet = re.match(r'^[-*]\s+(.+)$', line)
+    if bullet:
+        return [{'object': 'block', 'type': 'bulleted_list_item', 'bulleted_list_item': {'rich_text': markdown_rich(bullet.group(1))}}]
+    numbered = re.match(r'^\d+\.\s+(.+)$', line)
+    if numbered:
+        return [{'object': 'block', 'type': 'numbered_list_item', 'numbered_list_item': {'rich_text': markdown_rich(numbered.group(1))}}]
+    blocks = []
+    for chunk in split_text(line, 1900):
+        blocks.append({'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': markdown_rich(chunk)}})
+    return blocks
+
+
+def naver_handoff_blocks(
+    generated: dict[str, Any],
+    qa: dict[str, Any],
+    *,
+    document_id: str,
+    source_version: str,
+    card_upload_ids: list[str],
+    card_names: list[str],
+) -> list[dict[str, Any]]:
+    """Build the strict, reviewable contract consumed by the local Naver draft saver."""
+    cards = list(generated.get('card_news') or [])
+    placements = list(generated.get('image_placements') or [])
+    if qa.get('pass') is not True or qa.get('blocking_issues'):
+        raise ValueError('Naver handoff requires an independent QA pass')
+    if not document_id or not source_version:
+        raise ValueError('Naver handoff identity is incomplete')
+    if not (len(cards) == len(placements) == len(card_upload_ids) == len(card_names) == 5):
+        raise ValueError('Naver handoff requires five ordered reviewed cards')
+
+    body = str(generated.get('body_markdown') or '').strip()
+    if not body:
+        raise ValueError('Naver handoff body is empty')
+    body_lines = body.splitlines()
+    headings = [
+        (line_index, match.group(1).strip())
+        for line_index, line in enumerate(body_lines)
+        if (match := re.match(r'^#{1,3}\s+(.+)$', line))
+    ]
+    by_section: dict[str, list[tuple[int, dict[str, Any], str, str]]] = {}
+    by_line: dict[int, list[tuple[int, dict[str, Any], str, str]]] = {}
+    for index, (card, placement, upload_id, name) in enumerate(
+        zip(cards, placements, card_upload_ids, card_names), 1
+    ):
+        if int(card.get('card') or 0) != index or int(placement.get('card') or 0) != index:
+            raise ValueError('Naver handoff card order does not match the reviewed manuscript')
+        target = str(placement.get('after_heading') or '').strip()
+        if not target:
+            raise ValueError('Naver handoff image placement is missing')
+        item = (index, card, upload_id, name)
+        if target == '도입':
+            by_section.setdefault('도입', []).append(item)
+            continue
+        exact = [heading for _, heading in headings if heading == target]
+        target_words = set(re.findall(r'[0-9A-Za-z가-힣.]+', target))
+        fuzzy = []
+        for _, heading in headings:
+            heading_words = set(re.findall(r'[0-9A-Za-z가-힣.]+', heading))
+            shared = target_words & heading_words
+            if (
+                target in heading
+                or heading in target
+                or (len(shared) >= 2 and len(shared) / max(len(target_words), 1) >= 0.5)
+            ):
+                fuzzy.append(heading)
+        section_matches = exact or fuzzy
+        if len(section_matches) == 1:
+            by_section.setdefault(section_matches[0], []).append(item)
+            continue
+        paragraph_matches = [
+            line_index for line_index, line in enumerate(body_lines)
+            if line.strip().startswith(target)
+        ]
+        if len(paragraph_matches) == 1:
+            by_line.setdefault(paragraph_matches[0], []).append(item)
+            continue
+        raise ValueError(f'Naver handoff image placement target is missing or ambiguous: {target}')
+
+    def image_blocks(item: tuple[int, dict[str, Any], str, str]) -> list[dict[str, Any]]:
+        _, card, upload_id, name = item
+        caption = str(card.get('caption') or '').strip()
+        disclosure = str(card.get('ai_disclosure') or '').strip()
+        if not caption or not disclosure or not upload_id or not name:
+            raise ValueError('Naver handoff card caption, disclosure, upload, or name is missing')
+        return [
+            {
+                'object': 'block',
+                'type': 'image',
+                'image': {
+                    'type': 'file_upload',
+                    'file_upload': {'id': upload_id},
+                    'caption': [],
+                },
+            },
+            {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': markdown_rich(caption)}},
+            {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': markdown_rich(disclosure)}},
+        ]
+
+    body_blocks: list[dict[str, Any]] = []
+    current_section = '도입'
+    used_cards: set[int] = set()
+    for line_index, line in enumerate(body_lines):
+        heading = re.match(r'^#{1,3}\s+(.+)$', line)
+        if heading:
+            if current_section in by_section:
+                for item in by_section[current_section]:
+                    body_blocks.extend(image_blocks(item))
+                    used_cards.add(item[0])
+            current_section = heading.group(1).strip()
+        body_blocks.extend(_markdown_line_blocks(line))
+        if line_index in by_line:
+            for item in by_line[line_index]:
+                body_blocks.extend(image_blocks(item))
+                used_cards.add(item[0])
+    if current_section in by_section:
+        for item in by_section[current_section]:
+            body_blocks.extend(image_blocks(item))
+            used_cards.add(item[0])
+    missing = sorted(set(range(1, 6)) - used_cards)
+    if missing:
+        raise ValueError('Naver handoff image placements were not applied: ' + ', '.join(map(str, missing)))
+
+    hashtags = [str(x).strip() for x in (generated.get('hashtags') or []) if str(x).strip()]
+    if hashtags:
+        body_blocks.append({'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich(' '.join(hashtags))}})
+
+    qa_text = (
+        f"PASS={qa.get('pass')} / score={qa.get('score')} / "
+        f"blocking={qa.get('blocking_issues', [])} / notes={qa.get('non_blocking_notes', [])}"
+    )
+    blocks: list[dict[str, Any]] = [
+        {'object': 'block', 'type': 'divider', 'divider': {}},
+        {'object': 'block', 'type': 'heading_2', 'heading_2': {'rich_text': rich('네이버 임시저장 전달 자료')}},
+        {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich('저장 준비 완료: READY_FOR_NAVER_DRAFT')}},
+        {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich(f'원고 ID: {document_id}')}},
+        {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich(f'버전: {source_version}')}},
+        {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich('검수: PASS')}},
+        {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich('이미지 수: 5')}},
+        {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich('네이버 임시저장만 허용 · 공개/예약발행 금지')}},
+        {'object': 'block', 'type': 'heading_3', 'heading_3': {'rich_text': rich('독립 QA')}},
+        {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich(qa_text)}},
+        {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich('네이버 본문 시작')}},
+        *body_blocks,
+        {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich('네이버 본문 끝')}},
+    ]
+    snapshot = json.dumps({'generated': generated, 'qa': qa}, ensure_ascii=False, indent=2)
+    for chunk in split_text(snapshot, 1800):
+        blocks.append({'object': 'block', 'type': 'code', 'code': {'language': 'json', 'rich_text': rich(chunk)}})
+    return blocks
+
+
+def result_blocks(
+    channel: str,
+    generated: dict[str, Any],
+    qa: dict[str, Any],
+    *,
+    naver_handoff: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    if channel == 'naver_blog' and naver_handoff is not None:
+        return naver_handoff_blocks(generated, qa, **naver_handoff)
     blocks: list[dict[str, Any]] = [
         {'object': 'block', 'type': 'divider', 'divider': {}},
         {'object': 'block', 'type': 'heading_2', 'heading_2': {'rich_text': rich('자동화 생성 결과')}},

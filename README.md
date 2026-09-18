@@ -12,7 +12,7 @@
 
 ### 블로그
 
-`작성 요청` → `생성 중` → AI 원고 작성 → 카드뉴스 5장 렌더링 → 실제 이미지와 원고 독립 QA → Notion 첨부·본문 재조회 검증 → `CODEX_HANDOFF_READY`
+`작성 요청` → `생성 중` → AI 원고 작성 → 카드뉴스 5장 렌더링 → 실제 이미지와 원고 독립 QA → Notion 첨부·본문 재조회 검증 → `네이버 저장 요청` + `READY_FOR_NAVER_DRAFT`
 
 - `목록 구분`이 `이전 주제 보관`인 항목은 자동 실행 후보에서 제외합니다.
 - 블로그는 `선별 상태=추천`, `모델 확인=공식 확인`, `진행 순서>0`을 모두 만족해야 자동 실행 후보가 됩니다.
@@ -23,7 +23,7 @@
 
 ### 햄찌 창작 쇼츠
 
-`작성 요청` → `Work 제작 중` → 대본/장면표 → 독립 QA → (선택) 이미지/TTS/MP4 → Notion 최종 영상 첨부 → `검토 대기`
+`작성 요청` → `Work 제작 중` → 대본/장면표 → 독립 QA → 이미지/TTS/MP4 → Notion 최종 영상 첨부 → 채널 일치 확인 → YouTube `private` 업로드 → `비공개 업로드 완료`
 
 ### 일본 쇼츠
 
@@ -31,12 +31,12 @@
 
 ## 안전장치
 
-1. 현재 운영 기준에서는 YouTube 업로드를 실행하지 않습니다. 공개 승인은 항상 NO에서 시작합니다.
-2. 남아 있는 YouTube 업로더 코드는 `privacyStatus=private`만 지원하지만 모든 워크플로에서 `AUTO_PRIVATE_YOUTUBE_UPLOAD=false`로 고정합니다.
+1. 쇼츠 제작 실행은 YouTube에 `private`로만 업로드합니다. 공개 승인은 항상 NO에서 시작합니다.
+2. YouTube 업로더는 코드상 `privacyStatus=private`만 지원하며, 고정된 채널 ID와 OAuth 채널이 다르면 전송 전에 중단합니다.
 3. 네이버 공개 발행/예약 발행 자동화는 구현하지 않았습니다.
 4. 로컬/동일 실행 환경에서는 SQLite 기록으로 중복 실행을 막고, GitHub Actions에서는 동시 실행 제한과 Notion의 `작성 요청 → 생성 중` 상태 전환으로 중복 처리를 막습니다.
 5. 오류가 나면 성공으로 기록하지 않고 `수정 필요` 상태로 남깁니다.
-6. 로컬과 GitHub Actions 모두 YouTube 업로드가 OFF이며, 쇼츠 제작은 최종 MP4와 Notion 검토 기록까지만 진행합니다.
+6. 블로그·dry run·텍스트 전용·영상 복구는 YouTube 업로드가 OFF이고, 검수된 쇼츠 제작·재시도에서만 비공개 업로드가 켜집니다.
 7. 블로그 카드뉴스가 정확히 5장이 아니거나 Notion 첨부가 실패하면 성공 상태로 넘기지 않습니다.
 8. OAuth 토큰의 실제 채널 ID가 고정된 삐죽이/일본 채널 ID와 다르면 파일 전송 전에 중단합니다.
 9. GPT Image 2는 `1024x1536` / `medium` 품질로 고정하며, `auto` 품질을 사용하지 않습니다.
@@ -144,13 +144,13 @@ python -m app.main setup-youtube-auth japan_shorts
 python -m app.main verify-youtube-auth
 ```
 
-현재 운영값:
+로컬 기본값은 OFF입니다. GitHub의 검수된 쇼츠 제작 단계만 환경변수로 ON을 명시합니다.
 
 ```env
 AUTO_PRIVATE_YOUTUBE_UPLOAD=false
 ```
 
-업로드 코드는 호출하지 않습니다. 공개·비공개를 포함한 YouTube 전송은 별도 사용자 승인과 별도 작업 없이는 실행하지 않습니다.
+업로드 코드는 `private`만 허용합니다. 공개·일부공개 전환과 삭제 기능은 자동화하지 않습니다.
 
 ## 8. GitHub Actions 첫 연결
 
@@ -170,7 +170,7 @@ GitHub 저장소의 Actions secrets에 다음 값을 넣습니다.
 
 `execute_text`는 채널 1건의 원고를 만들며, 블로그에서는 설명 도식 카드 5장도 렌더링합니다. `recover_blog`는 `page_id`로 지정한 기존 작성 요청 블로그 1편만 제작하고 새 주제를 만들지 않습니다. `execute_media`는 이미 검토 대상이 된 쇼츠 1건의 MP4를 만듭니다. `produce_daily_shorts`는 새 주제를 조사해 삐죽이·일본 쇼츠를 각각 1건씩 준비합니다. 독립 QA에서 멈춘 쇼츠는 원인을 보완한 뒤 `retry_revision`으로 1건만 다시 제작할 수 있습니다. 과거 artifact의 합성 파일만 복구할 때는 `repair_video`가 전체 장면 길이로 다시 합성해 같은 Notion 항목의 검토 영상을 교체합니다.
 
-미디어 생성은 쇼츠 실행에서만 켜집니다. 예약 쇼츠 제작, `execute_media`, `produce_daily_shorts`, `retry_revision`, 영상 복구까지 모두 MP4와 Notion 검토 기록에서 멈추며 YouTube에는 업로드하지 않습니다. `verify_youtube_auth`는 업로드 없이 두 OAuth 연결의 채널 ID와 이름만 검사합니다.
+미디어 생성은 쇼츠 실행에서만 켜집니다. 예약 쇼츠 제작, `execute_media`, `produce_daily_shorts`, `retry_revision`은 고정 채널 ID를 검사한 뒤 YouTube에 `private`로 올립니다. `regenerate_review`와 영상 복구는 MP4·Notion 검토 기록에서 멈추고 업로드하지 않습니다. `verify_youtube_auth`는 업로드 없이 두 OAuth 연결의 채널 ID와 이름만 검사합니다.
 
 생성 파일은 Actions artifact로 14일 보존하도록 설정했습니다. Notion 파일 첨부가 성공하면 카드뉴스/MP4는 Notion에도 남습니다.
 
@@ -180,7 +180,7 @@ GitHub 저장소의 Actions secrets에 다음 값을 넣습니다.
 
 네이버 블로그 공식 글쓰기 Open API는 현재 제공되지 않으므로, 이 프로젝트에서는 브라우저 로그인 세션/비밀번호/쿠키를 GitHub에 저장하는 위험한 방식으로 우회하지 않습니다.
 
-블로그 결과가 실제 카드 PNG를 포함한 독립 QA와 Notion 재조회 검증을 통과하면 `CODEX_HANDOFF_READY`로 남깁니다. 이 값은 **Notion 제작물 준비 완료**만 뜻합니다. `app/naver.py`의 저장 함수는 미구현이며, 현재 결과 형식은 기존 Codex의 `네이버 저장 요청`/READY 계약과 자동 연결되어 있지 않습니다. PC를 끈 상태에서 네이버 입력·저장·재열람까지 되는 것으로 해석하지 않습니다. GitHub 상태판도 Notion 준비 편수와 네이버 저장 확인 편수를 별도로 표시합니다.
+블로그 결과가 실제 카드 PNG를 포함한 독립 QA와 Notion 재조회 검증을 통과하면 본문·카드 5장·캡션·AI 고지·원고 해시를 `READY_FOR_NAVER_DRAFT` 계약으로 만들고 상태를 `네이버 저장 요청`으로 바꿉니다. 기존 로컬 Codex 임시저장 자동화가 이 대기열을 받아 himemi0412의 비공개 임시저장과 재열람 검증을 수행합니다. GitHub 자체는 네이버 로그인 세션을 보유하지 않으므로 PC/Codex가 꺼져 있거나 로그인이 풀리면 대기하며, 공개·예약발행은 하지 않습니다. 상태판도 Notion 전달 준비와 실제 네이버 저장 확인을 별도로 표시합니다.
 
 블로그 제작은 대기 중인 글을 우선 처리하고 부족한 수만 새로 조사합니다. 신규 항목은 Notion 분류에 필요한 `원본 순서`와 `진행 순서`를 함께 기록합니다. 글마다 오류를 격리하며, 0건·목표 미달·QA 실패·저장 재조회 불일치는 성공으로 처리하지 않습니다. 본문 블록 전체와 카드 5장의 파일 순서·SHA-256을 다시 확인하고, 실패해도 비용 원장과 처리 기록을 다음 실행에 보존합니다. 코드 검사 push는 제작 상태판을 덮어쓰지 않습니다.
 

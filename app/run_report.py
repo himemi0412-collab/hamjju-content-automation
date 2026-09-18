@@ -321,7 +321,7 @@ def markdown_report(data: dict, expected: dict[str, int], run_status: str, run_u
     lines += [
         '', f'- 네이버 임시저장·재열람 확인: **{naver_verified}편**. Notion 준비와 네이버 저장은 별도입니다.',
         '- 자동 실행: 매일 10:00 KST 블로그 / 21:00 KST 쇼츠',
-        '- 네이버 공개·예약 발행: 안 함', '- YouTube 자동 업로드: 꺼짐',
+        '- 네이버 공개·예약 발행: 안 함', '- YouTube 자동 업로드: 채널 확인 후 비공개(private)만 켜짐',
         '- OpenAI 내부 월 한도: $22',
         '- 코드 변경 검사와 읽기 전용 점검은 이 제작 상태판을 덮어쓰지 않습니다.', '',
     ]

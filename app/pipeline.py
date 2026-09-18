@@ -203,8 +203,11 @@ class Pipeline:
                             match_attached_cards(latest_files, prior_card_receipt)
                         elif latest_files:
                             raise RuntimeError('MANUAL_EDIT_CONFLICT: images were added during review')
-                    self.notion.attach_files(page_id, '생성 이미지', cards)
+                    card_upload_ids = self.notion.attach_files(page_id, '생성 이미지', cards)
+                    if len(card_upload_ids) != 5:
+                        raise RuntimeError('Notion did not return five card upload identities')
                     media['notion_cards_attached'] = True
+                    media['notion_card_upload_ids'] = card_upload_ids
                     manifest['media'] = media
                     if previous:
                         manifest['resume_previous_output'] = previous.get('resume_previous_output') or previous
@@ -238,7 +241,15 @@ class Pipeline:
                             'YouTube 비공개 주소': {'url': media['youtube_url']},
                         })
 
-            blocks = result_blocks(cfg.name, generated, qa)
+            naver_handoff = None
+            if cfg.content_kind == 'blog' and passed:
+                naver_handoff = {
+                    'document_id': page_id,
+                    'source_version': manifest['manuscript_sha256'],
+                    'card_upload_ids': list(media.get('notion_card_upload_ids') or []),
+                    'card_names': [Path(x).name for x in media.get('cards', [])],
+                }
+            blocks = result_blocks(cfg.name, generated, qa, naver_handoff=naver_handoff)
             if previous:
                 prior_blocks = self._match_prior_blog_blocks(page_id, previous)
                 # Only replace a byte-equivalent previous automation section.
@@ -284,7 +295,17 @@ class Pipeline:
     def _match_prior_blog_blocks(self, page_id: str, previous: dict[str, Any]) -> list[dict[str, Any]]:
         observed = self.notion.read_page_blocks(page_id)
         prior_output = previous.get('resume_previous_output') or previous
-        expected = result_blocks('naver_blog', prior_output['generated'], prior_output['qa'])
+        prior_media = prior_output.get('media') or {}
+        prior_qa = prior_output['qa']
+        prior_handoff = None
+        if prior_qa.get('pass') is True and not prior_qa.get('blocking_issues') and prior_media.get('notion_card_upload_ids'):
+            prior_handoff = {
+                'document_id': prior_output['page_id'],
+                'source_version': prior_output.get('manuscript_sha256') or manuscript_hash(prior_output['generated']),
+                'card_upload_ids': list(prior_media['notion_card_upload_ids']),
+                'card_names': [Path(x).name for x in prior_media.get('cards', [])],
+            }
+        expected = result_blocks('naver_blog', prior_output['generated'], prior_qa, naver_handoff=prior_handoff)
         if [block_signature(x) for x in observed] != [block_signature(x) for x in expected]:
             raise RuntimeError('MANUAL_EDIT_CONFLICT: current page does not match the previous automation output')
         if any(not block.get('id') for block in observed):

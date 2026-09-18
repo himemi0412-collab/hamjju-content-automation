@@ -4,7 +4,7 @@ channels:
     notion_channel_value: null
     ready_status: "작성 요청"
     processing_status: "생성 중"
-    success_status: "CODEX_HANDOFF_READY"
+    success_status: "네이버 저장 요청"
     revision_status: "수정 필요"
     content_kind: "blog"
     prompt_file: "prompts/blog.md"
