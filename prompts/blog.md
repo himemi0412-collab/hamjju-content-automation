@@ -34,6 +34,8 @@
 - 허용 디자인 언어: `Swiss Typography`, `Retro Tech UI`, `Bento Editorial`, `Monochrome Magazine`, `Neo Brutalism`, `Japanese Editorial`, `Quiet Luxury Editorial`, `Newspaper 2.0`, `Technical Manual`, `Screenshot Editorial`, `Prompt Playground`, `Terminal Noir`, `Fluorescent Minimal`, `Soft Swiss`, `Index / Catalogue`, `Cinematic Title Card`, `Zine Collage`, `Split Screen`, `Chrome Accent`, `Modular Poster`.
 - 주제 적합성을 우선한다. 치수·설치·원리는 Technical Manual, 조건이 많은 묶음은 Bento Editorial 또는 Index / Catalogue, 비용·약정은 Newspaper 2.0 또는 Monochrome Magazine, 화면 사용법은 Screenshot Editorial 또는 Prompt Playground, 양쪽 선택 비교는 Split Screen을 먼저 검토하되 기계적으로 고정하지 않는다.
 - 선택한 이름은 장식용 라벨이 아니다. 자동화가 해당 이름에 묶인 `타이포그래피 / 그리드 / 사진·도식·UI 요소 / 여백 / 색상·질감` 토큰을 manifest의 `design_direction`에 주입하고 실제 렌더에 적용한다. 같은 화이트 배경·둥근 박스·아이콘 구성을 이름만 바꿔 반복하면 실패다.
+- 반드시 **표지 콘셉트를 먼저 설계**한다. 표지에서 큰 제목과 주인공 이미지의 관계를 확정한 뒤, 그 표지의 글꼴 위계·이미지 처리·재질·색·여백을 나머지 네 장에 확장한다. 자동화는 선택한 스타일의 `cover_composition / type_system / image_strategy / material_treatment / role_expansion`을 정본 `design_blueprint`로 주입한다. 본문 카드부터 같은 박스 틀로 찍은 뒤 표지만 꾸미는 방식은 금지한다.
+- `Screenshot Editorial`은 일반 인포그래픽이 아니다. 실제 화면처럼 보이는 큰 코드·채팅·파일·터미널 장면이 카드마다 하나씩 정보의 주인공이 되어야 하며, 제목은 화면과 분리된 편집 지면에 크게 놓는다. 작은 아이콘 여러 개와 둥근 설명 상자만으로 대체하지 않는다.
 - `visual_family`는 생활 사물과 정보 역할의 방향이고 `design_language`는 폰트 위계·그리드·면·여백의 디자인 문법이다. 둘을 모두 선택하며 서로 대체하지 않는다.
 - 제목은 Cafe24 Ssurround, 본문은 가독성 좋은 고딕으로 조판한다. 무료 원본 도식이며 실제 제품 사진이나 AI 생성 사진처럼 설명하지 않는다.
 - 세트는 중립 배경 외 3~5색을 반복하고 주조색 1개와 강조색 1~2개만 한 장에 사용한다. 흰색은 #FFFFFF로 한다.

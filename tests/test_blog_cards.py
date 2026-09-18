@@ -5,7 +5,7 @@ import pytest
 from PIL import Image, ImageDraw
 
 from app.media import _blog_distinct_item_symbols, render_blog_cards
-from app.card_design import SUPPORTED_DESIGN_LANGUAGES
+from app.card_design import SUPPORTED_DESIGN_LANGUAGES, get_design_blueprint
 
 
 def sample_cards():
@@ -87,6 +87,36 @@ def test_named_design_languages_change_actual_render_tokens(tmp_path):
 def test_unknown_named_design_language_fails_closed(tmp_path):
     with pytest.raises(ValueError, match='named card-news design language'):
         render_blog_cards(sample_cards(), tmp_path, design_language='Pretty AI')
+
+
+def test_screenshot_editorial_uses_cover_first_screen_compositions(tmp_path, monkeypatch):
+    drawn_text = []
+    original = ImageDraw.ImageDraw.text
+
+    def capture(draw, xy, text, *args, **kwargs):
+        drawn_text.append(text)
+        return original(draw, xy, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, 'text', capture)
+    paths = render_blog_cards(
+        sample_cards(), tmp_path, design_language='Screenshot Editorial',
+        design_blueprint=get_design_blueprint('Screenshot Editorial'),
+    )
+
+    assert len(paths) == 5
+    assert 'SCREENSHOT EDITORIAL' in drawn_text
+    assert '먼저 답' not in drawn_text
+    assert '같은 조건 비교' not in drawn_text
+    with Image.open(paths[0]) as cover:
+        assert cover.getpixel((0, 0)) == (32, 36, 44)
+
+
+def test_renderer_rejects_blueprint_from_another_style(tmp_path):
+    with pytest.raises(ValueError, match='blueprint does not match'):
+        render_blog_cards(
+            sample_cards(), tmp_path, design_language='Screenshot Editorial',
+            design_blueprint=get_design_blueprint('Terminal Noir'),
+        )
 
 
 def test_playful_diagram_illustration_alias_renders_as_safe_neutral_diagram(tmp_path):

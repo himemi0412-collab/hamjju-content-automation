@@ -11,7 +11,7 @@ from openai import OpenAI
 import httpx
 
 from .budget import BudgetGuard
-from .card_design import get_design_language
+from .card_design import get_design_blueprint, get_design_language
 
 PALETTE = [
     '#F7F8FB', '#E7F1FF', '#EDE9FE', '#FFE8EF', '#DFF7EE',
@@ -239,7 +239,7 @@ def concat_scene_audio(parts: list[Path], out_path: Path) -> tuple[Path, list[fl
 def render_blog_cards(
     cards: list[dict[str, Any]], out_dir: Path, font_path: str | None = None,
     *, card_format: str = 'square', visual_family: str = 'playful_diagram',
-    design_language: str | None = None,
+    design_language: str | None = None, design_blueprint: dict[str, Any] | None = None,
 ) -> list[Path]:
     """Typeset five original explanatory diagrams; never invent product photos.
 
@@ -261,6 +261,9 @@ def render_blog_cards(
     if visual_family not in family_palettes:
         raise ValueError('Unsupported Hamzzu blog visual family')
     named_style = get_design_language(design_language) if design_language is not None else None
+    canonical_blueprint = get_design_blueprint(design_language) if design_language is not None else None
+    if design_blueprint is not None and design_blueprint != canonical_blueprint:
+        raise ValueError('Named card-news design blueprint does not match the selected language')
     width, height = formats[card_format]
     sx, sy = width / 1080, height / 1080
     sf = min(sx, sy)
@@ -321,6 +324,12 @@ def render_blog_cards(
                 raise ValueError(f'Card {i} item has an unsupported explanatory illustration')
             if item_illustration is not None:
                 item['illustration'] = item_illustration
+        if design_language == 'Screenshot Editorial':
+            rendered.append(_render_screenshot_editorial_card(
+                card, i, width, height, sx, sy, sf, font_path,
+                primary, secondary, tertiary, ink,
+            ))
+            continue
         im = Image.new('RGB', (width, height), background)
         draw = ImageDraw.Draw(im)
         if named_style:
@@ -440,6 +449,159 @@ def render_blog_cards(
         im.save(path)
         paths.append(path)
     return paths
+
+
+def _render_screenshot_editorial_card(
+    card: dict[str, Any], index: int, width: int, height: int,
+    sx: float, sy: float, sf: float, font_path: str | None,
+    primary: str, secondary: str, tertiary: str, ink: str,
+) -> Image.Image:
+    """Render Screenshot Editorial as a cover-first screen story.
+
+    This intentionally bypasses the generic card/pill renderer.  The screen is
+    the primary image field, type lives in a separate editorial zone, and each
+    role receives a different screen composition.
+    """
+    def box(values):
+        return tuple(int(v * (sx if i % 2 == 0 else sy)) for i, v in enumerate(values))
+
+    def point(values):
+        return int(values[0] * sx), int(values[1] * sy)
+
+    def size(value):
+        return max(1, int(value * sf))
+
+    def window(coords, *, dark=False, split=False):
+        x1, y1, x2, y2 = coords
+        fill = '#161D28' if dark else '#F9FBFF'
+        draw.rounded_rectangle(coords, radius=size(12), fill=fill, outline=ink, width=size(3))
+        draw.line((x1, y1 + size(44), x2, y1 + size(44)), fill=ink, width=size(2))
+        for j, color in enumerate((tertiary, secondary, primary)):
+            cx = x1 + size(23 + j * 24)
+            cy = y1 + size(22)
+            draw.ellipse((cx - size(6), cy - size(6), cx + size(6), cy + size(6)), fill=color)
+        if split:
+            mid = int((x1 + x2) / 2)
+            draw.rectangle((x1 + size(2), y1 + size(46), mid, y2 - size(2)), fill='#161D28')
+            draw.rectangle((mid, y1 + size(46), x2 - size(2), y2 - size(2)), fill='#F9FBFF')
+
+    def code_lines(area, dark=True):
+        x1, y1, x2, y2 = area
+        colors = (primary, secondary, tertiary, '#91A0BA')
+        usable = max(x2 - x1, 1)
+        for row in range(7):
+            y = y1 + size(row * 34)
+            lead = size((row % 3) * 18)
+            length = int(usable * (0.45 + (row % 4) * 0.11))
+            draw.rounded_rectangle((x1 + lead, y, min(x2, x1 + lead + length), y + size(9)),
+                                   radius=size(4), fill=colors[row % len(colors)])
+
+    def chat_bubbles(area):
+        x1, y1, x2, y2 = area
+        colors = ('#DDE5FF', '#DDF5EE', '#F5E1E8')
+        for row in range(4):
+            w = int((x2 - x1) * (0.58 if row % 2 == 0 else 0.46))
+            left = x1 + (size(18) if row % 2 == 0 else (x2 - x1 - w - size(18)))
+            top = y1 + size(row * 70)
+            draw.rounded_rectangle((left, top, left + w, top + size(44)), radius=size(12), fill=colors[row % 3])
+
+    background = Image.new('RGB', (width, height), '#EEF1F6')
+    draw = ImageDraw.Draw(background)
+    # Fine editorial grain/grid, deliberately cooler and quieter than the
+    # generic rounded-card surface.
+    for x in range(size(28), width, size(38)):
+        draw.line((x, 0, x, height), fill='#E2E6EE', width=1)
+    draw.rectangle(box((0, 0, 1080, 28)), fill=ink)
+    draw.text(point((54, 62)), 'SCREENSHOT EDITORIAL', font=load_font(font_path, size(19)), fill=ink)
+    draw.text(point((1018, 62)), f'{index:02d} / 05', font=load_font(font_path, size(19)), fill=ink, anchor='ra')
+    draw.line(box((54, 94, 1026, 94)), fill='#B8C1D2', width=size(2))
+
+    layout = card['layout']
+    headline = card['headline']
+    copy = card['copy']
+    items = card['items']
+    illustration = card['illustration']
+
+    if layout == 'cover':
+        # Hero screen first; headline is a separate lower editorial field.
+        window(box((92, 130, 988, 520)), split=True)
+        code_lines(box((140, 214, 500, 438)))
+        chat_bubbles(box((610, 205, 940, 465)))
+        draw.line(box((540, 176, 540, 490)), fill=primary, width=size(8))
+        _blog_text(draw, headline, box((74, 574, 1006, 710)), font_path, size(58), ink, 2, title=True)
+        draw.rectangle(box((74, 728, 224, 740)), fill=primary)
+        _blog_text(draw, copy, box((74, 758, 1006, 824)), font_path, size(27), ink, 2)
+        for j, item in enumerate(items):
+            x = 74 + j * 492
+            draw.text(point((x, 850)), f'0{j + 1}', font=load_font(font_path, size(18)), fill=primary)
+            _blog_text(draw, item['label'], box((x, 880, x + 430, 922)), font_path, size(24), ink, 1, title=True)
+            _blog_text(draw, item['detail'], box((x, 932, x + 430, 996)), font_path, size(20), '#606A7C', 2)
+    elif layout == 'flow':
+        _blog_text(draw, headline, box((60, 128, 1018, 246)), font_path, size(52), ink, 2, title=True)
+        _blog_text(draw, copy, box((64, 258, 1016, 320)), font_path, size(24), '#596476', 2)
+        window(box((62, 346, 1018, 800)), dark=True)
+        code_lines(box((116, 452, 646, 696)))
+        draw.rectangle(box((704, 394, 970, 756)), fill='#F8FAFD')
+        symbols = _blog_flow_symbols(illustration)
+        for j, item in enumerate(items):
+            y = 424 + j * 108
+            draw.text(point((732, y)), f'0{j + 1}', font=load_font(font_path, size(18)), fill=primary)
+            _blog_symbol(draw, symbols[j], point((760, y + 65)), size(52), ink, '#FFFFFF')
+            _blog_text(draw, item['label'], box((800, y + 34, 950, y + 75)), font_path, size(20), ink, 2, title=True)
+            if j < 2:
+                draw.line(box((748, y + 105, 944, y + 105)), fill=secondary, width=size(3))
+        _blog_arrow(draw, point((412, 840)), point((690, 840)), primary)
+    elif layout == 'comparison':
+        _blog_text(draw, headline, box((60, 128, 1018, 246)), font_path, size(52), ink, 2, title=True)
+        _blog_text(draw, copy, box((64, 258, 1016, 320)), font_path, size(24), '#596476', 2)
+        window(box((62, 346, 1018, 770)), split=True)
+        code_lines(box((102, 454, 500, 680)))
+        chat_bubbles(box((610, 438, 970, 702)))
+        for j, item in enumerate(items):
+            x = 92 + j * 488
+            color = secondary if j == 0 else primary
+            draw.rectangle(box((x, 806, x + 420, 818)), fill=color)
+            _blog_text(draw, item['label'], box((x, 838, x + 420, 880)), font_path, size(24), ink, 1, title=True)
+            _blog_text(draw, item['detail'], box((x, 892, x + 420, 982)), font_path, size(20), '#606A7C', 3)
+    elif layout == 'checklist':
+        _blog_text(draw, headline, box((60, 128, 1018, 246)), font_path, size(52), ink, 2, title=True)
+        window(box((62, 284, 1018, 824)), dark=False)
+        # One screen, three distinct focus zones.  No repeated floating cards.
+        draw.rectangle(box((64, 330, 300, 822)), fill='#DDE4F6')
+        symbols = _blog_distinct_item_symbols(items, illustration)
+        for j, item in enumerate(items):
+            y = 356 + j * 112
+            color = (primary, secondary, tertiary, '#9BB4D8')[j]
+            draw.ellipse(box((102, y, 174, y + 72)), fill='#FFFFFF', outline=color, width=size(4))
+            _blog_symbol(draw, symbols[j], point((138, y + 36)), size(42), ink, '#FFFFFF')
+            draw.line(box((174, y + 36, 336, y + 36)), fill=color, width=size(5))
+            _blog_text(draw, item['label'], box((356, y - 2, 944, y + 45)), font_path, size(27), ink, 1, title=True)
+            _blog_text(draw, item['detail'], box((356, y + 50, 944, y + 112)), font_path, size(22), '#606A7C', 2)
+        _blog_text(draw, copy, box((64, 860, 1016, 924)), font_path, size(23), ink, 2)
+    else:  # decision
+        _blog_text(draw, headline, box((60, 128, 1018, 246)), font_path, size(52), ink, 2, title=True)
+        _blog_text(draw, copy, box((64, 258, 1016, 320)), font_path, size(24), '#596476', 2)
+        window(box((62, 346, 1018, 756)), split=True)
+        code_lines(box((104, 456, 500, 656)))
+        chat_bubbles(box((610, 438, 968, 680)))
+        draw.line(box((540, 386, 540, 716)), fill=primary, width=size(7))
+        for j, item in enumerate(items):
+            x = 64 + j * 330
+            draw.text(point((x, 800)), f'0{j + 1}', font=load_font(font_path, size(18)), fill=primary)
+            _blog_text(draw, item['label'], box((x, 832, x + 286, 880)), font_path, size(22), ink, 2, title=True)
+            _blog_text(draw, item['detail'], box((x, 892, x + 286, 980)), font_path, size(18), '#606A7C', 4)
+
+    # Redraw the masthead last so large Korean title ascenders can never
+    # visually swallow the editorial identity or page number.
+    draw.rectangle(box((0, 0, 1080, 108)), fill='#EEF1F6')
+    draw.rectangle(box((0, 0, 1080, 28)), fill=ink)
+    draw.text(point((54, 62)), 'SCREENSHOT EDITORIAL', font=load_font(font_path, size(19)), fill=ink)
+    draw.text(point((1018, 62)), f'{index:02d} / 05', font=load_font(font_path, size(19)), fill=ink, anchor='ra')
+    draw.line(box((54, 94, 1026, 94)), fill='#B8C1D2', width=size(2))
+    draw.line(box((64, 1012, 1016, 1012)), fill='#B8C1D2', width=size(2))
+    _blog_text(draw, '화면을 단순화한 설명용 편집 이미지 · 실제 앱 화면 아님',
+               box((64, 1030, 1016, 1065)), font_path, size(18), '#6D7685', 1)
+    return background
 
 
 def _blog_style_fill(fill: str, style: dict[str, Any] | None) -> str:

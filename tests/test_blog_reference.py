@@ -7,6 +7,8 @@ from app.blog_reference import (
     validate_generated_reference_contract,
 )
 from app.card_design import (
+    CARD_ROLE_KEYS,
+    DESIGN_BLUEPRINT_KEYS,
     DESIGN_DIRECTION_KEYS,
     SUPPORTED_DESIGN_LANGUAGES,
     apply_named_design_contract,
@@ -59,7 +61,39 @@ def test_fresh_blog_requires_one_of_twenty_named_design_languages():
     generated['design_language'] = 'Technical Manual'
     generated = apply_named_design_contract(generated)
     assert tuple(generated['design_direction']) == DESIGN_DIRECTION_KEYS
+    assert tuple(generated['design_blueprint']) == DESIGN_BLUEPRINT_KEYS
+    assert tuple(generated['design_blueprint']['role_expansion']) == CARD_ROLE_KEYS
+    assert len(set(generated['design_blueprint']['role_expansion'].values())) == 5
     validate_generated_reference_contract(generated, baseline)
+
+
+def test_fresh_blog_rejects_a_style_name_without_cover_first_blueprint():
+    baseline = load_blog_reference()
+    generated = apply_named_design_contract({
+        'reference_profile_id': REFERENCE_PROFILE_ID,
+        'card_format': 'square',
+        'visual_family': 'playful_diagram',
+        'design_language': 'Screenshot Editorial',
+        'card_news': [{'_': index} for index in range(5)],
+    })
+    generated.pop('design_blueprint')
+
+    with pytest.raises(RuntimeError, match='REFERENCE_DESIGN_BLUEPRINT_INVALID'):
+        validate_generated_reference_contract(generated, baseline)
+
+
+def test_legacy_resume_may_preserve_pre_blueprint_reviewed_bytes():
+    baseline = load_blog_reference()
+    generated = apply_named_design_contract({
+        'reference_profile_id': REFERENCE_PROFILE_ID,
+        'card_format': 'square',
+        'visual_family': 'playful_diagram',
+        'design_language': 'Screenshot Editorial',
+        'card_news': [{'_': index} for index in range(5)],
+    })
+    generated.pop('design_blueprint')
+
+    validate_generated_reference_contract(generated, baseline, require_design_language=False)
 
 
 def test_legacy_resume_can_preserve_pre_design_language_bytes():

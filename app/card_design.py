@@ -7,6 +7,11 @@ from typing import Any
 DESIGN_DIRECTION_KEYS = (
     'typography', 'grid', 'visual_motif', 'whitespace', 'color_texture',
 )
+DESIGN_BLUEPRINT_KEYS = (
+    'cover_composition', 'type_system', 'image_strategy',
+    'material_treatment', 'role_expansion',
+)
+CARD_ROLE_KEYS = ('cover', 'flow', 'comparison', 'checklist', 'decision')
 
 
 def _style(
@@ -243,11 +248,160 @@ DESIGN_LANGUAGES: dict[str, dict[str, Any]] = {
 SUPPORTED_DESIGN_LANGUAGES = tuple(DESIGN_LANGUAGES)
 
 
+def _blueprint(
+    cover_composition: str, image_strategy: str, material_treatment: str,
+    roles: tuple[str, str, str, str, str],
+) -> dict[str, Any]:
+    return {
+        'cover_composition': cover_composition,
+        'type_system': '',  # Filled from the canonical style direction below.
+        'image_strategy': image_strategy,
+        'material_treatment': material_treatment,
+        'role_expansion': dict(zip(CARD_ROLE_KEYS, roles)),
+    }
+
+
+# A style name is only the selector.  This cover-first blueprint is the
+# production contract that makes the name visible in the finished set.
+DESIGN_BLUEPRINTS: dict[str, dict[str, Any]] = {
+    'Swiss Typography': _blueprint(
+        'One oversized asymmetric headline locked to a strict baseline grid',
+        'One functional geometric object or diagram; never an icon collection',
+        'Pure white paper, black ink and one flat red accent',
+        ('hero word and one object', 'numbered linear sequence', 'aligned two-column comparison',
+         'baseline checklist', 'single-rule poster conclusion'),
+    ),
+    'Retro Tech UI': _blueprint(
+        'A dominant old-computer window with a compact headline inside its chrome',
+        'Pixel-like windows, status bars and cursor states that explain the topic',
+        'Dark CRT charcoal, phosphor mint and restrained blue-pink pixels',
+        ('boot screen', 'stacked program windows', 'two legacy panes', 'system status list', 'final command screen'),
+    ),
+    'Bento Editorial': _blueprint(
+        'One large story tile supported by two small factual tiles',
+        'Each module contains a distinct object, crop or diagram with a clear job',
+        'Cool white stock with lavender, mint and coral matte blocks',
+        ('hero tile', 'three unequal process tiles', 'matched comparison tiles', 'vertical action modules', 'one dominant verdict tile'),
+    ),
+    'Monochrome Magazine': _blueprint(
+        'Full-page black-and-white cover with a large masthead and one image field',
+        'High-contrast photograph-like crop or silhouette plus editorial captions',
+        'Matte black ink, gray halftone and uncoated white paper',
+        ('cover story', 'captioned photo sequence', 'facing-page comparison', 'editorial index', 'closing full-page quote'),
+    ),
+    'Neo Brutalism': _blueprint(
+        'Oversized boxed headline colliding with one blunt object',
+        'Hard-edged blocks, arrows and content objects with visible black outlines',
+        'Raw white stock, black keylines and two saturated flat colors',
+        ('impact poster', 'offset process blocks', 'hard split comparison', 'stamped checklist', 'oversized verdict'),
+    ),
+    'Japanese Editorial': _blueprint(
+        'Quiet image field with restrained headline and a vertical index rail',
+        'One tactile object or calm scene crop supported by fine rules and captions',
+        'Soft white paper, ink black and muted rose-blue-gray accents',
+        ('quiet cover', 'vertical reading sequence', 'balanced facing comparison', 'indexed notes', 'minimal closing page'),
+    ),
+    'Quiet Luxury Editorial': _blueprint(
+        'Low-density cover with one premium object and widely spaced title',
+        'One refined material or still-life object per card; no icon clusters',
+        'Cool greige paper, subtle grain, soft natural shadow and hairline rules',
+        ('still-life cover', 'slow sequence', 'paired material study', 'minimal audit list', 'one-line conclusion'),
+    ),
+    'Newspaper 2.0': _blueprint(
+        'A modern front page with one main headline, one image and clear columns',
+        'News photograph-like crop, data rule and short column hierarchy',
+        'Neutral newsprint, black ink and a single red or green signal color',
+        ('front page', 'three-column explainer', 'fact-table comparison', 'service checklist', 'editorial verdict'),
+    ),
+    'Technical Manual': _blueprint(
+        'A hero technical object surrounded by sparse measurement callouts',
+        'Blueprint lines, exploded parts, scale marks and functional arrows',
+        'Cool drafting paper, navy linework and restrained cyan-green markers',
+        ('assembly cover', 'numbered process drawing', 'same-scale comparison', 'inspection sheet', 'decision schematic'),
+    ),
+    'Screenshot Editorial': _blueprint(
+        'One large angled app screen or device dominates the image field; oversized title sits in a separate editorial zone',
+        'A specific code, chat, file, terminal or history screen for every card; use one meaningful screen scene instead of generic icons',
+        'Cool daylight workspace, paper-white margin, soft screen shadow, subtle print grain, charcoal with cobalt and mint accents',
+        ('hero screen plus lower title field', 'zoomed code/file screen sequence', 'dark-code versus bright-chat screen comparison',
+         'one screen with three annotated focus zones', 'decisive dark-light split screen with one final rule'),
+    ),
+    'Prompt Playground': _blueprint(
+        'An active prompt field and cursor lead into one visible response space',
+        'Prompt windows, cursor paths and response layers that show interaction',
+        'Lavender paper, crisp white UI, mint and pink interaction accents',
+        ('prompt hero', 'input-response flow', 'two prompt paths', 'prompt checklist', 'final reusable prompt'),
+    ),
+    'Terminal Noir': _blueprint(
+        'A black terminal fills most of the cover with one luminous command line',
+        'Terminal rows, logs, cursors and status output; no decorative app tiles',
+        'Near-black screen, matte grain, mint-blue-violet monospace signals',
+        ('command cover', 'log sequence', 'two terminal sessions', 'status audit', 'successful final command'),
+    ),
+    'Fluorescent Minimal': _blueprint(
+        'Large black headline on white with one fluorescent intervention',
+        'One small object or line diagram and one highlighter stroke per card',
+        'Pure white stock, black ink and tiny neon-mint or coral accents',
+        ('headline cover', 'single-axis steps', 'minimal paired comparison', 'highlighted action list', 'one fluorescent conclusion'),
+    ),
+    'Soft Swiss': _blueprint(
+        'Asymmetric Swiss headline softened by one translucent geometric field',
+        'Simple geometric relationships and one content object per card',
+        'Cool white, lavender, mint and rose with soft matte edges',
+        ('soft grid cover', 'rounded geometric flow', 'balanced paired fields', 'calm checklist', 'large final statement'),
+    ),
+    'Index / Catalogue': _blueprint(
+        'A numbered catalogue cover with one specimen and visible classification tabs',
+        'Indexed objects, category rails and consistent specimen views',
+        'Cool gray catalogue paper, navy type and sage-rose tabs',
+        ('catalogue cover', 'indexed sequence', 'specimen comparison', 'tabbed checklist', 'selection index'),
+    ),
+    'Cinematic Title Card': _blueprint(
+        'A wide atmospheric image band with title-card typography and quiet credits',
+        'One cinematic scene or symbolic object with controlled crop and scale',
+        'Navy-black matte image, restrained violet-blue-wine grade, no glossy flare',
+        ('opening title', 'three scene progression', 'parallel scene comparison', 'cue-sheet checklist', 'closing title'),
+    ),
+    'Zine Collage': _blueprint(
+        'A torn-paper headline collides with one documentary image fragment',
+        'Original paper scraps, tape, photocopy texture and functional handwritten marks',
+        'Off-white recycled paper, charcoal photocopy and coral-blue-sage ink',
+        ('collage cover', 'layered sequence', 'two torn-page comparison', 'stamped checklist', 'final pasted note'),
+    ),
+    'Split Screen': _blueprint(
+        'Two opposing visual fields meet at one clear decision boundary',
+        'Two matched scenes or objects shown at the same scale and angle',
+        'Cool white with distinct blue and rose fields plus one mint connector',
+        ('split cover', 'left-to-right route', 'true matched comparison', 'dual-path checklist', 'single boundary decision'),
+    ),
+    'Chrome Accent': _blueprint(
+        'Minimal headline and one isolated chrome object with generous negative space',
+        'One precise object or screen crop reflected in a restrained metal accent',
+        'Cool white and silver, soft gray shadow, cobalt and mint micro accents',
+        ('chrome hero', 'reflection-led flow', 'paired object study', 'precision checklist', 'single polished conclusion'),
+    ),
+    'Modular Poster': _blueprint(
+        'Large interlocking title blocks form the cover image',
+        'Content-specific image crops and diagrams occupy differently sized poster modules',
+        'Pure white stock, black keylines and cobalt-coral-sage flat ink',
+        ('module cover', 'stepped modular flow', 'two-weight comparison', 'stacked action modules', 'one merged conclusion block'),
+    ),
+}
+
+for _name, _blueprint_value in DESIGN_BLUEPRINTS.items():
+    _blueprint_value['type_system'] = DESIGN_LANGUAGES[_name]['direction']['typography']
+
+
 def get_design_language(name: str) -> dict[str, Any]:
     try:
         return DESIGN_LANGUAGES[name]
     except KeyError as exc:
         raise ValueError(f'Unsupported named card-news design language: {name!r}') from exc
+
+
+def get_design_blueprint(name: str) -> dict[str, Any]:
+    get_design_language(name)
+    return deepcopy(DESIGN_BLUEPRINTS[name])
 
 
 def apply_named_design_contract(generated: dict[str, Any]) -> dict[str, Any]:
@@ -256,13 +410,15 @@ def apply_named_design_contract(generated: dict[str, Any]) -> dict[str, Any]:
     style = get_design_language(name)
     result = deepcopy(generated)
     result['design_direction'] = deepcopy(style['direction'])
+    result['design_blueprint'] = get_design_blueprint(name)
     return result
 
 
 def validate_named_design_contract(generated: dict[str, Any], *, required: bool) -> None:
     name = generated.get('design_language')
     direction = generated.get('design_direction')
-    if name is None and direction is None and not required:
+    blueprint = generated.get('design_blueprint')
+    if name is None and direction is None and blueprint is None and not required:
         return
     if name not in DESIGN_LANGUAGES:
         raise RuntimeError('REFERENCE_DESIGN_LANGUAGE_INVALID')
@@ -271,3 +427,17 @@ def validate_named_design_contract(generated: dict[str, Any], *, required: bool)
         raise RuntimeError('REFERENCE_DESIGN_DIRECTION_INVALID')
     if direction != expected:
         raise RuntimeError('REFERENCE_DESIGN_DIRECTION_MISMATCH')
+    if blueprint is None and not required:
+        # Preserve already-reviewed bytes created before the cover-first
+        # blueprint contract existed. Fresh work must always include it.
+        return
+    if not isinstance(blueprint, dict) or tuple(blueprint) != DESIGN_BLUEPRINT_KEYS:
+        raise RuntimeError('REFERENCE_DESIGN_BLUEPRINT_INVALID')
+    expected_blueprint = get_design_blueprint(name)
+    if blueprint != expected_blueprint:
+        raise RuntimeError('REFERENCE_DESIGN_BLUEPRINT_MISMATCH')
+    roles = blueprint.get('role_expansion')
+    if not isinstance(roles, dict) or tuple(roles) != CARD_ROLE_KEYS:
+        raise RuntimeError('REFERENCE_DESIGN_ROLE_EXPANSION_INVALID')
+    if len(set(roles.values())) != len(CARD_ROLE_KEYS):
+        raise RuntimeError('REFERENCE_DESIGN_ROLE_EXPANSION_REPEATED')

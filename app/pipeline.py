@@ -266,6 +266,7 @@ class Pipeline:
                     card_news, job_dir / 'cards', self.s.card_font_path,
                     card_format=generated['card_format'], visual_family=generated['visual_family'],
                     design_language=generated.get('design_language'),
+                    design_blueprint=generated.get('design_blueprint'),
                 )
                 if len(cards) != 5:
                     raise RuntimeError('Blog card-news render did not produce exactly five images')
@@ -304,6 +305,7 @@ class Pipeline:
                             'renderer': (
                                 f"named design language={generated.get('design_language')}; "
                                 f"direction={generated.get('design_direction')}; measured text; "
+                                f"cover-first blueprint={generated.get('design_blueprint')}; "
                                 'cover/flow/comparison/checklist/decision; Cafe24 title font'
                                 if generated.get('design_language') else
                                 'legacy reviewed renderer; preserve original bytes; measured text; '
