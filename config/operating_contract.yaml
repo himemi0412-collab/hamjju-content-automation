@@ -1,0 +1,108 @@
+contract_id: HAMZZU_OPERATING_CONTRACT_V1
+version: 1
+
+environments:
+  github_actions:
+    owns:
+      - topic_research
+      - manuscript_and_script
+      - blog_cards
+      - shorts_images
+      - shorts_voice
+      - shorts_video
+      - independent_qa
+      - notion_handoff
+      - youtube_private_upload
+    never:
+      - naver_editor
+      - naver_publication
+      - youtube_publication
+  notion:
+    owns:
+      - canonical_handoff
+      - version_and_hash_record
+    never:
+      - content_generation
+      - platform_publication
+  codex_automation_3:
+    owns:
+      - naver_private_draft_save
+      - naver_draft_reopen_verification
+    never:
+      - manuscript_rewrite
+      - card_regeneration
+      - youtube_media_generation
+      - platform_publication
+  user:
+    owns:
+      - final_review
+      - public_release_decision
+
+channels:
+  naver_blog:
+    producer_owner: github_actions
+    delivery_owner: codex_automation_3
+    publication_owner: user
+    handoff_status: "네이버 저장 요청"
+    handoff_marker: READY_FOR_NAVER_DRAFT
+    verified_status: "임시저장 완료"
+    required_assets:
+      blog_cards: 5
+    allowed_stages:
+      - CLAIMED
+      - CONTENT_READY
+      - MEDIA_READY
+      - QA_PASS
+      - HANDOFF_READY
+      - DRAFT_VERIFIED
+      - FAILED
+  ppojjugi_shorts:
+    producer_owner: github_actions
+    delivery_owner: github_actions
+    publication_owner: user
+    handoff_status: "비공개 업로드 완료"
+    youtube_privacy: private
+    required_voice: Aoede
+    allowed_stages:
+      - CLAIMED
+      - CONTENT_READY
+      - QA_PASS
+      - MEDIA_READY
+      - PRIVATE_UPLOAD_VERIFIED
+      - USER_REVIEW
+      - FAILED
+  japan_shorts:
+    producer_owner: github_actions
+    delivery_owner: github_actions
+    publication_owner: user
+    handoff_status: "비공개 업로드 완료"
+    youtube_privacy: private
+    required_voice: Gacrux
+    allowed_stages:
+      - CLAIMED
+      - CONTENT_READY
+      - QA_PASS
+      - MEDIA_READY
+      - PRIVATE_UPLOAD_VERIFIED
+      - USER_REVIEW
+      - FAILED
+
+schedules:
+  github_actions:
+    - cron: "0 1 * * *"
+      timezone_display: Asia/Seoul 10:00
+      owns: naver_blog_production
+    - cron: "0 12 * * *"
+      timezone_display: Asia/Seoul 21:00
+      owns: shorts_production_and_private_upload
+  codex:
+    - id: automation-3
+      owns: naver_private_draft_save_and_reopen_only
+    - id: automation
+      owns: weekly_keyword_selection_only
+    - id: start
+      owns: morning_start_briefing_only
+
+release_policy:
+  naver_public_or_scheduled: user_explicit_approval_only
+  youtube_public: user_explicit_approval_only

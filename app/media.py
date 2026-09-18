@@ -281,12 +281,14 @@ def render_blog_cards(
         headline = _blog_required_text(card.get('headline'), f'card {i} headline')
         copy = _blog_required_text(card.get('copy'), f'card {i} copy')
         illustration = card.get('illustration')
-        # A model may occasionally repeat one of these visual-family tokens in
-        # the illustration slot. Normalize only the two unambiguous cases to a
-        # neutral explanatory symbol; neither mapping adds product or factual
-        # detail. Ambiguous family tokens remain fail-closed.
+        # A model may occasionally repeat a visual-family token in the
+        # illustration slot. All four mappings are deliberately generic and
+        # add no product shape or factual detail, so a known schema slip can be
+        # recovered without weakening the fail-closed rule for unknown tokens.
         illustration = {
+            'soft_scene': 'home',
             'playful_diagram': 'diagram',
+            'contract_notebook': 'document',
             'clipboard_checklist': 'document',
         }.get(illustration, illustration)
         if illustration not in BLOG_SYMBOLS:
@@ -301,8 +303,16 @@ def render_blog_cards(
                 raise ValueError(f'Card {i} item must contain label and detail')
             _blog_required_text(item.get('label'), f'card {i} item label')
             _blog_required_text(item.get('detail'), f'card {i} item detail')
-            if item.get('illustration') is not None and item['illustration'] not in BLOG_SYMBOLS:
+            item_illustration = {
+                'soft_scene': 'home',
+                'playful_diagram': 'diagram',
+                'contract_notebook': 'document',
+                'clipboard_checklist': 'document',
+            }.get(item.get('illustration'), item.get('illustration'))
+            if item_illustration is not None and item_illustration not in BLOG_SYMBOLS:
                 raise ValueError(f'Card {i} item has an unsupported explanatory illustration')
+            if item_illustration is not None:
+                item['illustration'] = item_illustration
         im = Image.new('RGB', (width, height), '#FFFFFF')
         draw = ImageDraw.Draw(im)
         _blog_family_decor(draw, visual_family, width, height, primary, secondary, tertiary, ink)
@@ -781,6 +791,61 @@ def compose_short_video(images: list[Path], scenes: list[dict[str, Any]], audio:
         '-movflags','+faststart',str(out_path)
     ], check=True)
     return out_path
+
+
+def probe_video_streams(path: Path) -> dict[str, Any]:
+    if not shutil.which('ffprobe'):
+        raise RuntimeError('ffprobe is required for final Shorts verification')
+    result = subprocess.run([
+        'ffprobe', '-v', 'error', '-show_streams', '-show_format',
+        '-of', 'json', str(path),
+    ], check=True, capture_output=True, text=True)
+    return json.loads(result.stdout)
+
+
+def verify_short_artifacts(
+    images: list[Path],
+    scenes: list[dict[str, Any]],
+    audio: Path,
+    srt: Path,
+    video: Path,
+) -> dict[str, Any]:
+    """Verify the final bytes that will be attached/uploaded, not just the plan."""
+    if len(images) != len(scenes) or not scenes:
+        raise RuntimeError('Shorts verification requires one image for every scene')
+    required = [*images, audio, srt, video]
+    if any(not path.is_file() or path.stat().st_size <= 0 for path in required):
+        raise RuntimeError('Shorts verification found a missing or empty artifact')
+    expected_captions = sum(bool(str(scene.get('caption') or '').strip()) for scene in scenes)
+    observed_captions = sum(
+        bool(line.strip().isdigit())
+        for line in srt.read_text(encoding='utf-8').splitlines()
+    )
+    if observed_captions != expected_captions:
+        raise RuntimeError('Shorts subtitle cue count does not match the scene captions')
+    info = probe_video_streams(video)
+    streams = info.get('streams') or []
+    video_streams = [stream for stream in streams if stream.get('codec_type') == 'video']
+    audio_streams = [stream for stream in streams if stream.get('codec_type') == 'audio']
+    if len(video_streams) != 1 or not audio_streams:
+        raise RuntimeError('Shorts MP4 must contain one video stream and an audio stream')
+    stream = video_streams[0]
+    if (int(stream.get('width') or 0), int(stream.get('height') or 0)) != (1080, 1920):
+        raise RuntimeError('Shorts MP4 must be exactly 1080x1920')
+    expected_duration = sum(max(float(scene.get('seconds') or 0), 1.0) for scene in scenes)
+    actual_duration = float((info.get('format') or {}).get('duration') or 0)
+    tolerance = max(0.75, expected_duration * 0.02)
+    if actual_duration <= 0 or abs(actual_duration - expected_duration) > tolerance:
+        raise RuntimeError('Shorts MP4 duration does not match the actual scene audio timeline')
+    return {
+        'pass': True,
+        'image_count': len(images),
+        'subtitle_cues': observed_captions,
+        'duration_seconds': round(actual_duration, 3),
+        'width': 1080,
+        'height': 1920,
+        'audio_streams': len(audio_streams),
+    }
 
 
 def save_manifest(path: Path, payload: dict[str, Any]) -> None:

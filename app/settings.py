@@ -49,6 +49,7 @@ class Settings(BaseSettings):
 
     state_db: Path = Path('output/state.db')
     output_dir: Path = Path('output')
+    operating_contract_path: Path = Path('config/operating_contract.yaml')
     card_font_path: str | None = None
     log_level: str = 'INFO'
 

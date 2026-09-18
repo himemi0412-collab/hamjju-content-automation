@@ -298,6 +298,7 @@ def naver_handoff_blocks(
     source_version: str,
     card_upload_ids: list[str],
     card_names: list[str],
+    ownership_receipt: dict[str, str] | None = None,
     _legacy_paragraph_order: bool = False,
 ) -> list[dict[str, Any]]:
     """Build the strict, reviewable contract consumed by the local Naver draft saver."""
@@ -431,7 +432,26 @@ def naver_handoff_blocks(
         *body_blocks,
         {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich('네이버 본문 끝')}},
     ]
-    snapshot = json.dumps({'generated': generated, 'qa': qa}, ensure_ascii=False, indent=2)
+    if ownership_receipt:
+        required_ownership = {
+            'contract_id', 'producer_owner', 'delivery_owner', 'publication_owner', 'stage', 'source_version',
+        }
+        if not required_ownership.issubset(ownership_receipt):
+            raise ValueError('Naver handoff ownership receipt is incomplete')
+        if ownership_receipt['source_version'] != source_version or ownership_receipt['stage'] != 'HANDOFF_READY':
+            raise ValueError('Naver handoff ownership receipt does not match the reviewed version')
+        ownership_blocks = [
+            {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich(f"운영 계약: {ownership_receipt['contract_id']}")}},
+            {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich(f"제작 소유자: {ownership_receipt['producer_owner']}")}},
+            {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich(f"임시저장 소유자: {ownership_receipt['delivery_owner']}")}},
+            {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich(f"공개 결정 소유자: {ownership_receipt['publication_owner']}")}},
+        ]
+        blocks[7:7] = ownership_blocks
+    snapshot = json.dumps(
+        {'generated': generated, 'qa': qa, 'ownership': ownership_receipt},
+        ensure_ascii=False,
+        indent=2,
+    )
     for chunk in split_text(snapshot, 1800):
         blocks.append({'object': 'block', 'type': 'code', 'code': {'language': 'json', 'rich_text': rich(chunk)}})
     return blocks

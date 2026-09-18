@@ -8,6 +8,15 @@
 - 쇼츠 대기열 Data Source: `e7ad07b7-0652-4747-956d-e7b071d4bde9`
 - 쇼츠 채널은 `햄찌 창작 쇼츠` / `일본 유튜브 쇼츠`를 별도로 처리합니다.
 
+## 단일 운영 계약
+
+실행 환경별 소유권은 [`docs/OPERATING_CONTRACT.md`](docs/OPERATING_CONTRACT.md)와
+프로그램 검증용 [`config/operating_contract.yaml`](config/operating_contract.yaml)에 고정합니다.
+GitHub Actions는 원고·카드·쇼츠 이미지·음성·영상·QA·Notion 전달과 YouTube 비공개
+업로드를 담당하고, Codex `automation-3`은 검수된 네이버 원고의 임시저장과 재열기
+확인만 담당합니다. 공개·예약발행 결정은 항상 사용자 소유입니다. 임시 5분 예약은
+운영 일정에 포함하지 않습니다.
+
 ## 하는 일
 
 ### 블로그

@@ -140,6 +140,14 @@ def test_naver_handoff_has_one_ready_contract_and_five_ordered_images():
         source_version='sha256-version',
         card_upload_ids=[f'upload-{i}' for i in range(1, 6)],
         card_names=[f'card_{i:02d}.png' for i in range(1, 6)],
+        ownership_receipt={
+            'contract_id': 'HAMZZU_OPERATING_CONTRACT_V1',
+            'producer_owner': 'github_actions',
+            'delivery_owner': 'codex_automation_3',
+            'publication_owner': 'user',
+            'stage': 'HANDOFF_READY',
+            'source_version': 'sha256-version',
+        },
     )
     texts = [
         ''.join(x.get('text', {}).get('content', '') for x in block.get(block['type'], {}).get('rich_text', []))
@@ -152,6 +160,10 @@ def test_naver_handoff_has_one_ready_contract_and_five_ordered_images():
     assert sum(block['type'] == 'image' for block in blocks) == 5
     assert '#하나 #둘' in texts
     assert all('발행 금지' in text for text in texts if text.startswith('네이버 임시저장만 허용'))
+    assert '운영 계약: HAMZZU_OPERATING_CONTRACT_V1' in texts
+    assert '제작 소유자: github_actions' in texts
+    assert '임시저장 소유자: codex_automation_3' in texts
+    assert '공개 결정 소유자: user' in texts
 
 
 def test_last_section_card_stays_before_paragraph_targeted_decision_card():

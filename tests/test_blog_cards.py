@@ -88,12 +88,13 @@ def test_clipboard_checklist_illustration_alias_renders_as_safe_document(tmp_pat
     assert len(paths) == 5
 
 
-def test_other_visual_family_token_is_not_accepted_as_illustration(tmp_path):
+def test_contract_notebook_illustration_alias_renders_as_safe_document(tmp_path):
     cards = sample_cards()
     cards[1]['illustration'] = 'contract_notebook'
 
-    with pytest.raises(ValueError, match='unsupported explanatory illustration'):
-        render_blog_cards(cards, tmp_path)
+    paths = render_blog_cards(cards, tmp_path)
+
+    assert len(paths) == 5
 
 
 def test_comparison_uses_distinct_semantic_objects_instead_of_one_generic_icon():

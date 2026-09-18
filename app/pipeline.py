@@ -2,6 +2,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
@@ -10,13 +11,17 @@ import httpx
 from .ai import AIClient
 from .budget import BudgetGuard
 from .config import ChannelConfig
-from .media import MediaGenerator, compose_short_video, concat_scene_audio, make_srt, render_blog_cards, save_manifest
+from .media import (
+    MediaGenerator, compose_short_video, concat_scene_audio, make_srt,
+    render_blog_cards, save_manifest, verify_short_artifacts,
+)
 from .notion_client import NotionClient, compact_page_context, extract_page_title, naver_handoff_blocks, result_blocks
 from .settings import Settings
 from .state import StateStore
 from .youtube import YouTubePrivateUploader
 from .manuscript_repair import apply_reviewed_corrections, manuscript_hash
 from .blog_reference import load_blog_reference, validate_generated_reference_contract
+from .ownership import load_operating_contract
 
 
 class Pipeline:
@@ -36,6 +41,7 @@ class Pipeline:
         self.ai = ai
         self.state = state
         self.budget = budget
+        self.operating_contract = load_operating_contract(settings.operating_contract_path)
 
     def run_channel(self, cfg: ChannelConfig, limit: int | None = None, dry_run: bool = False) -> list[dict[str, Any]]:
         ds = self.s.blog_data_source_id if cfg.source == 'blog' else self.s.shorts_data_source_id
@@ -78,6 +84,11 @@ class Pipeline:
         page_text = self.notion.read_page_text(page_id)
         context = compact_page_context(page, page_text)
         page_title = extract_page_title(page)
+        source_version = str(page.get('last_edited_time') or 'unknown-source-version')
+        run_id = os.getenv('GITHUB_RUN_ID') or 'local'
+        ownership_cfg = self.operating_contract.channel(cfg.name)
+        if cfg.name == 'naver_blog' and cfg.success_status != ownership_cfg.handoff_status:
+            raise RuntimeError('Channel config and operating contract handoff status differ')
         media_expected = bool(
             cfg.content_kind == 'shorts'
             and cfg.media_generation
@@ -179,6 +190,13 @@ class Pipeline:
             }
 
         self.state.start(key, page_id, cfg.name)
+        self.operating_contract.receipt(
+            cfg.name,
+            document_id=page_id,
+            source_version=source_version,
+            stage='CLAIMED',
+        )
+        self.state.record_stage(page_id, cfg.name, source_version, 'github_actions', 'CLAIMED', run_id)
         try:
             self.notion.update_status(page_id, cfg.processing_status)
             use_web = cfg.name in {'naver_blog', 'japan_shorts'}
@@ -190,6 +208,14 @@ class Pipeline:
                 gen_usage = {'reused_from_manifest': True}
             else:
                 generated, gen_usage = self.ai.generate(cfg.prompt_file, context, use_web=use_web)
+            content_version = manuscript_hash(generated)
+            ownership_receipt = self.operating_contract.receipt(
+                cfg.name,
+                document_id=page_id,
+                source_version=content_version,
+                stage='CONTENT_READY',
+            )
+            self.state.record_stage(page_id, cfg.name, content_version, 'github_actions', 'CONTENT_READY', run_id)
             if cfg.content_kind == 'blog':
                 validate_generated_reference_contract(generated, context['reference_baseline'])
                 # Blog QA sees the finished images and manuscript together.
@@ -197,6 +223,11 @@ class Pipeline:
             else:
                 qa, qa_usage = self.ai.qa(generated, {'channel': cfg.name, **context})
             passed = qa.get('pass') is True and not qa.get('blocking_issues')
+            if cfg.content_kind == 'shorts' and passed:
+                ownership_receipt = self.operating_contract.receipt(
+                    cfg.name, document_id=page_id, source_version=content_version, stage='QA_PASS',
+                )
+                self.state.record_stage(page_id, cfg.name, content_version, 'github_actions', 'QA_PASS', run_id)
 
             job_dir = self.s.output_dir / page_id.replace('-', '')[:16]
             job_dir.mkdir(parents=True, exist_ok=True)
@@ -209,6 +240,7 @@ class Pipeline:
                 'budget': self.budget.snapshot() if self.budget else None,
                 'created_at': datetime.now(timezone.utc).isoformat(),
                 'manuscript_sha256': manuscript_hash(generated),
+                'ownership': ownership_receipt,
             }
             if cfg.content_kind == 'blog':
                 manifest['reference_baseline_id'] = context['reference_baseline']['id']
@@ -230,6 +262,7 @@ class Pipeline:
                 if len(cards) != 5:
                     raise RuntimeError('Blog card-news render did not produce exactly five images')
                 media['cards'] = [str(x) for x in cards]
+                self.state.record_stage(page_id, cfg.name, content_version, 'github_actions', 'MEDIA_READY', run_id)
                 prior_qa = reviewed_previous.get('qa', {}) if reviewed_previous else {}
                 unchanged_reviewed_resume = bool(
                     previous
@@ -263,6 +296,11 @@ class Pipeline:
                             'renderer': '1080 square; 3 pastel colors plus dark ink; white background; measured text boxes; cover/flow/comparison/checklist/decision; Cafe24 title font'},
                     }, image_paths=cards)
                 passed = qa.get('pass') is True and not qa.get('blocking_issues')
+                if passed:
+                    ownership_receipt = self.operating_contract.receipt(
+                        cfg.name, document_id=page_id, source_version=content_version, stage='QA_PASS',
+                    )
+                    self.state.record_stage(page_id, cfg.name, content_version, 'github_actions', 'QA_PASS', run_id)
                 media['rendered_card_qa_pass'] = passed
                 manifest['qa'] = qa
                 manifest['usage']['rendered_card_qa'] = image_qa_usage
@@ -301,6 +339,10 @@ class Pipeline:
                     }
                 else:
                     media = self._make_short_media(generated, job_dir, cfg.name)
+                    ownership_receipt = self.operating_contract.receipt(
+                        cfg.name, document_id=page_id, source_version=content_version, stage='MEDIA_READY',
+                    )
+                    self.state.record_stage(page_id, cfg.name, content_version, 'github_actions', 'MEDIA_READY', run_id)
                     if media.get('video'):
                         try:
                             self.notion.attach_files(page_id, '최종 영상', [Path(media['video'])])
@@ -316,11 +358,15 @@ class Pipeline:
 
             naver_handoff = None
             if cfg.content_kind == 'blog' and passed:
+                ownership_receipt = self.operating_contract.receipt(
+                    cfg.name, document_id=page_id, source_version=content_version, stage='HANDOFF_READY',
+                )
                 naver_handoff = {
                     'document_id': page_id,
                     'source_version': manifest['manuscript_sha256'],
                     'card_upload_ids': list(media.get('notion_card_upload_ids') or []),
                     'card_names': [Path(x).name for x in media.get('cards', [])],
+                    'ownership_receipt': ownership_receipt,
                 }
             blocks = result_blocks(cfg.name, generated, qa, naver_handoff=naver_handoff)
             if previous:
@@ -336,6 +382,16 @@ class Pipeline:
                 final_status = cfg.revision_status
             if passed and media.get('youtube_url'):
                 final_status = '비공개 업로드 완료'
+                ownership_receipt = self.operating_contract.receipt(
+                    cfg.name,
+                    document_id=page_id,
+                    source_version=content_version,
+                    stage='PRIVATE_UPLOAD_VERIFIED',
+                )
+                self.state.record_stage(
+                    page_id, cfg.name, content_version, 'github_actions', 'PRIVATE_UPLOAD_VERIFIED', run_id,
+                    media['youtube_url'],
+                )
             self.notion.update_status(page_id, final_status)
             output_verified = False
             if cfg.content_kind == 'blog':
@@ -343,7 +399,14 @@ class Pipeline:
                 save_manifest(job_dir / 'notion-readback.json', observation)
                 output_verified = True
             complete = passed and not media.get('budget_blocked')
-            manifest.update({'media': media, 'final_status': final_status, 'output_verified': output_verified})
+            if cfg.content_kind == 'blog' and passed:
+                self.state.record_stage(page_id, cfg.name, content_version, 'github_actions', 'HANDOFF_READY', run_id)
+            manifest.update({
+                'media': media,
+                'final_status': final_status,
+                'output_verified': output_verified,
+                'ownership': ownership_receipt,
+            })
             manifest['budget'] = self.budget.snapshot() if self.budget else None
             save_manifest(job_dir / 'manifest.json', manifest)
             self.state.finish(key, 'success' if complete else 'revision_required', json.dumps({'final_status': final_status, 'media': media}, ensure_ascii=False))
@@ -356,6 +419,7 @@ class Pipeline:
                 'output_verified': output_verified,
                 'budget_blocked': bool(media.get('budget_blocked')),
                 'media': media,
+                'ownership': ownership_receipt,
             }
         except Exception as exc:
             try:
@@ -363,6 +427,12 @@ class Pipeline:
             except Exception:
                 pass
             self.state.finish(key, 'failed', repr(exc))
+            try:
+                self.state.record_stage(
+                    page_id, cfg.name, source_version, 'github_actions', 'FAILED', run_id, repr(exc),
+                )
+            except Exception:
+                pass
             return {'page_id': page_id, 'title': page_title, 'status': 'failed', 'error': repr(exc)}
 
     def _match_prior_blog_blocks(self, page_id: str, previous: dict[str, Any]) -> list[dict[str, Any]]:
@@ -378,6 +448,9 @@ class Pipeline:
                 'card_upload_ids': list(prior_media['notion_card_upload_ids']),
                 'card_names': [Path(x).name for x in prior_media.get('cards', [])],
             }
+            prior_ownership = prior_output.get('ownership')
+            if prior_ownership and prior_ownership.get('stage') == 'HANDOFF_READY':
+                prior_handoff['ownership_receipt'] = prior_ownership
         expected = result_blocks('naver_blog', prior_output['generated'], prior_qa, naver_handoff=prior_handoff)
         expected_signatures = [block_signature(x) for x in expected]
         # Production appends the machine handoff after the user's planning
@@ -506,12 +579,14 @@ class Pipeline:
             hook=str(generated.get('hook') or ''),
             font_path=self.s.card_font_path,
         )
+        verification = verify_short_artifacts(images, timed_scenes, audio, srt, video)
         return {
             'images': [str(x) for x in images],
             'audio': str(audio),
             'srt': str(srt),
             'video': str(video),
             'scene_durations': durations,
+            'verification': verification,
         }
 
     def _upload_private(self, channel_name: str, generated: dict[str, Any], video: Path) -> str:

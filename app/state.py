@@ -20,6 +20,19 @@ class StateStore:
                     detail TEXT
                 )
             """)
+            cx.execute("""
+                CREATE TABLE IF NOT EXISTS content_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    page_id TEXT NOT NULL,
+                    channel TEXT NOT NULL,
+                    source_version TEXT NOT NULL,
+                    owner TEXT NOT NULL,
+                    stage TEXT NOT NULL,
+                    run_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    detail TEXT
+                )
+            """)
 
     def _connect(self):
         return sqlite3.connect(self.path)
@@ -43,4 +56,22 @@ class StateStore:
             cx.execute(
                 'UPDATE jobs SET finished_at=?, status=?, detail=? WHERE idempotency_key=?',
                 (now, status, detail[:4000], key),
+            )
+
+    def record_stage(
+        self,
+        page_id: str,
+        channel: str,
+        source_version: str,
+        owner: str,
+        stage: str,
+        run_id: str,
+        detail: str = '',
+    ) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connect() as cx:
+            cx.execute(
+                'INSERT INTO content_events(page_id,channel,source_version,owner,stage,run_id,created_at,detail) '
+                'VALUES(?,?,?,?,?,?,?,?)',
+                (page_id, channel, source_version, owner, stage, run_id, now, detail[:4000]),
             )
