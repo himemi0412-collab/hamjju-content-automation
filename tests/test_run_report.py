@@ -80,11 +80,11 @@ def test_workflow_keeps_second_shorts_after_first_failure_and_preserves_budget()
 
 def test_one_time_schedule_runs_one_blog_and_unknown_schedule_fails_closed():
     workflow = Path('.github/workflows/daily.yml').read_text(encoding='utf-8')
-    assert "cron: '0 4 18 9 *'" in workflow
-    assert 'elif [ "$schedule_expr" = "0 4 18 9 *" ]' in workflow
+    assert "cron: '55 3 18 9 *'" in workflow
+    assert 'elif [ "$schedule_expr" = "55 3 18 9 *" ]' in workflow
     assert 'channel naver_blog --limit 1 || result=1' in workflow
     assert 'Unsupported schedule expression' in workflow
-    assert expected_channels('schedule', '0 4 18 9 *', '', '') == {'naver_blog': 1}
+    assert expected_channels('schedule', '55 3 18 9 *', '', '') == {'naver_blog': 1}
     assert expected_channels('schedule', 'unexpected', '', '') == {}
 
 
