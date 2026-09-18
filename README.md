@@ -168,7 +168,7 @@ GitHub 저장소의 Actions secrets에 다음 값을 넣습니다.
 
 현재 블로그·쇼츠 Data Source ID는 코드 기본값에 들어 있으므로 중복 입력하지 않습니다. 대기열을 교체할 때만 Repository Variables로 별도 관리합니다.
 
-`execute_text`는 채널 1건의 원고를 만들며, 블로그에서는 설명 도식 카드 5장도 렌더링합니다. `recover_blog`는 `page_id`로 지정한 기존 작성 요청 블로그 1편만 제작하고 새 주제를 만들지 않습니다. `execute_media`는 이미 검토 대상이 된 쇼츠 1건의 MP4를 만듭니다. `produce_daily_shorts`는 새 주제를 조사해 삐죽이·일본 쇼츠를 각각 1건씩 준비합니다. 독립 QA에서 멈춘 쇼츠는 원인을 보완한 뒤 `retry_revision`으로 1건만 다시 제작할 수 있습니다. 과거 artifact의 합성 파일만 복구할 때는 `repair_video`가 전체 장면 길이로 다시 합성해 같은 Notion 항목의 검토 영상을 교체합니다.
+`execute_text`는 채널 1건의 원고를 만들며, 블로그에서는 설명 도식 카드 5장도 렌더링합니다. `recover_blog`는 `page_id`로 지정한 기존 작성 요청 블로그 1편만 제작하고 새 주제를 만들지 않습니다. `resume_blog`는 `수정 필요` 또는 과거 `CODEX_HANDOFF_READY` 페이지의 원고·블록·카드 바이트가 기존 artifact와 정확히 일치할 때만 같은 페이지를 재검수해 새 네이버 전달 계약으로 바꿉니다. `execute_media`는 이미 검토 대상이 된 쇼츠 1건의 MP4를 만듭니다. `produce_daily_shorts`는 새 주제를 조사해 삐죽이·일본 쇼츠를 각각 1건씩 준비합니다. 독립 QA에서 멈춘 쇼츠는 원인을 보완한 뒤 `retry_revision`으로 1건만 다시 제작할 수 있습니다. 과거 artifact의 합성 파일만 복구할 때는 `repair_video`가 전체 장면 길이로 다시 합성해 같은 Notion 항목의 검토 영상을 교체합니다.
 
 미디어 생성은 쇼츠 실행에서만 켜집니다. 예약 쇼츠 제작, `execute_media`, `produce_daily_shorts`, `retry_revision`은 고정 채널 ID를 검사한 뒤 YouTube에 `private`로 올립니다. `regenerate_review`와 영상 복구는 MP4·Notion 검토 기록에서 멈추고 업로드하지 않습니다. `verify_youtube_auth`는 업로드 없이 두 OAuth 연결의 채널 ID와 이름만 검사합니다.
 

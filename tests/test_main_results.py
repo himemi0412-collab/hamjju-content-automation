@@ -151,7 +151,8 @@ def test_resume_blog_rejects_wrong_artifact_before_any_connection(monkeypatch, t
         main.resume_blog('exact-page', manifest)
 
 
-def test_resume_blog_processes_only_original_manifest_and_records_readback(monkeypatch, tmp_path):
+@pytest.mark.parametrize('resume_status', ['수정 필요', 'CODEX_HANDOFF_READY'])
+def test_resume_blog_processes_only_original_manifest_and_records_readback(monkeypatch, tmp_path, resume_status):
     import json
     from types import SimpleNamespace
     import app.main as main
@@ -161,17 +162,40 @@ def test_resume_blog_processes_only_original_manifest_and_records_readback(monke
         'page_id': 'exact-page', 'channel': 'naver_blog', 'generated': {'body_markdown': 'Saved original'},
     }), encoding='utf-8')
     settings = SimpleNamespace(output_dir=tmp_path / 'output')
-    notion = SimpleNamespace(retrieve_page=lambda page_id: {'id': page_id}, close=lambda: None)
+    notion = SimpleNamespace(retrieve_page=lambda page_id: {
+        'id': page_id,
+        'properties': {'상태': {'type': 'select', 'select': {'name': resume_status}}},
+    }, close=lambda: None)
     def process(cfg, page, *, resume_manifest):
-        assert cfg.ready_status == '수정 필요'
-        assert page == {'id': 'exact-page'}
+        assert cfg.ready_status == resume_status
+        assert page['id'] == 'exact-page'
         assert resume_manifest == manifest
         return {
             'channel': 'naver_blog', 'page_id': page['id'], 'qa_pass': True,
-            'notion_page_updated': True, 'output_verified': True, 'status': 'CODEX_HANDOFF_READY',
+            'notion_page_updated': True, 'output_verified': True, 'status': '네이버 저장 요청',
         }
     pipeline = SimpleNamespace(process_page=process)
     monkeypatch.setattr(main, 'build', lambda: (settings, notion, None, None, pipeline))
     main.resume_blog('exact-page', manifest)
     data = json.loads((settings.output_dir / 'production-results.json').read_text(encoding='utf-8'))
     assert data['batches'][0]['reviewed_outputs'] == 1
+
+
+def test_resume_blog_refuses_ready_or_completed_page(monkeypatch, tmp_path):
+    import json
+    from types import SimpleNamespace
+    import app.main as main
+
+    manifest = tmp_path / 'manifest.json'
+    manifest.write_text(json.dumps({
+        'page_id': 'exact-page', 'channel': 'naver_blog', 'generated': {'body_markdown': 'Saved original'},
+    }), encoding='utf-8')
+    settings = SimpleNamespace(output_dir=tmp_path / 'output')
+    notion = SimpleNamespace(retrieve_page=lambda page_id: {
+        'id': page_id,
+        'properties': {'상태': {'type': 'select', 'select': {'name': '네이버 저장 요청'}}},
+    }, close=lambda: None)
+    pipeline = SimpleNamespace(process_page=lambda *_a, **_k: pytest.fail('Already-ready page must not be rewritten'))
+    monkeypatch.setattr(main, 'build', lambda: (settings, notion, None, None, pipeline))
+    with pytest.raises(RuntimeError, match='did not complete'):
+        main.resume_blog('exact-page', manifest)

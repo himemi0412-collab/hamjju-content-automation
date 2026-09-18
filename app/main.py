@@ -223,9 +223,12 @@ def resume_blog(page_id: str, manifest: Path):
         raise typer.BadParameter('Resume manifest has no generated blog body')
     s, notion, _, _, pipeline = build()
     cfg = load_channels()['naver_blog']
-    cfg = replace(cfg, ready_status=cfg.revision_status)
     try:
         page = notion.retrieve_page(page_id)
+        current_status = property_value((page.get('properties') or {}).get('상태', {}))
+        if current_status not in {cfg.revision_status, 'CODEX_HANDOFF_READY'}:
+            raise RuntimeError('Resume requires 수정 필요 or the legacy CODEX_HANDOFF_READY status')
+        cfg = replace(cfg, ready_status=current_status)
         result = [pipeline.process_page(cfg, page, resume_manifest=manifest)]
     except Exception as exc:
         result = [{'page_id': page_id, 'channel': 'naver_blog', 'status': 'failed', 'error': repr(exc)}]
