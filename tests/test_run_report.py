@@ -297,3 +297,4 @@ def test_workflow_restores_original_batch_evidence_before_repeated_resume():
     assert 'original_batch_run_id' in resume
     assert 'gh run download "$original_run_id" --repo "$GITHUB_REPOSITORY"' in resume
     assert '--dir recovered-original' in resume
+    assert '--reviewed-manifest "recovered-original/$page_folder/manifest.json"' in resume

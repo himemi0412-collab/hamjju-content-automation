@@ -54,15 +54,24 @@ class Pipeline:
             results.append(self.process_page(cfg, page, dry_run=dry_run))
         return results
 
-    def process_page(self, cfg: ChannelConfig, page_stub: dict[str, Any], dry_run: bool = False, resume_manifest: Path | None = None) -> dict[str, Any]:
+    def process_page(
+        self, cfg: ChannelConfig, page_stub: dict[str, Any], dry_run: bool = False,
+        resume_manifest: Path | None = None, reviewed_manifest: Path | None = None,
+    ) -> dict[str, Any]:
         # Read/claim failures belong to this item, not to every remaining item.
         try:
-            result = self._process_page(cfg, page_stub, dry_run=dry_run, resume_manifest=resume_manifest)
+            result = self._process_page(
+                cfg, page_stub, dry_run=dry_run,
+                resume_manifest=resume_manifest, reviewed_manifest=reviewed_manifest,
+            )
         except Exception as exc:
             result = {'page_id': page_stub.get('id'), 'status': 'failed', 'error': repr(exc)}
         return {'channel': cfg.name, **result}
 
-    def _process_page(self, cfg: ChannelConfig, page_stub: dict[str, Any], dry_run: bool = False, resume_manifest: Path | None = None) -> dict[str, Any]:
+    def _process_page(
+        self, cfg: ChannelConfig, page_stub: dict[str, Any], dry_run: bool = False,
+        resume_manifest: Path | None = None, reviewed_manifest: Path | None = None,
+    ) -> dict[str, Any]:
         page_id = page_stub['id']
         page = self.notion.retrieve_page(page_id)
         page_text = self.notion.read_page_text(page_id)
@@ -82,6 +91,7 @@ class Pipeline:
         if not page_is_eligible(cfg, context):
             return {'page_id': page_id, 'status': 'skipped', 'reason': 'eligibility_changed'}
         previous = None
+        reviewed_previous = None
         prior_card_receipt = None
         prior_reviewed_cards: list[Path] = []
         prior_files = page.get('properties', {}).get('생성 이미지', {}).get('files', [])
@@ -91,11 +101,32 @@ class Pipeline:
                 raise ValueError('Resume manifest does not match the exact blog page')
             if not previous.get('generated') or not previous.get('qa'):
                 raise ValueError('Resume manifest is missing the original manuscript or review')
+            reviewed_previous = previous
+            reviewed_root = resume_manifest.parent
+            if reviewed_manifest is not None:
+                reviewed_previous = json.loads(reviewed_manifest.read_text(encoding='utf-8'))
+                if (reviewed_previous.get('page_id') != page_id
+                        or reviewed_previous.get('channel') != 'naver_blog'):
+                    raise ValueError('Reviewed manifest does not match the exact blog page')
+                if manuscript_hash(reviewed_previous.get('generated') or {}) != manuscript_hash(previous['generated']):
+                    raise RuntimeError('Reviewed manuscript is not the same version as the current recovery source')
+                reviewed_root = reviewed_manifest.parent
             self._match_prior_blog_blocks(page_id, previous)
             expected_names = [Path(p).name for p in previous.get('media', {}).get('cards', [])]
-            prior_reviewed_cards = [resume_manifest.parent / 'cards' / name for name in expected_names]
-            if any(not path.is_file() for path in prior_reviewed_cards):
+            source_cards = [resume_manifest.parent / 'cards' / name for name in expected_names]
+            if any(not path.is_file() for path in source_cards):
                 raise RuntimeError('Resume artifact is missing original image bytes')
+            reviewed_names = [Path(p).name for p in reviewed_previous.get('media', {}).get('cards', [])]
+            if reviewed_names != expected_names:
+                raise RuntimeError('Reviewed card names/order differ from the current recovery source')
+            prior_reviewed_cards = [reviewed_root / 'cards' / name for name in reviewed_names]
+            if any(not path.is_file() for path in prior_reviewed_cards):
+                raise RuntimeError('Reviewed artifact is missing original image bytes')
+            if any(
+                hashlib.sha256(source.read_bytes()).digest() != hashlib.sha256(reviewed.read_bytes()).digest()
+                for source, reviewed in zip(source_cards, prior_reviewed_cards)
+            ):
+                raise RuntimeError('Reviewed card bytes differ from the current recovery source')
             if [f.get('name') for f in prior_files] != expected_names:
                 # An upload may have completed before the body replacement failed.
                 # Reconcile only a reviewed receipt bound to this exact manuscript,
@@ -109,7 +140,7 @@ class Pipeline:
             elif expected_names:
                 prior_card_receipt = [
                     {'name': path.name, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
-                    for path in prior_reviewed_cards
+                    for path in source_cards
                 ]
                 try:
                     match_attached_cards(prior_files, prior_card_receipt)
@@ -185,13 +216,14 @@ class Pipeline:
                 if len(cards) != 5:
                     raise RuntimeError('Blog card-news render did not produce exactly five images')
                 media['cards'] = [str(x) for x in cards]
-                prior_qa = previous.get('qa', {}) if previous else {}
+                prior_qa = reviewed_previous.get('qa', {}) if reviewed_previous else {}
                 unchanged_reviewed_resume = bool(
                     previous
-                    and manuscript_hash(generated) == manuscript_hash(previous['generated'])
+                    and reviewed_previous
+                    and manuscript_hash(generated) == manuscript_hash(reviewed_previous['generated'])
                     and prior_qa.get('pass') is True
                     and not prior_qa.get('blocking_issues')
-                    and previous.get('media', {}).get('rendered_card_qa_pass') is True
+                    and reviewed_previous.get('media', {}).get('rendered_card_qa_pass') is True
                     and len(prior_reviewed_cards) == 5
                     and all(
                         hashlib.sha256(current.read_bytes()).digest()
@@ -206,7 +238,7 @@ class Pipeline:
                     qa = prior_qa
                     image_qa_usage = {
                         'reused_from_manifest': True,
-                        'source_manuscript_sha256': manuscript_hash(previous['generated']),
+                        'source_manuscript_sha256': manuscript_hash(reviewed_previous['generated']),
                     }
                 else:
                     qa, image_qa_usage = self.ai.qa(generated, {

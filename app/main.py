@@ -214,13 +214,21 @@ def process_exact_page(name: str, page_id: str, retry_revision: bool = False):
 
 
 @app.command('resume-blog')
-def resume_blog(page_id: str, manifest: Path):
+def resume_blog(
+    page_id: str,
+    manifest: Path,
+    reviewed_manifest: Path | None = None,
+):
     """Resume one existing blog artifact without researching or rewriting it."""
     source = json.loads(manifest.read_text(encoding='utf-8'))
     if source.get('page_id') != page_id or source.get('channel') != 'naver_blog':
         raise typer.BadParameter('Resume manifest does not match the exact blog page and channel')
     if not isinstance(source.get('generated'), dict) or not source['generated'].get('body_markdown'):
         raise typer.BadParameter('Resume manifest has no generated blog body')
+    if reviewed_manifest is not None:
+        reviewed = json.loads(reviewed_manifest.read_text(encoding='utf-8'))
+        if reviewed.get('page_id') != page_id or reviewed.get('channel') != 'naver_blog':
+            raise typer.BadParameter('Reviewed manifest does not match the exact blog page and channel')
     s, notion, _, _, pipeline = build()
     cfg = load_channels()['naver_blog']
     try:
@@ -229,7 +237,10 @@ def resume_blog(page_id: str, manifest: Path):
         if current_status not in {cfg.revision_status, 'CODEX_HANDOFF_READY'}:
             raise RuntimeError('Resume requires 수정 필요 or the legacy CODEX_HANDOFF_READY status')
         cfg = replace(cfg, ready_status=current_status)
-        result = [pipeline.process_page(cfg, page, resume_manifest=manifest)]
+        kwargs = {'resume_manifest': manifest}
+        if reviewed_manifest is not None:
+            kwargs['reviewed_manifest'] = reviewed_manifest
+        result = [pipeline.process_page(cfg, page, **kwargs)]
     except Exception as exc:
         result = [{'page_id': page_id, 'channel': 'naver_blog', 'status': 'failed', 'error': repr(exc)}]
     finally:

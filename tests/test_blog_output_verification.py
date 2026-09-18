@@ -258,6 +258,40 @@ def test_resume_reuses_pass_for_identical_reviewed_manuscript_and_card_bytes(tmp
     assert written['usage']['rendered_card_qa']['reused_from_manifest'] is True
 
 
+def test_repeated_resume_restores_pass_only_from_identical_original_review(tmp_path, monkeypatch):
+    pipeline, cards = make_pipeline(tmp_path, monkeypatch)
+    generated = pipeline.ai.generate.return_value[0]
+    current = {
+        'page_id': 'one', 'channel': 'naver_blog', 'generated': generated,
+        'qa': {'pass': False, 'blocking_issues': ['stochastic second review']},
+        'media': {'cards': [str(p) for p in cards], 'rendered_card_qa_pass': False},
+    }
+    reviewed = {
+        'page_id': 'one', 'channel': 'naver_blog', 'generated': generated,
+        'qa': {'pass': True, 'score': 94, 'blocking_issues': []},
+        'media': {'cards': [str(p) for p in cards], 'rendered_card_qa_pass': True},
+    }
+    current_dir = tmp_path / 'current'
+    reviewed_dir = tmp_path / 'reviewed'
+    for root, payload in ((current_dir, current), (reviewed_dir, reviewed)):
+        (root / 'cards').mkdir(parents=True)
+        for card in cards:
+            (root / 'cards' / card.name).write_bytes(card.read_bytes())
+        (root / 'manifest.json').write_text(json.dumps(payload), encoding='utf-8')
+    pipeline.notion.status = '수정 필요'
+    pipeline.notion.append_blocks('one', result_blocks('naver_blog', generated, current['qa']))
+    pipeline.notion.attach_files('one', '생성 이미지', cards)
+    cfg = replace(load_channels()['naver_blog'], ready_status='수정 필요')
+
+    result = pipeline.process_page(
+        cfg, {'id': 'one'}, resume_manifest=current_dir / 'manifest.json',
+        reviewed_manifest=reviewed_dir / 'manifest.json',
+    )
+
+    assert result['qa_pass'] is True and result['status'] == '네이버 저장 요청'
+    pipeline.ai.qa.assert_not_called()
+
+
 def test_resume_does_not_overwrite_manual_edit_or_call_ai(tmp_path, monkeypatch):
     pipeline, _ = make_pipeline(tmp_path, monkeypatch)
     prior = {'page_id': 'one', 'channel': 'naver_blog',
