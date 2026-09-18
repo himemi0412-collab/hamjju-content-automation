@@ -83,6 +83,7 @@ class Pipeline:
             return {'page_id': page_id, 'status': 'skipped', 'reason': 'eligibility_changed'}
         previous = None
         prior_card_receipt = None
+        prior_reviewed_cards: list[Path] = []
         prior_files = page.get('properties', {}).get('생성 이미지', {}).get('files', [])
         if resume_manifest is not None:
             previous = json.loads(resume_manifest.read_text(encoding='utf-8'))
@@ -92,6 +93,9 @@ class Pipeline:
                 raise ValueError('Resume manifest is missing the original manuscript or review')
             self._match_prior_blog_blocks(page_id, previous)
             expected_names = [Path(p).name for p in previous.get('media', {}).get('cards', [])]
+            prior_reviewed_cards = [resume_manifest.parent / 'cards' / name for name in expected_names]
+            if any(not path.is_file() for path in prior_reviewed_cards):
+                raise RuntimeError('Resume artifact is missing original image bytes')
             if [f.get('name') for f in prior_files] != expected_names:
                 # An upload may have completed before the body replacement failed.
                 # Reconcile only a reviewed receipt bound to this exact manuscript,
@@ -103,12 +107,9 @@ class Pipeline:
                 prior_card_receipt = receipt.get('attached_cards', [])
                 match_attached_cards(prior_files, prior_card_receipt)
             elif expected_names:
-                original_cards = [resume_manifest.parent / 'cards' / name for name in expected_names]
-                if any(not path.is_file() for path in original_cards):
-                    raise RuntimeError('Resume artifact is missing original image bytes')
                 prior_card_receipt = [
                     {'name': path.name, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
-                    for path in original_cards
+                    for path in prior_reviewed_cards
                 ]
                 try:
                     match_attached_cards(prior_files, prior_card_receipt)
@@ -184,11 +185,35 @@ class Pipeline:
                 if len(cards) != 5:
                     raise RuntimeError('Blog card-news render did not produce exactly five images')
                 media['cards'] = [str(x) for x in cards]
-                qa, image_qa_usage = self.ai.qa(generated, {
-                    'channel': cfg.name, **context,
-                    'automation_scope': {**context['automation_scope'], 'mode': 'blog_cards', 'stage': 'rendered_cards', 'media_expected': True,
-                        'renderer': '1080 square; 3 pastel colors plus dark ink; white background; measured text boxes; cover/flow/comparison/checklist/decision; Cafe24 title font'},
-                }, image_paths=cards)
+                prior_qa = previous.get('qa', {}) if previous else {}
+                unchanged_reviewed_resume = bool(
+                    previous
+                    and manuscript_hash(generated) == manuscript_hash(previous['generated'])
+                    and prior_qa.get('pass') is True
+                    and not prior_qa.get('blocking_issues')
+                    and previous.get('media', {}).get('rendered_card_qa_pass') is True
+                    and len(prior_reviewed_cards) == 5
+                    and all(
+                        hashlib.sha256(current.read_bytes()).digest()
+                        == hashlib.sha256(reviewed.read_bytes()).digest()
+                        for current, reviewed in zip(cards, prior_reviewed_cards)
+                    )
+                )
+                if unchanged_reviewed_resume:
+                    # A migration must not turn an immutable, already-reviewed
+                    # artifact into a revision merely because a stochastic AI
+                    # reviewer gives the same bytes a different answer later.
+                    qa = prior_qa
+                    image_qa_usage = {
+                        'reused_from_manifest': True,
+                        'source_manuscript_sha256': manuscript_hash(previous['generated']),
+                    }
+                else:
+                    qa, image_qa_usage = self.ai.qa(generated, {
+                        'channel': cfg.name, **context,
+                        'automation_scope': {**context['automation_scope'], 'mode': 'blog_cards', 'stage': 'rendered_cards', 'media_expected': True,
+                            'renderer': '1080 square; 3 pastel colors plus dark ink; white background; measured text boxes; cover/flow/comparison/checklist/decision; Cafe24 title font'},
+                    }, image_paths=cards)
                 passed = qa.get('pass') is True and not qa.get('blocking_issues')
                 media['rendered_card_qa_pass'] = passed
                 manifest['qa'] = qa

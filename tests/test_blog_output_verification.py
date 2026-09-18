@@ -226,6 +226,38 @@ def test_resume_reuses_text_and_replaces_only_matching_failed_output(tmp_path, m
     assert sum(x['type'] == 'divider' for x in pipeline.notion.blocks) == 1
 
 
+def test_resume_reuses_pass_for_identical_reviewed_manuscript_and_card_bytes(tmp_path, monkeypatch):
+    pipeline, cards = make_pipeline(tmp_path, monkeypatch)
+    generated = pipeline.ai.generate.return_value[0]
+    prior_qa = {'pass': True, 'score': 94, 'blocking_issues': [], 'recommended_status': 'PASS'}
+    prior = {
+        'page_id': 'one', 'channel': 'naver_blog', 'generated': generated, 'qa': prior_qa,
+        'media': {
+            'cards': [str(p) for p in cards],
+            'rendered_card_qa_pass': True,
+        },
+        'manuscript_sha256': manuscript_hash(generated),
+    }
+    saved_cards = tmp_path / 'cards'
+    saved_cards.mkdir()
+    for card in cards:
+        (saved_cards / card.name).write_bytes(card.read_bytes())
+    manifest = tmp_path / 'previous.json'
+    manifest.write_text(json.dumps(prior), encoding='utf-8')
+    pipeline.notion.status = 'CODEX_HANDOFF_READY'
+    pipeline.notion.append_blocks('one', result_blocks('naver_blog', generated, prior_qa))
+    pipeline.notion.attach_files('one', '생성 이미지', cards)
+    cfg = replace(load_channels()['naver_blog'], ready_status='CODEX_HANDOFF_READY')
+
+    result = pipeline.process_page(cfg, {'id': 'one'}, resume_manifest=manifest)
+
+    assert result['qa_pass'] is True and result['status'] == '네이버 저장 요청'
+    pipeline.ai.qa.assert_not_called()
+    written = json.loads((tmp_path / 'output/one/manifest.json').read_text(encoding='utf-8'))
+    assert written['qa'] == prior_qa
+    assert written['usage']['rendered_card_qa']['reused_from_manifest'] is True
+
+
 def test_resume_does_not_overwrite_manual_edit_or_call_ai(tmp_path, monkeypatch):
     pipeline, _ = make_pipeline(tmp_path, monkeypatch)
     prior = {'page_id': 'one', 'channel': 'naver_blog',
