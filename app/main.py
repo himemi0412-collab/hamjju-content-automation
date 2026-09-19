@@ -2,7 +2,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import typer
 from rich import print
@@ -22,6 +22,7 @@ from .notion_client import property_value
 from .run_report import record_results
 
 app = typer.Typer(help='햄쮸 블로그·쇼츠 자동화')
+KST = timezone(timedelta(hours=9))
 
 
 def build() -> tuple[Settings, NotionClient, AIClient, StateStore, Pipeline]:
@@ -70,6 +71,15 @@ def seed_topics(blog_count: int = 3, ppojjugi_count: int = 1, japan_count: int =
         short_pages = notion.query_recent(s.shorts_data_source_id, 100)
         existing_blog = [extract_page_title(x) for x in blog_pages]
         existing_shorts = [extract_page_title(x) for x in short_pages]
+        shorts_by_channel = {
+            '햄찌 창작 쇼츠': [],
+            '일본 유튜브 쇼츠': [],
+        }
+        for page in short_pages:
+            channel_prop = (page.get('properties') or {}).get('채널', {})
+            channel_name = property_value(channel_prop)
+            if channel_name in shorts_by_channel:
+                shorts_by_channel[channel_name].append(extract_page_title(page))
         planned, usage = ai.research_topics({
             'today_utc': datetime.now(timezone.utc).date().isoformat(),
             'requested_counts': {
@@ -79,6 +89,11 @@ def seed_topics(blog_count: int = 3, ppojjugi_count: int = 1, japan_count: int =
             },
             'existing_blog_titles': existing_blog,
             'existing_shorts_titles': existing_shorts,
+            # Keep personal-story evidence and Japanese-retro history strictly
+            # separated. A combined title list previously let the topic model
+            # treat a Japanese Shorts title as evidence for Ppojjugi.
+            'existing_ppojjugi_titles': shorts_by_channel['햄찌 창작 쇼츠'],
+            'existing_japan_titles': shorts_by_channel['일본 유튜브 쇼츠'],
         })
         known = {normalize_title(x) for x in existing_blog + existing_shorts}
         created = {'blog': [], 'ppojjugi': [], 'japan': [], 'usage': usage}
@@ -100,6 +115,133 @@ def seed_topics(blog_count: int = 3, ppojjugi_count: int = 1, japan_count: int =
     finally:
         notion.close()
     print_json(created)
+
+
+@app.command('plan-month')
+def plan_month(
+    blog_count: int = 90,
+    ppojjugi_count: int = 30,
+    japan_count: int = 30,
+    batch_size: int = 10,
+):
+    """Build a resumable 30-day topic inventory without producing media."""
+    if batch_size < 1 or batch_size > 10:
+        raise typer.BadParameter('batch-size must be between 1 and 10')
+    requested = {
+        'blog': max(blog_count, 0),
+        'ppojjugi': max(ppojjugi_count, 0),
+        'japan': max(japan_count, 0),
+    }
+    s, notion, ai, _, _ = build()
+    month = datetime.now(KST).strftime('%Y%m')
+    checkpoint = s.output_dir / f'topic-plan-{month}.json'
+    try:
+        blog_pages = notion.query_recent(s.blog_data_source_id, 100)
+        short_pages = notion.query_recent(s.shorts_data_source_id, 100)
+        existing_blog = [extract_page_title(x) for x in blog_pages]
+        existing_shorts = [extract_page_title(x) for x in short_pages]
+        existing_ids = {
+            str(property_value((page.get('properties') or {}).get('콘텐츠 ID', {})) or '')
+            for page in short_pages
+        }
+        existing_month = {
+            'blog': sum(
+                1 for page in blog_pages
+                if _is_monthly_blog_order(
+                    property_value((page.get('properties') or {}).get('원본 순서', {})), month,
+                )
+            ),
+            'ppojjugi': sum(x.startswith(f'PPIJUK-{month}') for x in existing_ids),
+            'japan': sum(x.startswith(f'JAPAN-{month}') for x in existing_ids),
+        }
+        remaining = {
+            key: max(requested[key] - existing_month[key], 0)
+            for key in requested
+        }
+        created = {'blog': [], 'ppojjugi': [], 'japan': []}
+        known = {normalize_title(x) for x in existing_blog + existing_shorts}
+        sequence = dict(existing_month)
+        usage_batches: list[dict] = []
+        while any(remaining.values()):
+            counts = {
+                key: min(remaining[key], batch_size)
+                for key in remaining
+            }
+            planned, usage = ai.research_topics({
+                'today_kst': datetime.now(KST).date().isoformat(),
+                'planning_month': month,
+                'planning_mode': 'monthly_inventory',
+                'requested_counts': counts,
+                'existing_blog_titles': existing_blog,
+                'existing_shorts_titles': existing_shorts,
+                'existing_ppojjugi_titles': [
+                    extract_page_title(page) for page in short_pages
+                    if property_value((page.get('properties') or {}).get('채널', {})) == '햄찌 창작 쇼츠'
+                ],
+                'existing_japan_titles': [
+                    extract_page_title(page) for page in short_pages
+                    if property_value((page.get('properties') or {}).get('채널', {})) == '일본 유튜브 쇼츠'
+                ],
+            })
+            usage_batches.append(usage)
+            made_this_batch = 0
+            for topic in (planned.get('blog') or [])[:counts['blog']]:
+                title_key = normalize_title(topic.get('title'))
+                if not title_key or title_key in known:
+                    continue
+                sequence['blog'] += 1
+                order = int(f'{month}0000') + sequence['blog']
+                created['blog'].append(notion.create_blog_topic(s.blog_data_source_id, topic, order))
+                existing_blog.append(str(topic.get('title') or ''))
+                known.add(title_key)
+                remaining['blog'] -= 1
+                made_this_batch += 1
+            for key, channel, prefix in (
+                ('ppojjugi', '햄찌 창작 쇼츠', 'PPIJUK'),
+                ('japan', '일본 유튜브 쇼츠', 'JAPAN'),
+            ):
+                for topic in (planned.get(key) or [])[:counts[key]]:
+                    title_key = normalize_title(topic.get('title'))
+                    if not title_key or title_key in known:
+                        continue
+                    sequence[key] += 1
+                    topic = dict(topic)
+                    topic['content_id'] = f'{prefix}-{month}-{sequence[key]:03d}'
+                    created[key].append(notion.create_short_topic(s.shorts_data_source_id, topic, channel))
+                    existing_shorts.append(str(topic.get('title') or ''))
+                    known.add(title_key)
+                    remaining[key] -= 1
+                    made_this_batch += 1
+            payload = {
+                'schema_version': 1,
+                'month': month,
+                'requested': requested,
+                'existing_before': existing_month,
+                'created': created,
+                'remaining': remaining,
+                'usage_batches': usage_batches,
+                'updated_at': datetime.now(timezone.utc).isoformat(),
+            }
+            checkpoint.parent.mkdir(parents=True, exist_ok=True)
+            temp = checkpoint.with_suffix('.tmp')
+            temp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+            temp.replace(checkpoint)
+            if made_this_batch == 0:
+                raise RuntimeError(
+                    'Monthly topic planning made no progress; the model returned too few unique topics. '
+                    f'Remaining: {remaining}'
+                )
+    finally:
+        notion.close()
+    print_json(json.loads(checkpoint.read_text(encoding='utf-8')))
+
+
+def _is_monthly_blog_order(value, month: str) -> bool:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    number = int(value)
+    base = int(f'{month}0000')
+    return base < number <= base + 9999
 
 
 def normalize_title(value) -> str:
@@ -166,6 +308,7 @@ def channel(
     dry_run: bool = False,
     require_item: bool = False,
     retry_revision: bool = False,
+    auto_retry: bool = False,
 ):
     """Process a single configured channel."""
     s, notion, _, _, pipeline = build()
@@ -181,6 +324,8 @@ def channel(
             limit=limit if limit is not None else s.max_jobs_per_run,
             dry_run=dry_run,
         )
+        if auto_retry and not dry_run and not retry_revision:
+            result = retry_qa_rejections_once(pipeline, cfg, result)
     except Exception as exc:
         result = [{'channel': name, 'status': 'failed', 'error': repr(exc)}]
     finally:
@@ -190,6 +335,35 @@ def channel(
     if not dry_run:
         record_results(s.output_dir, name, result, expected)
     validate_results(result, require_item=require_item, dry_run=dry_run, expected_count=expected)
+
+
+def retry_qa_rejections_once(
+    pipeline: Pipeline,
+    cfg,
+    results: list[dict],
+) -> list[dict]:
+    """Retry only QA-rejected items once, without hiding infrastructure errors."""
+    retry_cfg = replace(cfg, ready_status=cfg.revision_status)
+    final_results: list[dict] = []
+    for result in results:
+        page_id = result.get('page_id')
+        should_retry = (
+            bool(page_id)
+            and result.get('status') == cfg.revision_status
+            and result.get('qa_pass') is False
+            and not result.get('budget_blocked')
+        )
+        if not should_retry:
+            final_results.append(result)
+            continue
+        page = pipeline.notion.retrieve_page(str(page_id))
+        retried = pipeline.process_page(retry_cfg, page)
+        retried['automatic_retry'] = {
+            'attempted': True,
+            'previous_blocking_issues': list(result.get('blocking_issues') or []),
+        }
+        final_results.append(retried)
+    return final_results
 
 
 @app.command('page')

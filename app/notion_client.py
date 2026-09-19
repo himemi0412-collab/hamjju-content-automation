@@ -231,7 +231,12 @@ def rich(text: str) -> list[dict[str, Any]]:
 def markdown_rich(text: str) -> list[dict[str, Any]]:
     """Convert the small inline Markdown subset used by reviewed blog bodies."""
     parts: list[dict[str, Any]] = []
-    token = re.compile(r'\*\*(.+?)\*\*|\[([^\]]+)\]\((https?://[^\s)]+)\)')
+    token = re.compile(
+        r'\*\*(.+?)\*\*'  # bold
+        r'|__(.+?)__'  # underline
+        r'|==(.+?)=='  # non-yellow color emphasis
+        r'|\[([^\]]+)\]\((https?://[^\s)]+)\)'  # link
+    )
     cursor = 0
     for match in token.finditer(text):
         if match.start() > cursor:
@@ -242,10 +247,22 @@ def markdown_rich(text: str) -> list[dict[str, Any]]:
                 'text': {'content': match.group(1)[:2000]},
                 'annotations': {'bold': True},
             })
+        elif match.group(2) is not None:
+            parts.append({
+                'type': 'text',
+                'text': {'content': match.group(2)[:2000]},
+                'annotations': {'underline': True},
+            })
+        elif match.group(3) is not None:
+            parts.append({
+                'type': 'text',
+                'text': {'content': match.group(3)[:2000]},
+                'annotations': {'bold': True, 'color': 'purple_background'},
+            })
         else:
             parts.append({
                 'type': 'text',
-                'text': {'content': match.group(2)[:2000], 'link': {'url': match.group(3)}},
+                'text': {'content': match.group(4)[:2000], 'link': {'url': match.group(5)}},
             })
         cursor = match.end()
     if cursor < len(text):
