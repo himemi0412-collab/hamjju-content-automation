@@ -9,6 +9,9 @@ env:
   # This one-time baseline is ignored automatically after September 2026.
   OPENAI_BUDGET_BASELINE_MONTH: '2026-09'
   OPENAI_BUDGET_BASELINE_USD: '0.64'
+  # Public upload also requires the Notion page's 공개 승인 checkbox.
+  # Keep false until both Shorts channels pass end-to-end private review.
+  ALLOW_PUBLIC_YOUTUBE_UPLOAD: 'false'
 
 on:
   schedule:
@@ -30,11 +33,13 @@ on:
           - ppojjugi_shorts
           - japan_shorts
       mode:
-        description: Dry run, text only, reviewed MP4, today's Shorts, or OAuth verification
+        description: Prepare one topic, dry run, text only, reviewed MP4, today's Shorts, or OAuth verification
         required: true
         type: choice
         default: dry_run
         options:
+          - plan_month
+          - prepare_topic
           - dry_run
           - execute_text
           - recover_blog
@@ -90,7 +95,7 @@ jobs:
           restore-keys: |
             hamjju-openai-budget-${{ runner.os }}-
       - name: Restore processing checkpoints
-        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design') }}
+        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design') }}
         uses: actions/cache/restore@v6
         with:
           path: output/state.db
@@ -144,6 +149,39 @@ jobs:
           FAL_KEY: ${{ secrets.FAL_KEY }}
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
         run: python -m app.main doctor
+      - name: Research and save one topic for the selected channel
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'prepare_topic' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
+          ENABLE_WEB_RESEARCH: 'true'
+          ENABLE_MEDIA_GENERATION: 'false'
+          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
+        run: |
+          case "${{ inputs.channel }}" in
+            naver_blog)
+              python -m app.main seed-topics --blog-count 1 --ppojjugi-count 0 --japan-count 0
+              ;;
+            ppojjugi_shorts)
+              python -m app.main seed-topics --blog-count 0 --ppojjugi-count 1 --japan-count 0
+              ;;
+            japan_shorts)
+              python -m app.main seed-topics --blog-count 0 --ppojjugi-count 0 --japan-count 1
+              ;;
+            *)
+              echo "Unsupported channel: ${{ inputs.channel }}"
+              exit 1
+              ;;
+          esac
+      - name: Build the 30-day topic inventory in resumable batches
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'plan_month' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
+          ENABLE_WEB_RESEARCH: 'true'
+          ENABLE_MEDIA_GENERATION: 'false'
+          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
+        run: python -m app.main plan-month --blog-count 90 --ppojjugi-count 30 --japan-count 30 --batch-size 10
       - name: Read one Notion item without modifying it
         if: ${{ inputs.mode == 'dry_run' }}
         env:
@@ -228,7 +266,6 @@ jobs:
           AUTO_PRIVATE_YOUTUBE_UPLOAD: 'true'
         run: |
           result=0
-          python -m app.main seed-topics --blog-count 0 --ppojjugi-count 1 --japan-count 1 || result=1
           python -m app.main channel ppojjugi_shorts --limit 1 || result=1
           python -m app.main channel japan_shorts --limit 1 || result=1
           exit "$result"
@@ -289,12 +326,10 @@ jobs:
           result=0
           schedule_expr="${{ github.event.schedule }}"
           if [ "$schedule_expr" = "0 1 * * *" ]; then
-            python -m app.main seed-topics --blog-count 3 --ppojjugi-count 0 --japan-count 0 || result=1
-            ENABLE_MEDIA_GENERATION=false python -m app.main channel naver_blog --limit 3 || result=1
+            ENABLE_MEDIA_GENERATION=false python -m app.main channel naver_blog --limit 3 --auto-retry || result=1
           elif [ "$schedule_expr" = "0 12 * * *" ]; then
-            python -m app.main seed-topics --blog-count 0 --ppojjugi-count 1 --japan-count 1 || result=1
-            ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=true python -m app.main channel ppojjugi_shorts --limit 1 || result=1
-            ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=true python -m app.main channel japan_shorts --limit 1 || result=1
+            ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=true python -m app.main channel ppojjugi_shorts --limit 1 --auto-retry || result=1
+            ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=true python -m app.main channel japan_shorts --limit 1 --auto-retry || result=1
           else
             echo "Unsupported schedule expression: $schedule_expr"
             result=1
@@ -309,14 +344,14 @@ jobs:
           key: hamjju-openai-budget-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Save processing checkpoints even when one item fails
-        if: ${{ always() && hashFiles('output/state.db') != '' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design')) }}
+        if: ${{ always() && hashFiles('output/state.db') != '' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design')) }}
         uses: actions/cache/save@v6
         with:
           path: output/state.db
           key: hamjju-processing-state-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Summarize actual production evidence
-        if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design')) }}
+        if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design')) }}
         env:
           RUN_STATUS: ${{ job.status }}
           EVENT_NAME: ${{ github.event_name }}
@@ -336,7 +371,7 @@ jobs:
           retention-days: 14
 
       - name: Update production status board
-        if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design')) }}
+        if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design')) }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
