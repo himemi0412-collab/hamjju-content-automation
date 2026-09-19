@@ -13,7 +13,7 @@ SCOPES = [
 
 
 class YouTubePrivateUploader:
-    """YouTube uploader with a hard safety invariant: privacy is always private."""
+    """YouTube uploader requiring an explicit reviewed privacy value."""
 
     def __init__(self, client_secrets: Path, token_file: Path):
         self.client_secrets = client_secrets
@@ -49,6 +49,14 @@ class YouTubePrivateUploader:
         }
 
     def upload_private(self, video: Path, title: str, description: str = '', tags: list[str] | None = None) -> str:
+        return self.upload_reviewed(video, title, description, tags, privacy_status='private')
+
+    def upload_reviewed(
+        self, video: Path, title: str, description: str = '',
+        tags: list[str] | None = None, privacy_status: str = 'private',
+    ) -> str:
+        if privacy_status not in {'private', 'public'}:
+            raise ValueError('YouTube privacy must be private or public')
         youtube = build('youtube', 'v3', credentials=self._credentials(), cache_discovery=False)
         body = {
             'snippet': {
@@ -57,7 +65,7 @@ class YouTubePrivateUploader:
                 'tags': (tags or [])[:50],
                 'categoryId': '22',
             },
-            'status': {'privacyStatus': 'private'},
+            'status': {'privacyStatus': privacy_status},
         }
         request = youtube.videos().insert(
             part='snippet,status',

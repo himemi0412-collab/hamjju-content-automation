@@ -100,6 +100,8 @@ class Pipeline:
             'mode': 'media' if media_expected else 'text_only',
             'media_expected': media_expected,
             'youtube_upload_expected': bool(media_expected and self.s.auto_private_youtube_upload),
+            'public_approval': context.get('properties', {}).get('공개 승인') is True,
+            'public_upload_enabled': self.s.allow_public_youtube_upload,
         }
         if cfg.content_kind == 'blog':
             # GitHub-hosted runs do not inherit local Codex memories or user
@@ -323,27 +325,34 @@ class Pipeline:
                 manifest['usage']['rendered_card_qa'] = image_qa_usage
                 manifest['media'] = media
                 save_manifest(job_dir / 'manifest.json', manifest)
-                try:
-                    if previous:
-                        self._match_prior_blog_blocks(page_id, previous)
-                        latest_files = self.notion.retrieve_page(page_id).get('properties', {}).get('생성 이미지', {}).get('files', [])
-                        if prior_card_receipt is not None:
-                            match_attached_cards(latest_files, prior_card_receipt)
-                        elif latest_files:
-                            raise RuntimeError('MANUAL_EDIT_CONFLICT: images were added during review')
-                    card_upload_ids = self.notion.attach_files(page_id, '생성 이미지', cards)
-                    if len(card_upload_ids) != 5:
-                        raise RuntimeError('Notion did not return five card upload identities')
-                    media['notion_cards_attached'] = True
-                    media['notion_card_upload_ids'] = card_upload_ids
-                    manifest['media'] = media
-                    if previous:
-                        manifest['resume_previous_output'] = previous.get('resume_previous_output') or previous
-                    save_manifest(job_dir / 'manifest.json', manifest)
-                except Exception as exc:
+                # Never attach cards that failed the independent rendered-image
+                # review. Failed artifacts stay only in the Actions artifact so
+                # a retry cannot be mistaken for an approved Notion handoff.
+                if passed:
+                    try:
+                        if previous:
+                            self._match_prior_blog_blocks(page_id, previous)
+                            latest_files = self.notion.retrieve_page(page_id).get('properties', {}).get('생성 이미지', {}).get('files', [])
+                            if prior_card_receipt is not None:
+                                match_attached_cards(latest_files, prior_card_receipt)
+                            elif latest_files:
+                                raise RuntimeError('MANUAL_EDIT_CONFLICT: images were added during review')
+                        card_upload_ids = self.notion.attach_files(page_id, '생성 이미지', cards)
+                        if len(card_upload_ids) != 5:
+                            raise RuntimeError('Notion did not return five card upload identities')
+                        media['notion_cards_attached'] = True
+                        media['notion_card_upload_ids'] = card_upload_ids
+                        manifest['media'] = media
+                        if previous:
+                            manifest['resume_previous_output'] = previous.get('resume_previous_output') or previous
+                        save_manifest(job_dir / 'manifest.json', manifest)
+                    except Exception as exc:
+                        media['notion_cards_attached'] = False
+                        media['notion_cards_error'] = repr(exc)
+                        raise RuntimeError('Failed to attach all blog card-news images to Notion') from exc
+                else:
                     media['notion_cards_attached'] = False
-                    media['notion_cards_error'] = repr(exc)
-                    raise RuntimeError('Failed to attach all blog card-news images to Notion') from exc
+                    media['notion_cards_skipped_reason'] = 'rendered_card_qa_failed'
             elif cfg.content_kind == 'shorts' and passed and cfg.media_generation and self.s.enable_media_generation:
                 scenes = generated.get('scenes') or []
                 media_cost = len(scenes) * self.s.openai_image_estimated_cost_usd + self.s.openai_tts_estimated_cost_usd
@@ -368,7 +377,18 @@ class Pipeline:
                             media['notion_video_attached'] = False
                             media['notion_video_error'] = repr(exc)
                     if self.s.auto_private_youtube_upload and media.get('video'):
-                        media['youtube_url'] = self._upload_private(cfg.name, generated, Path(media['video']))
+                        public_approved = context.get('properties', {}).get('공개 승인') is True
+                        privacy_status = (
+                            'public'
+                            if public_approved and self.s.allow_public_youtube_upload
+                            else 'private'
+                        )
+                        media['youtube_url'] = self._upload_private(
+                            cfg.name, generated, Path(media['video']),
+                            privacy_status=privacy_status,
+                        )
+                        media['youtube_privacy'] = privacy_status
+                        media['public_approval_confirmed'] = public_approved
                         self.notion.update_properties(page_id, {
                             'YouTube 비공개 주소': {'url': media['youtube_url']},
                         })
@@ -385,20 +405,25 @@ class Pipeline:
                     'card_names': [Path(x).name for x in media.get('cards', [])],
                     'ownership_receipt': ownership_receipt,
                 }
-            blocks = result_blocks(cfg.name, generated, qa, naver_handoff=naver_handoff)
-            if previous:
-                prior_blocks = self._match_prior_blog_blocks(page_id, previous)
-                # Only replace a byte-equivalent previous automation section.
-                # If a person edited the page, stop instead of overwriting it.
-                self.notion.archive_blocks([block['id'] for block in prior_blocks])
-            self.notion.append_blocks(page_id, blocks)
+            blocks = result_blocks(cfg.name, generated, qa, naver_handoff=naver_handoff) if passed else []
+            if passed:
+                if previous:
+                    prior_blocks = self._match_prior_blog_blocks(page_id, previous)
+                    # Only replace a byte-equivalent previous automation section.
+                    # If a person edited the page, stop instead of overwriting it.
+                    self.notion.archive_blocks([block['id'] for block in prior_blocks])
+                self.notion.append_blocks(page_id, blocks)
             manifest.pop('resume_previous_output', None)
             save_manifest(job_dir / 'manifest.json', manifest)
             final_status = cfg.success_status if passed else cfg.revision_status
             if media.get('budget_blocked'):
                 final_status = cfg.revision_status
             if passed and media.get('youtube_url'):
-                final_status = '비공개 업로드 완료'
+                final_status = (
+                    '공개 업로드 완료'
+                    if media.get('youtube_privacy') == 'public'
+                    else '비공개 업로드 완료'
+                )
                 ownership_receipt = self.operating_contract.receipt(
                     cfg.name,
                     document_id=page_id,
@@ -411,7 +436,7 @@ class Pipeline:
                 )
             self.notion.update_status(page_id, final_status)
             output_verified = False
-            if cfg.content_kind == 'blog':
+            if cfg.content_kind == 'blog' and passed:
                 observation = self._verify_blog_output(page_id, page_title, final_status, blocks, [Path(x) for x in media.get('cards', [])])
                 save_manifest(job_dir / 'notion-readback.json', observation)
                 output_verified = True
@@ -432,6 +457,8 @@ class Pipeline:
                 'title': page_title,
                 'status': final_status,
                 'qa_pass': passed,
+                'blocking_issues': list(qa.get('blocking_issues') or []),
+                'qa_score': qa.get('score'),
                 'notion_page_updated': True,
                 'output_verified': output_verified,
                 'budget_blocked': bool(media.get('budget_blocked')),
@@ -548,6 +575,28 @@ class Pipeline:
         if channel_style not in narration_profiles:
             raise ValueError(f'Unknown Shorts narration style: {channel_style}')
         voice, narration_instructions = narration_profiles[channel_style]
+        narrator_profile = generated.get('narrator_profile') or {}
+        if channel_style == 'japan_shorts':
+            profile_key = str(narrator_profile.get('profile') or 'older_woman')
+            approved_voices = {
+                'older_woman': self.s.tts_japan_voice,
+                'young_woman': self.s.tts_japan_young_woman_voice,
+                'young_man': self.s.tts_japan_young_man_voice,
+                'older_man': self.s.tts_japan_older_man_voice,
+            }
+            if profile_key not in approved_voices:
+                raise ValueError(f'Unknown Japanese narrator profile: {profile_key}')
+            voice = approved_voices[profile_key]
+            if not voice:
+                raise RuntimeError(
+                    f'Japanese narrator profile {profile_key} has no user-approved voice; '
+                    'media generation stopped before TTS'
+                )
+            narration_instructions = (
+                narration_instructions
+                + ' Selected story narrator profile: '
+                + json.dumps(narrator_profile, ensure_ascii=False)
+            )
         media = MediaGenerator(
             self.s.openai_api_key,
             self.s.image_model,
@@ -603,12 +652,19 @@ class Pipeline:
             'srt': str(srt),
             'video': str(video),
             'scene_durations': durations,
+            'narrator_profile': narrator_profile,
+            'tts_voice': voice,
             'verification': verification,
         }
 
-    def _upload_private(self, channel_name: str, generated: dict[str, Any], video: Path) -> str:
+    def _upload_private(
+        self, channel_name: str, generated: dict[str, Any], video: Path,
+        privacy_status: str = 'private',
+    ) -> str:
         if self.budget:
             self.budget.require_below_limit('youtube_private_upload')
+        if privacy_status == 'public' and not self.s.allow_public_youtube_upload:
+            raise RuntimeError('Public YouTube upload is disabled by repository configuration')
         channel_auth = {
             'ppojjugi_shorts': (
                 self.s.youtube_ppojjugi_token_file,
@@ -629,11 +685,12 @@ class Pipeline:
                 f'YouTube channel mismatch for {channel_name}; upload stopped before transfer'
             )
         meta = generated.get('youtube') or {}
-        return uploader.upload_private(
+        return uploader.upload_reviewed(
             video,
             title=str(meta.get('title') or generated.get('title') or 'Shorts draft'),
             description=str(meta.get('description') or ''),
             tags=list(meta.get('tags') or []),
+            privacy_status=privacy_status,
         )
 
 

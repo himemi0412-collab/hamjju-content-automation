@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     tts_voice: str = 'Aoede'
     tts_ppojjugi_voice: str = 'Aoede'
     tts_japan_voice: str = 'Gacrux'
+    tts_japan_young_woman_voice: str = ''
+    tts_japan_young_man_voice: str = ''
+    tts_japan_older_man_voice: str = ''
     fal_tts_temperature: float = 1.1
     fal_tts_ppojjugi_language: str = 'Korean (South Korea)'
     fal_tts_japan_language: str = 'Japanese (Japan)'
@@ -39,6 +42,7 @@ class Settings(BaseSettings):
     enable_web_research: bool = True
     enable_media_generation: bool = False
     auto_private_youtube_upload: bool = False
+    allow_public_youtube_upload: bool = False
 
     youtube_client_secrets_file: Path = Path('secrets/youtube_client_secret.json')
     youtube_token_file: Path = Path('secrets/youtube_token.json')
