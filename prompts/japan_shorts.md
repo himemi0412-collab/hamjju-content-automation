@@ -47,6 +47,7 @@
 {
   "title": "",
   "hook": "",
+  "narrator_profile": {"profile": "older_woman", "reason": "이 이야기의 시점과 등장인물에 맞는 이유"},
   "narration": "일본어 전체 내레이션",
   "scenes": [
     {"scene": 1, "seconds": 8, "narration": "この場面で実際に流れるナレーション", "caption": "일본어 자막", "image_prompt": "장면 연속성과 금지 색상까지 포함한 시각 지시"}

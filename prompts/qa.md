@@ -17,7 +17,7 @@
 - 장면 지속시간이 각 장면의 실제 음성 길이를 기준으로 계산됐으며, 문장별 음성 시작·끝과 자막 시작·끝이 일치하는가.
 - 전체 프레임을 시각 검사해 검은 화면, 잘린 자막, 장면 반복, 노란색·세피아 색조가 없는가.
 - 전체 음성을 청취해 발음·감정·음질·목소리 일관성을 확인했고, 과도한 압축이나 음성 누락이 없는가.
-- 공개 승인 값이 NO이고 YouTube 업로드가 실행되지 않았는가.
+- 공개 업로드는 source_context.automation_scope.public_approval=true와 public_upload_enabled=true가 동시에 확인될 때만 허용한다. 둘 중 하나라도 false이면 공개 업로드를 차단하고 비공개 검토만 허용한다. 이 사전 QA 시점에 아직 YouTube 전송이 실행되지 않은 것은 정상이다.
 
 블로그:
 - source_context.reference_baseline의 ID·SHA-256·네 개 source_urls가 있어야 한다. generated.reference_profile_id가 같은 ID가 아니면 `REFERENCE_PASS=false`로 차단한다.
@@ -42,6 +42,7 @@
 - 사실 확인 필요 항목과 근거가 명시됐는가.
 
 일본 쇼츠:
+- generated.narrator_profile.profile은 young_woman, older_woman, young_man, older_man 중 하나여야 하며 이야기의 시점·주인공과 이유가 일치해야 한다. 한 편 안에서는 단일 화자를 유지한다.
 - '일본 쇼츠 영상.mp4' 마스터 가이드대로 전체 화면 일러스트, 첫 장면 상단 일본어 훅, 하단 일본어 자막을 지시했는가.
 - 삐죽이용 흐린 배경·중앙 가로 패널·장면 번호 레이아웃이 섞이면 차단한다.
 - 일본인 60대 이상을 위한 자연스럽고 담백한 일본어인가.
