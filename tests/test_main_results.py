@@ -90,6 +90,50 @@ def test_channel_failure_does_not_skip_following_channels():
     assert results[1]['status'] == '검토 대기'
 
 
+def test_automatic_retry_reprocesses_only_qa_rejections():
+    from app.main import retry_qa_rejections_once
+    from app.config import load_channels
+
+    class Notion:
+        def retrieve_page(self, page_id):
+            return {'id': page_id}
+
+    class Pipeline:
+        notion = Notion()
+
+        def process_page(self, cfg, page):
+            assert cfg.ready_status == '수정 필요'
+            return {
+                'page_id': page['id'], 'status': '검토 대기',
+                'qa_pass': True, 'notion_page_updated': True,
+            }
+
+    initial = [
+        {
+            'page_id': 'retry-me', 'status': '수정 필요', 'qa_pass': False,
+            'blocking_issues': ['channel style mixed'], 'budget_blocked': False,
+        },
+        {'page_id': 'leave-me', 'status': 'failed', 'error': 'network'},
+    ]
+    results = retry_qa_rejections_once(
+        Pipeline(), load_channels()['ppojjugi_shorts'], initial,
+    )
+
+    assert results[0]['qa_pass'] is True
+    assert results[0]['automatic_retry']['attempted'] is True
+    assert results[0]['automatic_retry']['previous_blocking_issues'] == ['channel style mixed']
+    assert results[1] == initial[1]
+
+
+def test_monthly_blog_order_is_resumable_and_month_scoped():
+    from app.main import _is_monthly_blog_order
+
+    assert _is_monthly_blog_order(2026090001, '202609')
+    assert _is_monthly_blog_order(2026099999, '202609')
+    assert not _is_monthly_blog_order(2026089999, '202609')
+    assert not _is_monthly_blog_order(None, '202609')
+
+
 @pytest.mark.parametrize(('backlog', 'needed'), [(0, 3), (1, 2), (3, 0)])
 def test_blog_seeding_fills_only_ready_queue_gap(backlog, needed):
     from app.main import missing_blog_topics

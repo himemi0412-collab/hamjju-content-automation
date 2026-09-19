@@ -77,3 +77,15 @@ def test_extract_page_title_reads_only_title_property():
     }
     assert extract_page_title(page) == '자동화 테스트 글'
     assert extract_page_title({'properties': {}}) == '(제목 없음)'
+
+
+def test_markdown_rich_preserves_blog_emphasis_without_yellow_highlight():
+    from app.notion_client import markdown_rich
+
+    rich = markdown_rich('**굵게** __밑줄__ ==중요== [공식](https://example.com) 😊')
+
+    assert any(x.get('annotations', {}).get('bold') for x in rich)
+    assert any(x.get('annotations', {}).get('underline') for x in rich)
+    assert any(x.get('annotations', {}).get('color') == 'purple_background' for x in rich)
+    assert not any(x.get('annotations', {}).get('color') == 'yellow_background' for x in rich)
+    assert any(x.get('text', {}).get('link', {}).get('url') == 'https://example.com' for x in rich)

@@ -6,8 +6,8 @@ from app.naver import save_draft, NaverDraftAutomationUnavailable
 
 def test_youtube_code_hardcodes_private():
     src = Path('app/youtube.py').read_text(encoding='utf-8')
-    assert "'privacyStatus': 'private'" in src
-    assert 'upload_public' not in src
+    assert "privacy_status: str = 'private'" in src
+    assert "privacy_status not in {'private', 'public'}" in src
 
 
 def test_naver_browser_automation_is_disabled():
@@ -36,6 +36,13 @@ def test_github_action_keeps_blog_local_and_uploads_review_shorts_privately():
     assert 'ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=true python -m app.main channel ppojjugi_shorts --limit 1' in workflow
     assert 'ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=true python -m app.main channel japan_shorts --limit 1' in workflow
     assert 'execute_media' in workflow
+    assert 'prepare_topic' in workflow
+    assert 'plan_month' in workflow
+    assert 'plan-month --blog-count 90 --ppojjugi-count 30 --japan-count 30 --batch-size 10' in workflow
+    assert 'Research and save one topic for the selected channel' in workflow
+    assert 'seed-topics --blog-count 1 --ppojjugi-count 0 --japan-count 0' in workflow
+    assert 'seed-topics --blog-count 0 --ppojjugi-count 1 --japan-count 0' in workflow
+    assert 'seed-topics --blog-count 0 --ppojjugi-count 0 --japan-count 1' in workflow
     assert 'default: dry_run' in workflow
     assert '--dry-run --limit 1' in workflow
     assert "AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'" in workflow
@@ -75,6 +82,15 @@ def test_channel_mismatch_stops_before_youtube_upload(monkeypatch, tmp_path):
     else:
         raise AssertionError('A mismatched YouTube channel must stop the upload')
     assert called['upload'] is False
+
+
+def test_public_upload_requires_repository_gate(tmp_path):
+    from app.pipeline import Pipeline
+    from app.settings import Settings
+
+    pipeline = Pipeline(Settings(_env_file=None, allow_public_youtube_upload=False), None, None, None)
+    with pytest.raises(RuntimeError, match='Public YouTube upload is disabled'):
+        pipeline._upload_private('ppojjugi_shorts', {}, tmp_path / 'video.mp4', privacy_status='public')
 
 
 def test_internal_budget_stops_before_youtube_upload(monkeypatch, tmp_path):

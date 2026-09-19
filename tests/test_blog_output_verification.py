@@ -239,6 +239,11 @@ def test_visual_rejection_is_preserved_and_not_a_state_success(tmp_path, monkeyp
     result = pipeline.process_page(load_channels()['naver_blog'], {'id': 'one'})
     assert result['status'] == '수정 필요'
     assert result['qa_pass'] is False
+    assert result['blocking_issues'] == ['card 3 overlaps']
+    assert result['output_verified'] is False
+    assert result['media']['notion_cards_attached'] is False
+    assert pipeline.notion.files == []
+    assert pipeline.notion.blocks == []
     assert not pipeline.state.succeeded('one:test-source-version:naver_blog:v1')
 
 
