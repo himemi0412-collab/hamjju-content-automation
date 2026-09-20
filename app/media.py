@@ -144,7 +144,26 @@ class MediaGenerator:
                 {'model': self.tts_model, 'characters': len(text)},
             )
         if self.tts_model.startswith('fal-ai/'):
-            self._generate_fal_tts(text, out_path, instructions)
+            try:
+                self._generate_fal_tts(text, out_path, instructions)
+            except httpx.HTTPStatusError as exc:
+                # Fal can accept a queued Gemini TTS request and then return
+                # 422 from the result endpoint for otherwise valid Korean
+                # narration. Keep production resumable by using the configured
+                # OpenAI account as a deterministic voice fallback.
+                if exc.response.status_code != 422:
+                    raise
+                response_format = out_path.suffix.lower().lstrip('.')
+                if response_format not in {'mp3', 'opus', 'aac', 'flac', 'wav', 'pcm'}:
+                    response_format = 'mp3'
+                with self.client.audio.speech.with_streaming_response.create(
+                    model='gpt-4o-mini-tts',
+                    voice='sage',
+                    input=text,
+                    instructions=instructions,
+                    response_format=response_format,
+                ) as response:
+                    response.stream_to_file(out_path)
         else:
             with self.client.audio.speech.with_streaming_response.create(
                 model=self.tts_model,
