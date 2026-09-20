@@ -20,7 +20,7 @@
 - 공개 업로드는 source_context.automation_scope.public_approval=true와 public_upload_enabled=true가 동시에 확인될 때만 허용한다. 둘 중 하나라도 false이면 공개 업로드를 차단하고 비공개 검토만 허용한다. 이 사전 QA 시점에 아직 YouTube 전송이 실행되지 않은 것은 정상이다.
 
 블로그:
-- source_context.reference_baseline의 ID·SHA-256·네 개 source_urls가 있어야 한다. generated.reference_profile_id가 같은 ID가 아니면 `REFERENCE_PASS=false`로 차단한다.
+- source_context.reference_baseline의 ID·SHA-256·네 개 source_urls가 있어야 한다. generated.reference_profile_id가 같은 ID가 아니면 `REFERENCE_PASS=false`로 차단한다. 블로그는 body_markdown 끝의 `공식 확인 출처`에 실제 원문 URL과 확인일이 있어야 한다.
 - 네 레퍼런스에서 확인된 `질문 상황 → 앞부분 답 → 조건 구분 → 확인 순서/비교 → 오늘 할 행동`의 흐름과 햄쮸의 자연스러운 연결말이 새 주제에 맞게 반영됐는지 본다. 문구·그림·구도를 복제해서는 안 된다.
 - 검수 결과는 내부적으로 `REFERENCE_PASS`, `CONTENT_PASS`, `EDITOR_FORMAT_PASS` 세 관문을 모두 확인한다. 하나라도 실패하면 pass=false이고 blocking_issues에 관문명과 구체적 이유를 남긴다.
 - source_context.automation_scope.stage가 rendered_cards이면 입력에 붙은 실제 PNG 5장을 순서대로 시각 검수한다. 원고/카드 기획 검수만으로 PASS하지 않는다.
