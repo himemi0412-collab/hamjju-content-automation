@@ -554,7 +554,10 @@ class Pipeline:
                 'body_blocks_verified': len(expected), 'cards_verified': hashes,
                 'verified_at': datetime.now(timezone.utc).isoformat(), 'naver_draft_verified': False}
 
-    def _make_short_media(self, generated: dict[str, Any], job_dir: Path, channel_style: str) -> dict[str, Any]:
+    def _make_short_media(
+        self, generated: dict[str, Any], job_dir: Path, channel_style: str,
+        existing_images: list[Path] | None = None,
+    ) -> dict[str, Any]:
         narration_profiles = {
             'ppojjugi_shorts': (
                 self.s.tts_ppojjugi_voice,
@@ -597,11 +600,16 @@ class Pipeline:
                 + ' Selected story narrator profile: '
                 + json.dumps(narrator_profile, ensure_ascii=False)
             )
+        # Use one provider and one voice for every scene in a video. Mixing a
+        # successful Fal scene with an OpenAI fallback scene caused audible
+        # speaker changes and synthetic artifacts in the middle of Shorts.
+        production_tts_model = 'gpt-4o-mini-tts'
+        production_voice = 'coral' if channel_style == 'ppojjugi_shorts' else 'sage'
         media = MediaGenerator(
             self.s.openai_api_key,
             self.s.image_model,
-            self.s.tts_model,
-            voice,
+            production_tts_model,
+            production_voice,
             self.s.card_font_path,
             self.s.image_quality,
             self.budget,
@@ -621,7 +629,12 @@ class Pipeline:
         scene_narrations = [str(scene.get('narration') or '').strip() for scene in scenes]
         if any(not text for text in scene_narrations):
             raise ValueError('Every Shorts scene must include its exact narration segment')
-        images = media.generate_scene_images(scenes, job_dir / 'scenes', channel_style)
+        if existing_images is None:
+            images = media.generate_scene_images(scenes, job_dir / 'scenes', channel_style)
+        else:
+            images = list(existing_images)
+            if len(images) != len(scenes) or any(not path.exists() for path in images):
+                raise RuntimeError('Preserved image set does not match the Shorts scenes')
         total_characters = max(sum(len(text) for text in scene_narrations), 1)
         audio_parts: list[Path] = []
         for index, text in enumerate(scene_narrations, 1):
@@ -653,7 +666,8 @@ class Pipeline:
             'video': str(video),
             'scene_durations': durations,
             'narrator_profile': narrator_profile,
-            'tts_voice': voice,
+            'tts_voice': production_voice,
+            'tts_provider': 'openai',
             'verification': verification,
         }
 
