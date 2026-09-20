@@ -1009,16 +1009,45 @@ def draw_multiline(draw, text: str, xy: tuple[int, int], max_width: int, font, f
     draw.multiline_text(xy, '\n'.join(lines), font=font, fill=fill, spacing=spacing)
 
 
+def _subtitle_phrases(text: str, max_chars: int = 22) -> list[str]:
+    """Split exact narration into short, readable speech-paced cues."""
+    text = ' '.join(text.split())
+    if not text:
+        return []
+    phrases: list[str] = []
+    current = ''
+    for char in text:
+        current += char
+        boundary = char in '。！？!?….,，、' or len(current) >= max_chars
+        if boundary and current.strip():
+            phrases.append(current.strip())
+            current = ''
+    if current.strip():
+        phrases.append(current.strip())
+    return phrases
+
+
 def make_srt(scenes: list[dict[str, Any]], path: Path) -> Path:
     cursor = 0.0
     chunks = []
-    for i, scene in enumerate(scenes, 1):
+    cue_index = 1
+    for scene in scenes:
         dur = max(float(scene.get('seconds') or 5), 1.0)
-        start, end = cursor, cursor + dur
-        caption = str(scene.get('caption') or '').strip()
-        if caption:
-            chunks.append(f'{i}\n{fmt_srt(start)} --> {fmt_srt(end)}\n{caption}\n')
-        cursor = end
+        narration = str(scene.get('narration') or scene.get('caption') or '').strip()
+        phrases = _subtitle_phrases(narration)
+        weights = [max(len(x.replace(' ', '')), 1) for x in phrases]
+        total_weight = max(sum(weights), 1)
+        local_cursor = cursor
+        scene_end = cursor + dur
+        for phrase, weight in zip(phrases, weights):
+            phrase_dur = dur * weight / total_weight
+            end = min(local_cursor + phrase_dur, scene_end)
+            chunks.append(
+                f'{cue_index}\n{fmt_srt(local_cursor)} --> {fmt_srt(end)}\n{phrase}\n'
+            )
+            cue_index += 1
+            local_cursor = end
+        cursor = scene_end
     path.write_text('\n'.join(chunks), encoding='utf-8')
     return path
 
@@ -1055,25 +1084,6 @@ def prepare_short_frames(
                           stroke_width=3, stroke_fill='#383A43', anchor='mm')
                 draw.text((540, 1000), f'{index:02d}', font=number_font, fill='#FFFFFF',
                           stroke_width=2, stroke_fill='#383A43', anchor='mm')
-                caption_text = str(scenes[index - 1].get('caption') or '').strip()
-                if caption_text:
-                    caption_lines: list[str] = []
-                    current = ''
-                    for ch in caption_text:
-                        trial = current + ch
-                        box = draw.textbbox((0, 0), trial, font=caption_font)
-                        if box[2] - box[0] > 850 and current:
-                            caption_lines.append(current)
-                            current = ch
-                        else:
-                            current = trial
-                    if current:
-                        caption_lines.append(current)
-                    draw.multiline_text(
-                        (540, 875), '\n'.join(caption_lines[:2]), font=caption_font,
-                        fill='#FFFFFF', stroke_width=3, stroke_fill='#383A43',
-                        anchor='ma', align='center', spacing=10,
-                    )
             elif channel_style == 'japan_shorts':
                 canvas = ImageOps.fit(source, (1080, 1920), method=Image.Resampling.LANCZOS)
                 if index == 1 and hook.strip():
@@ -1134,14 +1144,13 @@ def compose_short_video(images: list[Path], scenes: list[dict[str, Any]], audio:
     subprocess.run(['ffmpeg','-y','-loglevel','error','-f','concat','-safe','0','-i',str(concat),'-c','copy',str(silent)], check=True)
 
     escaped = str(srt.resolve()).replace('\\', '/').replace(':', '\\:').replace("'", "\\'")
-    if channel_style == 'ppojjugi_shorts':
-        vf = 'null'
-    else:
-        vf = (
-            f"subtitles='{escaped}':"
-            f"force_style='FontName=Noto Sans CJK JP,FontSize=18,Outline=2,Shadow=0,"
-            f"Alignment=2,MarginV=110'"
-        )
+    font_name = 'Noto Sans CJK KR' if channel_style == 'ppojjugi_shorts' else 'Noto Sans CJK JP'
+    margin_v = 245 if channel_style == 'ppojjugi_shorts' else 82
+    vf = (
+        f"subtitles='{escaped}':"
+        f"force_style='FontName={font_name},FontSize=20,Outline=3,Shadow=0,"
+        f"PrimaryColour=&H00FFFFFF,Alignment=2,MarginL=90,MarginR=90,MarginV={margin_v}'"
+    )
     total_duration = sum(max(float(scene.get('seconds') or 5), 1.0) for scene in scenes)
     audio_filter = (
         'loudnorm=I=-16:TP=-1.5:LRA=11,apad'
@@ -1180,13 +1189,16 @@ def verify_short_artifacts(
     required = [*images, audio, srt, video]
     if any(not path.is_file() or path.stat().st_size <= 0 for path in required):
         raise RuntimeError('Shorts verification found a missing or empty artifact')
-    expected_captions = sum(bool(str(scene.get('caption') or '').strip()) for scene in scenes)
+    expected_captions = sum(
+        len(_subtitle_phrases(str(scene.get('narration') or scene.get('caption') or '')))
+        for scene in scenes
+    )
     observed_captions = sum(
         bool(line.strip().isdigit())
         for line in srt.read_text(encoding='utf-8').splitlines()
     )
     if observed_captions != expected_captions:
-        raise RuntimeError('Shorts subtitle cue count does not match the scene captions')
+        raise RuntimeError('Shorts subtitle cue count does not match the spoken narration phrases')
     info = probe_video_streams(video)
     streams = info.get('streams') or []
     video_streams = [stream for stream in streams if stream.get('codec_type') == 'video']
