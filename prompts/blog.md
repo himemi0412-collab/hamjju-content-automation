@@ -28,7 +28,7 @@
 - 결과는 검토·네이버 비공개 임시저장용이며 공개·예약 발행을 지시하지 않는다.
 
 카드뉴스 기준:
-- 정확히 5장: 질문 표지(cover) → 원리 흐름(flow) → 동일 기준 비교(comparison) → 행동 체크(checklist) → 선택 기준 요약(decision). 세트 전체 형식은 `square`(1080×1080) 또는 `landscape_4_3`(1448×1086) 중 주제와 정보 밀도에 맞는 하나를 선택한다.
+- 정확히 5장: 질문 표지(cover) → 원리 흐름(flow) → 동일 기준 비교(comparison) → 행동 체크(checklist) → 선택 기준 요약(decision). `card_format`에는 반드시 `square` 또는 `landscape_4_3` 중 정확히 하나만 적는다. 다른 문구, 치수, 두 선택지를 함께 적지 않는다.
 - 시각 계열은 `soft_scene`, `playful_diagram`, `contract_notebook`, `clipboard_checklist` 중 하나를 고른다. 이는 고정 템플릿이 아니라 네 레퍼런스에서 추출한 색·여백·생활 사물·정보 장치 방향이다. 안전·침구처럼 한 장면과 여백이 중요한 글은 soft_scene, 설치·치수는 playful_diagram, 계약·비용은 contract_notebook, 단계·소유권·마지막 행동은 clipboard_checklist를 우선 검토한다.
 - `예쁘게`, `깔끔하게` 같은 추상 표현으로 끝내지 않는다. 글의 질문·정보 구조·독자·카드 역할을 보고 아래 이름 중 **한 가지 중심 디자인 언어**를 AI가 직접 선택해 `design_language`에 정확히 기록한다. 사용자에게 고르게 하지 않으며, 20개를 한 세트에 섞지 않는다.
 - 허용 디자인 언어: `Swiss Typography`, `Retro Tech UI`, `Bento Editorial`, `Monochrome Magazine`, `Neo Brutalism`, `Japanese Editorial`, `Quiet Luxury Editorial`, `Newspaper 2.0`, `Technical Manual`, `Screenshot Editorial`, `Prompt Playground`, `Terminal Noir`, `Fluorescent Minimal`, `Soft Swiss`, `Index / Catalogue`, `Cinematic Title Card`, `Zine Collage`, `Split Screen`, `Chrome Accent`, `Modular Poster`.
@@ -62,7 +62,7 @@
 스키마:
 {
   "reference_profile_id": "HAMZZU_NAVER_REFERENCE_V1",
-  "card_format": "square 또는 landscape_4_3",
+  "card_format": "square",
   "visual_family": "soft_scene 또는 playful_diagram 또는 contract_notebook 또는 clipboard_checklist",
   "design_language": "위 20개 허용 이름 중 정확히 하나",
   "title": "제목",
