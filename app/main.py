@@ -558,6 +558,50 @@ def repair_short_video(channel: str, page_id: str, source_dir: Path):
     })
 
 
+@app.command('repair-short-av')
+def repair_short_av(channel: str, page_id: str, source_dir: Path):
+    """Preserve approved images while rebuilding voice, timed subtitles, and MP4."""
+    s, notion, _, _, pipeline = build()
+    channels = load_channels()
+    if channel not in {'ppojjugi_shorts', 'japan_shorts'}:
+        raise typer.BadParameter('channel must be ppojjugi_shorts or japan_shorts')
+    cfg = channels[channel]
+    manifest_path = source_dir / 'manifest.json'
+    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    if manifest.get('page_id') != page_id or manifest.get('channel') != channel:
+        raise RuntimeError('Artifact manifest does not match the requested page and channel')
+    generated = dict(manifest.get('generated') or {})
+    scenes = list(generated.get('scenes') or [])
+    images = sorted((source_dir / 'scenes').glob('scene_*.png'))
+    if not scenes or len(images) != len(scenes):
+        raise RuntimeError('Artifact is missing the preserved scene images')
+    try:
+        page = notion.retrieve_page(page_id)
+        channel_value = property_value((page.get('properties') or {}).get('채널', {}))
+        if channel_value != cfg.notion_channel_value:
+            raise RuntimeError('Notion page channel does not match the requested channel')
+        output_dir = s.output_dir / page_id.replace('-', '')[:16]
+        output_dir.mkdir(parents=True, exist_ok=True)
+        media = pipeline._make_short_media(
+            generated, output_dir, channel, existing_images=images,
+        )
+        video = Path(media['video'])
+        notion.attach_files(page_id, '최종 영상', [video])
+        youtube_url = pipeline._upload_private(channel, generated, video, privacy_status='private')
+        notion.update_status(page_id, cfg.success_status)
+    finally:
+        notion.close()
+    print_json({
+        'page_id': page_id,
+        'channel': channel,
+        'status': cfg.success_status,
+        'images_preserved': len(images),
+        'media': media,
+        'youtube_url': youtube_url,
+        'youtube_privacy': 'private',
+    })
+
+
 @app.command('naver-status')
 def naver_status():
     print(naver_explain())
