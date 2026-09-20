@@ -586,7 +586,14 @@ def repair_short_av(channel: str, page_id: str, source_dir: Path):
             generated, output_dir, channel, existing_images=images,
         )
         video = Path(media['video'])
-        notion.attach_files(page_id, '최종 영상', [video])
+        notion_video_attached = True
+        try:
+            notion.attach_files(page_id, '최종 영상', [video])
+        except Exception:
+            # Notion's small-file endpoint rejects some otherwise valid long
+            # MP4 files. The verified video and private YouTube delivery must
+            # not be discarded because the optional review attachment failed.
+            notion_video_attached = False
         youtube_url = pipeline._upload_private(channel, generated, video, privacy_status='private')
         notion.update_status(page_id, cfg.success_status)
     finally:
@@ -596,6 +603,7 @@ def repair_short_av(channel: str, page_id: str, source_dir: Path):
         'channel': channel,
         'status': cfg.success_status,
         'images_preserved': len(images),
+        'notion_video_attached': notion_video_attached,
         'media': media,
         'youtube_url': youtube_url,
         'youtube_privacy': 'private',
