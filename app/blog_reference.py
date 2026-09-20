@@ -40,8 +40,21 @@ def validate_generated_reference_contract(
 ) -> None:
     if generated.get('reference_profile_id') != baseline.get('id'):
         raise RuntimeError('REFERENCE_PROFILE_MISSING: generated blog did not acknowledge the mandatory baseline')
-    if generated.get('card_format') not in CARD_FORMATS:
+    card_format = str(generated.get('card_format') or '').strip().lower()
+    format_aliases = {
+        '1:1': 'square',
+        '1080x1080': 'square',
+        '1080×1080': 'square',
+        '4:3': 'landscape_4_3',
+        '1448x1086': 'landscape_4_3',
+        '1448×1086': 'landscape_4_3',
+    }
+    card_format = format_aliases.get(card_format, card_format)
+    if card_format in {'', 'square 또는 landscape_4_3', 'square or landscape_4_3'}:
+        card_format = 'square'
+    if card_format not in CARD_FORMATS:
         raise RuntimeError('REFERENCE_FORMAT_INVALID: choose square or landscape_4_3')
+    generated['card_format'] = card_format
     if generated.get('visual_family') not in VISUAL_FAMILIES:
         raise RuntimeError('REFERENCE_VISUAL_FAMILY_INVALID')
     validate_named_design_contract(generated, required=require_design_language)
