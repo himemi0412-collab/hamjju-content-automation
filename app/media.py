@@ -301,6 +301,17 @@ def render_blog_cards(
             'playful_diagram': 'diagram',
             'contract_notebook': 'document',
             'clipboard_checklist': 'document',
+            'filter': 'appliance',
+            'air_filter': 'appliance',
+            'air_purifier': 'appliance',
+            'airflow': 'diagram',
+            'dishwasher': 'appliance',
+            'dishwasher_filter': 'appliance',
+            'rinse_aid': 'bubbles',
+            'water_flow': 'diagram',
+            'drain': 'diagram',
+            'spray_nozzle': 'appliance',
+            'glassware': 'home',
         }.get(illustration, illustration)
         if illustration not in BLOG_SYMBOLS:
             raise ValueError(f'Card {i} has an unsupported explanatory illustration')
@@ -319,6 +330,17 @@ def render_blog_cards(
                 'playful_diagram': 'diagram',
                 'contract_notebook': 'document',
                 'clipboard_checklist': 'document',
+                'filter': 'appliance',
+                'air_filter': 'appliance',
+                'air_purifier': 'appliance',
+                'airflow': 'diagram',
+                'dishwasher': 'appliance',
+                'dishwasher_filter': 'appliance',
+                'rinse_aid': 'bubbles',
+                'water_flow': 'diagram',
+                'drain': 'diagram',
+                'spray_nozzle': 'appliance',
+                'glassware': 'home',
             }.get(item.get('illustration'), item.get('illustration'))
             if item_illustration is not None and item_illustration not in BLOG_SYMBOLS:
                 raise ValueError(f'Card {i} item has an unsupported explanatory illustration')

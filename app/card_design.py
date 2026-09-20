@@ -407,8 +407,13 @@ def get_design_blueprint(name: str) -> dict[str, Any]:
 def apply_named_design_contract(generated: dict[str, Any]) -> dict[str, Any]:
     """Bind an AI-selected style name to inspectable deterministic render tokens."""
     name = generated.get('design_language')
+    # Missing optional model output must not discard an otherwise complete
+    # article. Explicit unknown names still fail closed below.
+    if not name:
+        name = 'Bento Editorial'
     style = get_design_language(name)
     result = deepcopy(generated)
+    result['design_language'] = name
     result['design_direction'] = deepcopy(style['direction'])
     result['design_blueprint'] = get_design_blueprint(name)
     return result
