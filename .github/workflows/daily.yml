@@ -279,7 +279,14 @@ jobs:
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'true'
           AUTO_PRIVATE_YOUTUBE_UPLOAD: 'true'
-        run: python -m app.main channel "${{ inputs.channel }}" --limit 1 --require-item --retry-revision
+          REVISION_PAGE_ID: ${{ inputs.page_id }}
+        run: |
+          if [ -n "$REVISION_PAGE_ID" ]; then
+            [[ "$REVISION_PAGE_ID" =~ ^[0-9a-fA-F-]{32,36}$ ]]
+            python -m app.main page "${{ inputs.channel }}" "$REVISION_PAGE_ID" --retry-revision
+          else
+            python -m app.main channel "${{ inputs.channel }}" --limit 1 --require-item --retry-revision
+          fi
 
       - name: Retry one exact blog revision without publishing
         if: ${{ inputs.mode == 'retry_revision' && inputs.channel == 'naver_blog' }}
