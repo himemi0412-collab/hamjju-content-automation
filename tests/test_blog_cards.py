@@ -5,7 +5,11 @@ import pytest
 from PIL import Image, ImageDraw
 
 from app.media import _blog_distinct_item_symbols, render_blog_cards
-from app.card_design import SUPPORTED_DESIGN_LANGUAGES, get_design_blueprint
+from app.card_design import (
+    SUPPORTED_DESIGN_LANGUAGES,
+    apply_named_design_contract,
+    get_design_blueprint,
+)
 
 
 def sample_cards():
@@ -87,6 +91,13 @@ def test_named_design_languages_change_actual_render_tokens(tmp_path):
 def test_unknown_named_design_language_fails_closed(tmp_path):
     with pytest.raises(ValueError, match='named card-news design language'):
         render_blog_cards(sample_cards(), tmp_path, design_language='Pretty AI')
+
+
+def test_missing_named_design_language_uses_reliable_default():
+    generated = apply_named_design_contract({'design_language': None})
+    assert generated['design_language'] == 'Bento Editorial'
+    assert generated['design_direction']
+    assert generated['design_blueprint']
 
 
 def test_screenshot_editorial_uses_cover_first_screen_compositions(tmp_path, monkeypatch):
