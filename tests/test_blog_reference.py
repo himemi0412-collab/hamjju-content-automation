@@ -108,6 +108,20 @@ def test_legacy_resume_can_preserve_pre_design_language_bytes():
     validate_generated_reference_contract(generated, baseline, require_design_language=False)
 
 
+def test_schema_hint_card_format_falls_back_to_square():
+    baseline = load_blog_reference()
+    generated = {
+        'reference_profile_id': REFERENCE_PROFILE_ID,
+        'card_format': 'square 또는 landscape_4_3',
+        'visual_family': 'playful_diagram',
+        'card_news': [{'_': index} for index in range(5)],
+    }
+
+    validate_generated_reference_contract(generated, baseline, require_design_language=False)
+
+    assert generated['card_format'] == 'square'
+
+
 def test_reference_baseline_is_incomplete_without_every_url(tmp_path):
     source = tmp_path / 'baseline.md'
     source.write_text('# HAMZZU_NAVER_REFERENCE_V1\n' + '\n'.join(REFERENCE_URLS[:-1]), encoding='utf-8')
