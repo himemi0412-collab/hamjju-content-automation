@@ -281,6 +281,19 @@ jobs:
           AUTO_PRIVATE_YOUTUBE_UPLOAD: 'true'
         run: python -m app.main channel "${{ inputs.channel }}" --limit 1 --require-item --retry-revision
 
+      - name: Retry one exact blog revision without publishing
+        if: ${{ inputs.mode == 'retry_revision' && inputs.channel == 'naver_blog' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
+          ENABLE_WEB_RESEARCH: 'true'
+          ENABLE_MEDIA_GENERATION: 'false'
+          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
+          REVISION_PAGE_ID: ${{ inputs.page_id }}
+        run: |
+          [[ "$REVISION_PAGE_ID" =~ ^[0-9a-fA-F-]{32,36}$ ]]
+          python -m app.main page naver_blog "$REVISION_PAGE_ID" --retry-revision
+
       - name: Regenerate one exact Shorts review without YouTube upload
         if: ${{ inputs.mode == 'regenerate_review' && inputs.channel != 'naver_blog' }}
         env:
