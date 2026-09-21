@@ -600,11 +600,10 @@ class Pipeline:
                 + ' Selected story narrator profile: '
                 + json.dumps(narrator_profile, ensure_ascii=False)
             )
-        # Use one provider and one voice for every scene in a video. Mixing a
-        # successful Fal scene with an OpenAI fallback scene caused audible
-        # speaker changes and synthetic artifacts in the middle of Shorts.
-        production_tts_model = 'gpt-4o-mini-tts'
-        production_voice = 'coral' if channel_style == 'ppojjugi_shorts' else 'sage'
+        # Use the channel's previously approved, age-matched Fal profile for
+        # every scene. Never silently replace it with a generic OpenAI voice.
+        production_tts_model = self.s.tts_model
+        production_voice = voice
         media = MediaGenerator(
             self.s.openai_api_key,
             self.s.image_model,
@@ -667,7 +666,7 @@ class Pipeline:
             'scene_durations': durations,
             'narrator_profile': narrator_profile,
             'tts_voice': production_voice,
-            'tts_provider': 'openai',
+            'tts_provider': 'fal' if production_tts_model.startswith('fal-ai/') else 'openai',
             'verification': verification,
         }
 
