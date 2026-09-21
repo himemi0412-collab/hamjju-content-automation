@@ -345,28 +345,39 @@ def retry_qa_rejections_once(
     pipeline: Pipeline,
     cfg,
     results: list[dict],
+    max_attempts: int = 2,
 ) -> list[dict]:
-    """Retry only QA-rejected items once, without hiding infrastructure errors."""
+    """Retry only QA-rejected items, bounded to avoid wasting free Actions minutes."""
     retry_cfg = replace(cfg, ready_status=cfg.revision_status)
     final_results: list[dict] = []
     for result in results:
-        page_id = result.get('page_id')
-        should_retry = (
-            bool(page_id)
-            and result.get('status') == cfg.revision_status
-            and result.get('qa_pass') is False
-            and not result.get('budget_blocked')
-        )
-        if not should_retry:
-            final_results.append(result)
-            continue
-        page = pipeline.notion.retrieve_page(str(page_id))
-        retried = pipeline.process_page(retry_cfg, page)
-        retried['automatic_retry'] = {
-            'attempted': True,
-            'previous_blocking_issues': list(result.get('blocking_issues') or []),
-        }
-        final_results.append(retried)
+        current = result
+        retry_history: list[dict] = []
+        for attempt in range(1, max_attempts + 1):
+            page_id = current.get('page_id')
+            should_retry = (
+                bool(page_id)
+                and current.get('status') == cfg.revision_status
+                and current.get('qa_pass') is False
+                and not current.get('budget_blocked')
+            )
+            if not should_retry:
+                break
+            previous_issues = list(current.get('blocking_issues') or [])
+            page = pipeline.notion.retrieve_page(str(page_id))
+            current = pipeline.process_page(retry_cfg, page)
+            retry_history.append({
+                'attempt': attempt,
+                'previous_blocking_issues': previous_issues,
+            })
+        if retry_history:
+            current['automatic_retry'] = {
+                'attempted': True,
+                'attempt_count': len(retry_history),
+                'previous_blocking_issues': retry_history[0]['previous_blocking_issues'],
+                'history': retry_history,
+            }
+        final_results.append(current)
     return final_results
 
 
