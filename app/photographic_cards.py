@@ -30,6 +30,25 @@ def _fit(draw: ImageDraw.ImageDraw, text: str, path: str | None, maximum: int,
     raise ValueError('Korean overlay text does not fit its reserved region')
 
 
+def _subject_lock(card: dict[str, Any]) -> str:
+    source = ' '.join([str(card.get('headline') or ''), str(card.get('copy') or '')])
+    locks = (
+        (('식기세척기',), 'Show a built-in kitchen dishwasher with dish racks and a door-mounted detergent dispenser. Never show an air purifier, dehumidifier, water purifier, laundry washer or generic white appliance.'),
+        (('세탁기',), 'Show a front-loading laundry washing machine with a circular drum door and the pull-out detergent drawer at the upper front. Never show dishwasher racks, spray arms or a kitchen dishwasher.'),
+        (('건조기',), 'Show a front-loading tumble clothes dryer with a circular door and a removable lint filter at the door or lower opening. Never show an air purifier, dehumidifier or water tank appliance.'),
+        (('와이파이', '2.4GHz'), 'Show only a recognizable wireless router with antennas, a smartphone or laptop, walls and signal-distance context. Never add household cleaning appliances, filters, brushes or vacuum parts.'),
+        (('로봇청소기',), 'Show a low round robot vacuum and its dock, dust bin or clean-water tank. Never substitute an air purifier or dehumidifier.'),
+        (('공기청정기',), 'Show a floor-standing air purifier with a large removable air filter and intake grille. Never show a dehumidifier water tank.'),
+        (('김치냉장고',), 'Show a Korean kimchi refrigerator with sealed kimchi containers, shelf position and cold-air outlet context. No generic document icons.'),
+        (('냉장고',), 'Show a household refrigerator interior with food containers, thermometer or power-outage context as appropriate.'),
+        (('에어컨',), 'Show a wall-mounted home air conditioner, removable mesh filter and dry indoor cooling context.'),
+    )
+    for keywords, instruction in locks:
+        if any(keyword in source for keyword in keywords):
+            return instruction
+    return 'Keep the exact appliance category and action named by the topic; do not substitute a visually similar appliance.'
+
+
 def _scene_prompt(card: dict[str, Any], index: int, revision_note: str = '') -> str:
     items = card.get('items') or []
     item_text = '; '.join(
@@ -39,7 +58,8 @@ def _scene_prompt(card: dict[str, Any], index: int, revision_note: str = '') -> 
         'Create one square editorial lifestyle image for a Korean home-appliance help article. '
         f'Card role: {ROLES[index - 1]}. Topic: {card.get("headline", "")}. '
         f'Explanation: {card.get("copy", "")}. Visible situation and objects: {item_text}. '
-        'Show a believable unbranded Korean home interior and concrete relevant appliances, '
+        _subject_lock(card) + ' ' +
+        'Show a believable unbranded Korean home interior and concrete relevant appliances, 
         'containers, controls, filters, documents, measurements, or actions. '
         'The image must explain the situation visually, with a clear subject and natural scale. '
         'Bright neutral daylight, cool white, pale lavender, muted mint and soft blue accents; '
