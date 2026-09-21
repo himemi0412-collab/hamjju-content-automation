@@ -424,7 +424,7 @@ def render_blog_cards(
             for ring_x in range(150, 950, 125):
                 _blog_style_panel(draw, box((ring_x, 388, ring_x + 26, 432)), named_style,
                                   fill=ink, outline=None, width=size(1), radius=size(10))
-            step_symbols = _blog_flow_symbols(illustration)
+            step_symbols = _blog_distinct_item_symbols(items, illustration)
             for j, item in enumerate(items):
                 x = 72 + j * 320
                 color = (primary, secondary, tertiary)[j]
