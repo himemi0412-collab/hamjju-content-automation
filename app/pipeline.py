@@ -44,6 +44,64 @@ class Pipeline:
         self.budget = budget
         self.operating_contract = load_operating_contract(settings.operating_contract_path)
 
+    def rerender_existing_blog_cards(self, page_id: str) -> dict[str, Any]:
+        """Replace only the file property for an unsaved blog; never regenerate its article."""
+        page = self.notion.retrieve_page(page_id)
+        props = page.get('properties', {})
+        draft_url = props.get('네이버 임시저장 주소', {}).get('url')
+        if draft_url:
+            raise RuntimeError('NAVER_DRAFT_ALREADY_EXISTS')
+        original_status = props.get('상태', {}).get('select', {}).get('name') or ''
+        if original_status in {'임시저장 완료', 'VERIFIED_NAVER_DRAFT', '완료'}:
+            raise RuntimeError('NAVER_DRAFT_STATUS_ALREADY_COMPLETE')
+        snapshot = self.notion.read_latest_json_snapshot(page_id)
+        generated = deepcopy(snapshot['generated'])
+        original_body_hash = hashlib.sha256(
+            str(generated.get('body_markdown') or '').encode('utf-8')
+        ).hexdigest()
+        if not generated.get('design_language'):
+            generated['design_language'] = 'Bento Editorial'
+        generated = apply_named_design_contract(generated)
+        if hashlib.sha256(str(generated.get('body_markdown') or '').encode('utf-8')).hexdigest() != original_body_hash:
+            raise RuntimeError('ARTICLE_BODY_CHANGED_DURING_CARD_RERENDER')
+        baseline = load_blog_reference(self.s.blog_reference_path)
+        validate_generated_reference_contract(generated, baseline, require_design_language=True)
+        out_dir = self.s.output_dir / page_id.replace('-', '')[:16] / 'cards'
+        cards = render_blog_cards(
+            list(generated.get('card_news') or []), out_dir, self.s.card_font_path,
+            card_format=generated.get('card_format') or 'square',
+            visual_family=generated.get('visual_family') or 'playful_diagram',
+            design_language=generated['design_language'],
+            design_blueprint=generated.get('design_blueprint'),
+        )
+        qa, usage = self.ai.qa(generated, {
+            'channel': 'naver_blog',
+            'reference_baseline': baseline,
+            'source_context': {'named_design_language_required': True},
+            'automation_scope': {
+                'mode': 'rerender_existing_cards', 'stage': 'rendered_cards',
+                'media_expected': True, 'article_body_frozen': True,
+                'visual_ratio': '60-70', 'text_ratio': '30-40',
+            },
+        }, image_paths=cards)
+        if qa.get('pass') is not True or qa.get('blocking_issues'):
+            raise RuntimeError('RERENDERED_CARD_QA_FAILED: ' + json.dumps(qa, ensure_ascii=False))
+        upload_ids = self.notion.attach_files(page_id, '생성 이미지', cards)
+        if len(upload_ids) != 5:
+            raise RuntimeError('NOTION_CARD_REPLACEMENT_INCOMPLETE')
+        self.notion.update_status(page_id, 'CODEX_HANDOFF_READY')
+        self.notion.append_blocks(page_id, [
+            {'object': 'block', 'type': 'heading_2', 'heading_2': {'rich_text': [
+                {'type': 'text', 'text': {'content': '카드뉴스 최신 재제작본 · visual-first QA PASS'}}]}},
+            {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': [
+                {'type': 'text', 'text': {'content': '기존 원고는 변경하지 않았습니다. 생성 이미지 속성의 5장이 현재 정본이며 네이버 저장·공개·예약발행은 실행하지 않았습니다.'}}]}},
+        ])
+        return {
+            'page_id': page_id, 'status': 'cards_replaced', 'card_count': len(cards),
+            'article_body_sha256': original_body_hash, 'qa': qa, 'usage': usage,
+            'previous_status': original_status, 'new_status': 'CODEX_HANDOFF_READY',
+        }
+
     def run_channel(self, cfg: ChannelConfig, limit: int | None = None, dry_run: bool = False) -> list[dict[str, Any]]:
         ds = self.s.blog_data_source_id if cfg.source == 'blog' else self.s.shorts_data_source_id
         pages = self.notion.query_ready(
