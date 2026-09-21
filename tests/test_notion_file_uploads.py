@@ -55,7 +55,7 @@ def test_upload_file_uses_single_part_for_small_file(tmp_path, monkeypatch):
 def test_upload_file_uses_numbered_parts_and_completes(tmp_path, monkeypatch):
     path = tmp_path / 'clip.mp4'
     path.write_bytes(b'abcdefghijklmnopqrstuvwxyz')
-    notion = NotionClient('token')
+    notion = NotionClient('token', multipart_upload_enabled=True)
     notion.client.close()
     notion.client = FakeApiClient()
     sends = []
@@ -85,3 +85,21 @@ def test_upload_file_uses_numbered_parts_and_completes(tmp_path, monkeypatch):
         {'part_number': '3'},
     ]
     assert [len(item[2]) for item in sends] == [10, 10, 6]
+
+
+def test_free_workspace_rejects_large_file_before_api_call(tmp_path, monkeypatch):
+    path = tmp_path / 'clip.mp4'
+    path.write_bytes(b'12345678901')
+    notion = NotionClient('token')
+    notion.client.close()
+    notion.client = FakeApiClient()
+    monkeypatch.setattr(notion_module, 'NOTION_SINGLE_PART_LIMIT', 10)
+
+    assert notion.can_upload_file(path) is False
+    try:
+        notion.upload_file(path)
+    except ValueError as exc:
+        assert str(exc) == 'NOTION_FREE_WORKSPACE_FILE_LIMIT'
+    else:
+        raise AssertionError('large free-workspace upload should be blocked')
+    assert notion.client.calls == []
