@@ -30,7 +30,7 @@ def _fit(draw: ImageDraw.ImageDraw, text: str, path: str | None, maximum: int,
     raise ValueError('Korean overlay text does not fit its reserved region')
 
 
-def _scene_prompt(card: dict[str, Any], index: int) -> str:
+def _scene_prompt(card: dict[str, Any], index: int, revision_note: str = '') -> str:
     items = card.get('items') or []
     item_text = '; '.join(
         f"{x.get('label', '')}: {x.get('detail', '')}" for x in items if isinstance(x, dict)
@@ -47,7 +47,8 @@ def _scene_prompt(card: dict[str, Any], index: int) -> str:
         'Leave calm low-detail negative space across the upper 30 percent for a later typography overlay. '
         'No people unless hands are essential to demonstrate the action. '
         'ABSOLUTELY NO text, letters, numbers, logos, labels, UI glyphs, watermark, yellow cast, sepia, '
-        'collage, floating icons, generic infographic nodes, or repeated template boxes.'
+        'collage, floating icons, generic infographic nodes, or repeated template boxes. '
+        + (f'Correct this prior QA problem: {revision_note}' if revision_note else '')
     )
 
 
@@ -61,12 +62,21 @@ def generate_and_typeset_blog_cards(
     font_path: str | None,
     budget: Any | None = None,
     estimated_cost_usd: float = 0.05,
+    only_indices: set[int] | None = None,
+    revision_notes: dict[int, str] | None = None,
 ) -> list[Path]:
     if len(cards) != 5:
         raise ValueError('Blog card set must contain exactly five cards')
     out_dir.mkdir(parents=True, exist_ok=True)
     results: list[Path] = []
+    revision_notes = revision_notes or {}
     for index, card in enumerate(cards, 1):
+        final_path = out_dir / f'card_{index:02d}.png'
+        if only_indices is not None and index not in only_indices:
+            if not final_path.exists():
+                raise RuntimeError(f'Missing preserved card for selective retry: {index}')
+            results.append(final_path)
+            continue
         if budget:
             budget.reserve('image_generation', estimated_cost_usd, {
                 'model': model, 'quality': quality, 'asset': 'blog_card_background',
@@ -74,7 +84,7 @@ def generate_and_typeset_blog_cards(
             })
         response = client.images.generate(
             model=model,
-            prompt=_scene_prompt(card, index),
+            prompt=_scene_prompt(card, index, revision_notes.get(index, '')),
             size='1024x1024',
             quality=quality,
         )
@@ -109,7 +119,6 @@ def generate_and_typeset_blog_cards(
         draw.text((64, 994), '주제별 생성 장면 · 실제 제품과 다를 수 있음',
                   font=_font(font_path, 21), fill='#343741')
 
-        final_path = out_dir / f'card_{index:02d}.png'
         canvas.convert('RGB').save(final_path, quality=95)
         results.append(final_path)
     return results
