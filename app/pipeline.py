@@ -537,12 +537,19 @@ class Pipeline:
                     )
                     self.state.record_stage(page_id, cfg.name, content_version, 'github_actions', 'MEDIA_READY', run_id)
                     if media.get('video'):
-                        try:
-                            self.notion.attach_files(page_id, '최종 영상', [Path(media['video'])])
-                            media['notion_video_attached'] = True
-                        except Exception as exc:
+                        video_path = Path(media['video'])
+                        if not self.notion.can_upload_file(video_path):
                             media['notion_video_attached'] = False
-                            media['notion_video_error'] = repr(exc)
+                            media['notion_video_skipped_reason'] = (
+                                'notion_free_workspace_20mb_limit; youtube_private_url_saved_instead'
+                            )
+                        else:
+                            try:
+                                self.notion.attach_files(page_id, '최종 영상', [video_path])
+                                media['notion_video_attached'] = True
+                            except Exception as exc:
+                                media['notion_video_attached'] = False
+                                media['notion_video_error'] = repr(exc)
                     if self.s.auto_private_youtube_upload and media.get('video'):
                         public_approved = context.get('properties', {}).get('공개 승인') is True
                         privacy_status = (
