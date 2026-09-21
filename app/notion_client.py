@@ -13,8 +13,9 @@ NOTION_MAX_PARTS = 1000
 
 
 class NotionClient:
-    def __init__(self, token: str):
+    def __init__(self, token: str, multipart_upload_enabled: bool = False):
         self.token = token
+        self.multipart_upload_enabled = multipart_upload_enabled
         self.client = httpx.Client(
             base_url='https://api.notion.com/v1',
             headers={
@@ -233,8 +234,13 @@ class NotionClient:
         )
         response.raise_for_status()
 
+    def can_upload_file(self, path: Path) -> bool:
+        return path.stat().st_size <= NOTION_SINGLE_PART_LIMIT or self.multipart_upload_enabled
+
     def upload_file(self, path: Path) -> str:
         size = path.stat().st_size
+        if size > NOTION_SINGLE_PART_LIMIT and not self.multipart_upload_enabled:
+            raise ValueError('NOTION_FREE_WORKSPACE_FILE_LIMIT')
         content_type = mimetypes.guess_type(path.name)[0] or 'application/octet-stream'
         if size <= NOTION_SINGLE_PART_LIMIT:
             create_payload = {
