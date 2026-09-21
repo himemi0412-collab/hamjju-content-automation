@@ -31,6 +31,8 @@ This file is a mandatory production input for every new `naver_blog` run. It is 
 - 허용 디자인 언어는 Swiss Typography, Retro Tech UI, Bento Editorial, Monochrome Magazine, Neo Brutalism, Japanese Editorial, Quiet Luxury Editorial, Newspaper 2.0, Technical Manual, Screenshot Editorial, Prompt Playground, Terminal Noir, Fluorescent Minimal, Soft Swiss, Index / Catalogue, Cinematic Title Card, Zine Collage, Split Screen, Chrome Accent, Modular Poster다. 한 세트에는 하나만 선택하며 스타일 이름만 바꾼 둥근 상자형 반복은 실패다.
 - 흰색은 `#FFFFFF`, 제목은 Cafe24 Ssurround, 작은 본문은 읽기 쉬운 고딕을 사용한다. 한 장은 중립 배경 외 주조색 1개와 포인트 1~2개, 전체 세트는 3~5색 안에서 반복한다.
 - 큰 질문과 핵심 사물이 모바일 축소 화면에서 먼저 보여야 한다. 긴 설명은 본문으로 보내고 카드에는 짧은 판단 정보만 둔다.
+- 각 카드의 시각 장면·생활 사물·화면·설명 도식은 체감 면적의 60~70%, 전체 한글 정보는 30~40% 이하를 기준으로 한다. headline은 공백 포함 18자, copy는 공백 포함 42자 이내로 제한한다.
+- 제목만 크게 배치하고 작은 아이콘을 장식처럼 붙이는 구성을 금지한다. 생성형 이미지에는 글자를 그리게 하지 않고, 모든 실제 문구는 코드 렌더러가 별도 레이어로 합성한다.
 - 실제 제품 정체성이 중요하면 권리가 확인된 실제/공식 이미지를 우선한다. 불확실하면 무브랜드 설명 도식을 사용하고 실제 제품 사진처럼 설명하지 않는다.
 
 ## Fail-closed review contract
