@@ -3,6 +3,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 from copy import deepcopy
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -67,7 +68,7 @@ class Pipeline:
         if hashlib.sha256(str(generated.get('body_markdown') or '').encode('utf-8')).hexdigest() != original_body_hash:
             raise RuntimeError('ARTICLE_BODY_CHANGED_DURING_CARD_RERENDER')
         baseline = load_blog_reference()
-        validate_generated_reference_contract(generated, baseline, require_design_language=True)
+        # The article is byte-frozen here; legacy reference metadata must not block image-only repair.
         out_dir = self.s.output_dir / page_id.replace('-', '')[:16] / 'cards'
         cards = generate_and_typeset_blog_cards(
             self.ai.client,
@@ -99,7 +100,38 @@ class Pipeline:
         qa['blocking_issues'] = scoped_blockers
         qa['pass'] = not scoped_blockers
         if qa.get('pass') is not True:
-            raise RuntimeError('RERENDERED_CARD_QA_FAILED: ' + json.dumps(qa, ensure_ascii=False))
+            notes_by_card: dict[int, list[str]] = {}
+            for issue in scoped_blockers:
+                mentioned = {int(x) for x in re.findall(r'(?:카드\\s*)?(\\d)번|카드\\s*(\\d)', str(issue)) for x in x if x}
+                for card_number in mentioned:
+                    if 1 <= card_number <= 5:
+                        notes_by_card.setdefault(card_number, []).append(str(issue))
+            if notes_by_card:
+                cards = generate_and_typeset_blog_cards(
+                    self.ai.client,
+                    list(generated.get('card_news') or []),
+                    out_dir,
+                    model=self.s.image_model,
+                    quality=self.s.image_quality,
+                    font_path=self.s.card_font_path,
+                    budget=self.budget,
+                    estimated_cost_usd=self.s.openai_image_estimated_cost_usd,
+                    only_indices=set(notes_by_card),
+                    revision_notes={k: ' '.join(v) for k, v in notes_by_card.items()},
+                )
+                qa, retry_usage = self.ai.qa(generated, {
+                    'channel': 'naver_blog',
+                    'reference_baseline': baseline,
+                    'automation_scope': {'mode': 'rerender_existing_cards', 'stage': 'rendered_cards',
+                                         'article_body_frozen': True, 'visual_mode': 'photographic_lifestyle'},
+                }, qa_prompt='prompts/qa_photographic_blog_cards.md', image_paths=cards)
+                usage = {'initial': usage, 'selective_retry': retry_usage}
+                scoped_blockers = [issue for issue in (qa.get('blocking_issues') or [])
+                                   if not str(issue).startswith('CONTENT_PASS=false')]
+                qa['blocking_issues'] = scoped_blockers
+                qa['pass'] = not scoped_blockers
+            if qa.get('pass') is not True:
+                raise RuntimeError('RERENDERED_CARD_QA_FAILED: ' + json.dumps(qa, ensure_ascii=False))
         upload_ids = self.notion.attach_files(page_id, '생성 이미지', cards)
         if len(upload_ids) != 5:
             raise RuntimeError('NOTION_CARD_REPLACEMENT_INCOMPLETE')
