@@ -7,6 +7,9 @@ from typing import Any
 import httpx
 
 NOTION_VERSION = '2026-03-11'
+NOTION_SINGLE_PART_LIMIT = 20 * 1024 * 1024
+NOTION_PART_SIZE = 10 * 1024 * 1024
+NOTION_MAX_PARTS = 1000
 
 
 class NotionClient:
@@ -213,32 +216,71 @@ class NotionClient:
             response = self.client.delete(f'/blocks/{block_id}')
             response.raise_for_status()
 
-    def upload_small_file(self, path: Path) -> str:
-        if path.stat().st_size > 20 * 1024 * 1024:
-            raise ValueError(f'File is larger than Notion single-part limit: {path}')
+    def _send_file_part(
+        self, upload_id: str, path: Path, content_type: str, content: Any,
+        part_number: int | None = None,
+    ) -> None:
+        data = {'part_number': str(part_number)} if part_number is not None else None
+        response = httpx.post(
+            f'https://api.notion.com/v1/file_uploads/{upload_id}/send',
+            headers={
+                'Authorization': f'Bearer {self.token}',
+                'Notion-Version': NOTION_VERSION,
+            },
+            data=data,
+            files={'file': (path.name, content, content_type)},
+            timeout=120.0,
+        )
+        response.raise_for_status()
+
+    def upload_file(self, path: Path) -> str:
+        size = path.stat().st_size
         content_type = mimetypes.guess_type(path.name)[0] or 'application/octet-stream'
-        create = self.client.post('/file_uploads', json={
-            'mode': 'single_part',
-            'filename': path.name,
-            'content_type': content_type,
-        })
+        if size <= NOTION_SINGLE_PART_LIMIT:
+            create_payload = {
+                'mode': 'single_part',
+                'filename': path.name,
+                'content_type': content_type,
+            }
+            number_of_parts = 1
+        else:
+            number_of_parts = (size + NOTION_PART_SIZE - 1) // NOTION_PART_SIZE
+            if number_of_parts > NOTION_MAX_PARTS:
+                raise ValueError(f'File exceeds Notion multipart upload limit: {path}')
+            create_payload = {
+                'mode': 'multi_part',
+                'filename': path.name,
+                'content_type': content_type,
+                'number_of_parts': number_of_parts,
+            }
+
+        create = self.client.post('/file_uploads', json=create_payload)
         create.raise_for_status()
         upload_id = create.json()['id']
+
         with path.open('rb') as fh:
-            send = httpx.post(
-                f'https://api.notion.com/v1/file_uploads/{upload_id}/send',
-                headers={
-                    'Authorization': f'Bearer {self.token}',
-                    'Notion-Version': NOTION_VERSION,
-                },
-                files={'file': (path.name, fh, content_type)},
-                timeout=120.0,
-            )
-        send.raise_for_status()
+            if number_of_parts == 1:
+                self._send_file_part(upload_id, path, content_type, fh)
+            else:
+                for part_number in range(1, number_of_parts + 1):
+                    chunk = fh.read(NOTION_PART_SIZE)
+                    if not chunk:
+                        raise RuntimeError('Notion multipart upload ended before all parts were sent')
+                    self._send_file_part(
+                        upload_id, path, content_type, chunk, part_number=part_number,
+                    )
+                complete = self.client.post(f'/file_uploads/{upload_id}/complete', json={})
+                complete.raise_for_status()
+                if complete.json().get('status') != 'uploaded':
+                    raise RuntimeError('Notion multipart upload did not reach uploaded status')
         return upload_id
 
+    def upload_small_file(self, path: Path) -> str:
+        """Backward-compatible entry point; automatically uses multipart when needed."""
+        return self.upload_file(path)
+
     def attach_files(self, page_id: str, property_name: str, paths: list[Path]) -> list[str]:
-        upload_ids = [self.upload_small_file(path) for path in paths]
+        upload_ids = [self.upload_file(path) for path in paths]
         files = [
             {'type': 'file_upload', 'file_upload': {'id': upload_id}, 'name': path.name}
             for upload_id, path in zip(upload_ids, paths)
