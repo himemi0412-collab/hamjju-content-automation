@@ -1057,9 +1057,9 @@ def make_srt(scenes: list[dict[str, Any]], path: Path) -> Path:
 
 def make_word_timed_srt(
     audio_parts: list[Path], path: Path, api_key: str, language: str,
-    max_chars: int = 16,
+    max_chars: int = 13,
 ) -> Path:
-    """Transcribe the final audio and use its word timestamps for captions."""
+    """Transcribe final audio into short, single-line horizontal captions."""
     client = OpenAI(api_key=api_key)
     cues: list[tuple[float, float, str]] = []
     offset = 0.0
@@ -1079,10 +1079,22 @@ def make_word_timed_srt(
         group: list[str] = []
         start = 0.0
         end = 0.0
+        timed_words: list[tuple[str, float, float]] = []
         for item in words:
             word = str(getattr(item, 'word', '') or '').strip()
             word_start = float(getattr(item, 'start', 0.0) or 0.0)
             word_end = float(getattr(item, 'end', word_start) or word_start)
+            # Some Japanese transcription responses return a whole clause as
+            # one "word". Split it before grouping so libass never wraps it.
+            pieces = [word[i:i + max_chars] for i in range(0, len(word), max_chars)] or ['']
+            piece_duration = max(word_end - word_start, 0.01) / len(pieces)
+            for piece_index, piece in enumerate(pieces):
+                timed_words.append((
+                    piece,
+                    word_start + piece_duration * piece_index,
+                    word_start + piece_duration * (piece_index + 1),
+                ))
+        for word, word_start, word_end in timed_words:
             candidate = joiner.join([*group, word]) if word else joiner.join(group)
             if group and (len(candidate.replace(' ', '')) > max_chars or word_end - start > 2.4):
                 cues.append((offset + start, offset + end, joiner.join(group)))
@@ -1098,7 +1110,9 @@ def make_word_timed_srt(
     if not cues:
         raise RuntimeError('Speech transcription produced no subtitle cues')
     chunks = [
-        f'{index}\n{fmt_srt(start)} --> {fmt_srt(max(end, start + 0.12))}\n{text}\n'
+        # q2 disables automatic line wrapping in libass. Cue length is capped
+        # above, so the text remains safely inside the 1080px frame.
+        f'{index}\n{fmt_srt(start)} --> {fmt_srt(max(end, start + 0.12))}\n{{\\q2}}{text}\n'
         for index, (start, end, text) in enumerate(cues, 1)
     ]
     path.write_text('\n'.join(chunks), encoding='utf-8')
@@ -1205,7 +1219,7 @@ def compose_short_video(images: list[Path], scenes: list[dict[str, Any]], audio:
         f"subtitles='{escaped}':"
         f"force_style='FontName={font_name},FontSize=14,Bold=1,Outline=2,Shadow=0,"
         f"PrimaryColour=&H00F4F1E8,BackColour=&H70000000,BorderStyle=3,"
-        f"Alignment=2,MarginL=120,MarginR=120,MarginV={margin_v}'"
+        f"Alignment=2,MarginL=70,MarginR=70,MarginV={margin_v},WrapStyle=2'"
     )
     total_duration = sum(max(float(scene.get('seconds') or 5), 1.0) for scene in scenes)
     audio_filter = (
