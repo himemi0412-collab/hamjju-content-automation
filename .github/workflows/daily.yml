@@ -313,8 +313,13 @@ jobs:
           AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
           RERENDER_PAGE_ID: ${{ inputs.page_id }}
         run: |
-          [[ "$RERENDER_PAGE_ID" =~ ^[0-9a-fA-F-]{32,36}$ ]]
-          python -m app.main rerender-blog-cards "$RERENDER_PAGE_ID"
+          IFS=',' read -ra PAGE_IDS <<< "$RERENDER_PAGE_ID"
+          test "${#PAGE_IDS[@]}" -ge 1
+          test "${#PAGE_IDS[@]}" -le 25
+          for page_id in "${PAGE_IDS[@]}"; do
+            [[ "$page_id" =~ ^[0-9a-fA-F-]{32,36}$ ]]
+            python -m app.main rerender-blog-cards "$page_id"
+          done
 
       - name: Regenerate one exact Shorts review without YouTube upload
         if: ${{ inputs.mode == 'regenerate_review' && inputs.channel != 'naver_blog' }}
