@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 import httpx
 
-from .ai import AIClient
+from .ai import AIClient, parse_json
 from .budget import BudgetGuard
 from .config import ChannelConfig
 from .media import (
@@ -57,8 +57,43 @@ class Pipeline:
         original_status = props.get('상태', {}).get('select', {}).get('name') or ''
         if original_status in {'임시저장 완료', 'VERIFIED_NAVER_DRAFT', '완료'}:
             raise RuntimeError('NAVER_DRAFT_STATUS_ALREADY_COMPLETE')
-        snapshot = self.notion.read_latest_json_snapshot(page_id)
-        generated = deepcopy(snapshot['generated'])
+        try:
+            snapshot = self.notion.read_latest_json_snapshot(page_id)
+            generated = deepcopy(snapshot['generated'])
+        except RuntimeError as exc:
+            if 'NOTION_AUTOMATION_SNAPSHOT_MISSING' not in str(exc):
+                raise
+            article_text = self.notion.read_page_text(page_id)
+            page_title = extract_page_title(page)
+            recovery_prompt = {
+                'title': page_title,
+                'existing_article': article_text[:16000],
+                'task': (
+                    'Recover only a five-card visual plan from this already-written Korean blog article. '
+                    'Do not rewrite the article. Return JSON with card_news only. '
+                    'Cards must be numbered 1..5 with layouts cover, flow, comparison, checklist, decision. '
+                    'Each card needs a Korean headline (max 18 characters), Korean copy (max 42 characters), '
+                    'and items containing label and detail. Item counts must be 2,3,2,4,3 respectively. '
+                    'Make every item concrete enough to generate a different appliance lifestyle photograph.'
+                ),
+            }
+            response = self.ai._create_response({
+                'model': self.s.text_model,
+                'max_output_tokens': self.s.max_generation_output_tokens,
+                'input': [
+                    {'role': 'system', 'content': 'Return one valid JSON object only. Preserve the article facts.'},
+                    {'role': 'user', 'content': json.dumps(recovery_prompt, ensure_ascii=False)},
+                ],
+            }, 'blog_card_plan_recovery', False)
+            recovered = parse_json(response.output_text)
+            generated = {
+                'body_markdown': article_text,
+                'card_news': recovered.get('card_news') or [],
+                'card_format': 'square',
+                'visual_family': 'soft_scene',
+                'design_language': 'Bento Editorial',
+                'reference_profile_id': 'LEGACY_ARTICLE_CARD_RECOVERY',
+            }
         original_body_hash = hashlib.sha256(
             str(generated.get('body_markdown') or '').encode('utf-8')
         ).hexdigest()
