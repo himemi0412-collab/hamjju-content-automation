@@ -48,6 +48,7 @@ on:
           - produce_daily_shorts
           - retry_revision
           - regenerate_review
+          - rerender_blog_cards
           - repair_video
           - repair_av_sync
           - explore_card_design
@@ -301,6 +302,19 @@ jobs:
         run: |
           [[ "$REVISION_PAGE_ID" =~ ^[0-9a-fA-F-]{32,36}$ ]]
           python -m app.main page naver_blog "$REVISION_PAGE_ID" --retry-revision
+
+      - name: Re-render one existing blog card set without changing article text
+        if: ${{ inputs.mode == 'rerender_blog_cards' && inputs.channel == 'naver_blog' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
+          ENABLE_WEB_RESEARCH: 'false'
+          ENABLE_MEDIA_GENERATION: 'false'
+          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
+          RERENDER_PAGE_ID: ${{ inputs.page_id }}
+        run: |
+          [[ "$RERENDER_PAGE_ID" =~ ^[0-9a-fA-F-]{32,36}$ ]]
+          python -m app.main rerender-blog-cards "$RERENDER_PAGE_ID"
 
       - name: Regenerate one exact Shorts review without YouTube upload
         if: ${{ inputs.mode == 'regenerate_review' && inputs.channel != 'naver_blog' }}
