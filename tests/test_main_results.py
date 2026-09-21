@@ -125,6 +125,87 @@ def test_automatic_retry_reprocesses_only_qa_rejections():
     assert results[1] == initial[1]
 
 
+def test_automatic_retry_uses_one_bounded_second_attempt_for_new_qa_issue():
+    from app.main import retry_qa_rejections_once
+    from app.config import load_channels
+
+    class Notion:
+        def retrieve_page(self, page_id):
+            return {'id': page_id}
+
+    class Pipeline:
+        notion = Notion()
+        calls = 0
+
+        def process_page(self, cfg, page):
+            self.calls += 1
+            if self.calls == 1:
+                return {
+                    'page_id': page['id'], 'status': '수정 필요',
+                    'qa_pass': False, 'blocking_issues': ['time axis mismatch'],
+                    'budget_blocked': False,
+                }
+            return {
+                'page_id': page['id'], 'status': '검토 대기',
+                'qa_pass': True, 'notion_page_updated': True,
+            }
+
+    pipeline = Pipeline()
+    results = retry_qa_rejections_once(
+        pipeline,
+        load_channels()['japan_shorts'],
+        [{
+            'page_id': 'retry-twice', 'status': '수정 필요',
+            'qa_pass': False, 'blocking_issues': ['unsupported memory'],
+            'budget_blocked': False,
+        }],
+    )
+
+    assert pipeline.calls == 2
+    assert results[0]['qa_pass'] is True
+    assert results[0]['automatic_retry']['attempt_count'] == 2
+    assert results[0]['automatic_retry']['history'] == [
+        {'attempt': 1, 'previous_blocking_issues': ['unsupported memory']},
+        {'attempt': 2, 'previous_blocking_issues': ['time axis mismatch']},
+    ]
+
+
+def test_automatic_retry_stops_after_two_qa_failures():
+    from app.main import retry_qa_rejections_once
+    from app.config import load_channels
+
+    class Notion:
+        def retrieve_page(self, page_id):
+            return {'id': page_id}
+
+    class Pipeline:
+        notion = Notion()
+        calls = 0
+
+        def process_page(self, cfg, page):
+            self.calls += 1
+            return {
+                'page_id': page['id'], 'status': '수정 필요',
+                'qa_pass': False, 'blocking_issues': [f'issue-{self.calls}'],
+                'budget_blocked': False,
+            }
+
+    pipeline = Pipeline()
+    results = retry_qa_rejections_once(
+        pipeline,
+        load_channels()['japan_shorts'],
+        [{
+            'page_id': 'still-bad', 'status': '수정 필요',
+            'qa_pass': False, 'blocking_issues': ['initial'],
+            'budget_blocked': False,
+        }],
+    )
+
+    assert pipeline.calls == 2
+    assert results[0]['qa_pass'] is False
+    assert results[0]['automatic_retry']['attempt_count'] == 2
+
+
 def test_monthly_blog_order_is_resumable_and_month_scoped():
     from app.main import _is_monthly_blog_order
 
