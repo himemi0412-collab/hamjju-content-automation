@@ -24,6 +24,7 @@ from .manuscript_repair import apply_reviewed_corrections, manuscript_hash
 from .blog_reference import load_blog_reference, validate_generated_reference_contract
 from .card_design import apply_named_design_contract
 from .ownership import load_operating_contract
+from .photographic_cards import generate_and_typeset_blog_cards
 
 
 class Pipeline:
@@ -68,12 +69,15 @@ class Pipeline:
         baseline = load_blog_reference()
         validate_generated_reference_contract(generated, baseline, require_design_language=True)
         out_dir = self.s.output_dir / page_id.replace('-', '')[:16] / 'cards'
-        cards = render_blog_cards(
-            list(generated.get('card_news') or []), out_dir, self.s.card_font_path,
-            card_format=generated.get('card_format') or 'square',
-            visual_family=generated.get('visual_family') or 'playful_diagram',
-            design_language=generated['design_language'],
-            design_blueprint=generated.get('design_blueprint'),
+        cards = generate_and_typeset_blog_cards(
+            self.ai.client,
+            list(generated.get('card_news') or []),
+            out_dir,
+            model=self.s.image_model,
+            quality=self.s.image_quality,
+            font_path=self.s.card_font_path,
+            budget=self.budget,
+            estimated_cost_usd=self.s.openai_image_estimated_cost_usd,
         )
         qa, usage = self.ai.qa(generated, {
             'channel': 'naver_blog',
