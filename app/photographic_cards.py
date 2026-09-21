@@ -67,7 +67,10 @@ def _scene_prompt(card: dict[str, Any], index: int, revision_note: str = '') -> 
         'ABSOLUTELY NO text, letters, numbers, logos, labels, UI glyphs, watermark, yellow cast, sepia, collage, floating icons, generic infographic nodes, or repeated template boxes.',
     ]
     if revision_note:
-        parts.append(f'Correct this prior QA problem: {revision_note}')
+        parts.append(
+            'Mandatory correction for this retry. Do not repeat the rejected visual action or implication. '
+            f'Use the article facts literally and correct this prior QA problem: {revision_note}'
+        )
     return ' '.join(parts)
 
 
