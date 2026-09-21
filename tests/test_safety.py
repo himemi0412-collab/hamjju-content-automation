@@ -156,9 +156,12 @@ def test_shorts_master_video_guides_are_enforced_in_prompts_and_composer():
     assert '일본 쇼츠 영상.mp4' in japan
     assert '첫 장면 상단' in japan
     assert 'JAPAN_REFERENCE_LAYOUT' in media
-    assert '20대 여성·60~70대 여성·20대 남성·60~70대 남성' in japan
-    assert '한 편 안에서는 선택한 단일 화자를 끝까지 유지' in japan
-    assert 'docs/japan_voice_reference.md' in japan
+    assert 'young_woman(20대 여성)' in japan
+    assert 'young_man(20대 남성)' in japan
+    assert 'older_woman(70대 여성)' in japan
+    assert 'older_man(70대 남성)' in japan
+    assert '한 scene 안에는 한 명만 말하게' in japan
+    assert 'speaker_profile' in japan
     assert '자연스러운 한국어 반말' in ppojjugi
     assert '`です・ます`체의 딱딱한 존댓말은 기본 대본에 사용하지 않는다' in japan
     assert '자연스러운 한국어 반말' in qa
