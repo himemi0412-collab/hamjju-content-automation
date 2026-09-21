@@ -605,6 +605,7 @@ def repair_short_av(channel: str, page_id: str, source_dir: Path):
         language = 'ko' if channel == 'ppojjugi_shorts' else 'ja'
         srt = make_word_timed_srt(
             audio_parts, output_dir / 'captions.srt', s.openai_api_key, language,
+            exact_texts=[str(scene.get('narration') or '') for scene in timed_scenes],
         )
         video = compose_short_video(
             images, timed_scenes, audio, srt, output_dir / 'short.mp4',
