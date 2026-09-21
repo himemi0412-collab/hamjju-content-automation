@@ -392,6 +392,23 @@ def process_exact_page(name: str, page_id: str, retry_revision: bool = False):
     validate_results(result, require_item=True, dry_run=False)
 
 
+@app.command('rerender-blog-cards')
+def rerender_blog_cards(page_id: str):
+    """Re-render five cards from the page snapshot without changing article text."""
+    s, notion, ai, state, pipeline = build()
+    try:
+        result = pipeline.rerender_existing_blog_cards(page_id)
+    except Exception as exc:
+        result = {'page_id': page_id, 'status': 'failed', 'error': repr(exc)}
+    finally:
+        notion.close()
+        ai.close()
+        state.close()
+    print_json(result)
+    if result.get('status') != 'cards_replaced':
+        raise typer.Exit(code=1)
+
+
 @app.command('resume-blog')
 def resume_blog(
     page_id: str,
