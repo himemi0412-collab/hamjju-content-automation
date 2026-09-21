@@ -59,7 +59,7 @@ def _scene_prompt(card: dict[str, Any], index: int, revision_note: str = '') -> 
         f'Card role: {ROLES[index - 1]}. Topic: {card.get("headline", "")}. '
         f'Explanation: {card.get("copy", "")}. Visible situation and objects: {item_text}. '
         _subject_lock(card) + ' ' +
-        'Show a believable unbranded Korean home interior and concrete relevant appliances, 
+        'Show a believable unbranded Korean home interior and concrete relevant appliances, '
         'containers, controls, filters, documents, measurements, or actions. '
         'The image must explain the situation visually, with a clear subject and natural scale. '
         'Bright neutral daylight, cool white, pale lavender, muted mint and soft blue accents; '
