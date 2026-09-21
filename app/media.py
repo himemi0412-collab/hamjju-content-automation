@@ -144,26 +144,29 @@ class MediaGenerator:
                 {'model': self.tts_model, 'characters': len(text)},
             )
         if self.tts_model.startswith('fal-ai/'):
-            try:
-                self._generate_fal_tts(text, out_path, instructions)
-            except httpx.HTTPStatusError as exc:
-                # Fal can accept a queued Gemini TTS request and then return
-                # 422 from the result endpoint for otherwise valid Korean
-                # narration. Keep production resumable by using the configured
-                # OpenAI account as a deterministic voice fallback.
-                if exc.response.status_code != 422:
-                    raise
-                response_format = out_path.suffix.lower().lstrip('.')
-                if response_format not in {'mp3', 'opus', 'aac', 'flac', 'wav', 'pcm'}:
-                    response_format = 'mp3'
-                with self.client.audio.speech.with_streaming_response.create(
-                    model='gpt-4o-mini-tts',
-                    voice='sage',
-                    input=text,
-                    instructions=instructions,
-                    response_format=response_format,
-                ) as response:
-                    response.stream_to_file(out_path)
+            # Never mix providers inside one Short. The former OpenAI fallback
+            # changed the speaker mid-video and produced the artificial voice
+            # shifts heard in review. Retry the approved Fal voice and fail
+            # closed if it remains unavailable.
+            last_error: Exception | None = None
+            for attempt in range(3):
+                try:
+                    self._generate_fal_tts(text, out_path, instructions)
+                    last_error = None
+                    break
+                except (httpx.HTTPStatusError, TimeoutError) as exc:
+                    last_error = exc
+                    if isinstance(exc, httpx.HTTPStatusError):
+                        status = exc.response.status_code
+                        if status not in {408, 422, 429, 500, 502, 503, 504}:
+                            raise
+                    if attempt < 2:
+                        time.sleep(2 ** attempt)
+            if last_error is not None:
+                raise RuntimeError(
+                    'Approved Fal voice failed after three attempts; stopped '
+                    'instead of changing the speaker or provider'
+                ) from last_error
         else:
             with self.client.audio.speech.with_streaming_response.create(
                 model=self.tts_model,
@@ -1052,6 +1055,56 @@ def make_srt(scenes: list[dict[str, Any]], path: Path) -> Path:
     return path
 
 
+def make_word_timed_srt(
+    audio_parts: list[Path], path: Path, api_key: str, language: str,
+    max_chars: int = 16,
+) -> Path:
+    """Transcribe the final audio and use its word timestamps for captions."""
+    client = OpenAI(api_key=api_key)
+    cues: list[tuple[float, float, str]] = []
+    offset = 0.0
+    joiner = '' if language == 'ja' else ' '
+    for part in audio_parts:
+        with part.open('rb') as audio_file:
+            result = client.audio.transcriptions.create(
+                model='whisper-1',
+                file=audio_file,
+                language=language,
+                response_format='verbose_json',
+                timestamp_granularities=['word'],
+            )
+        words = list(getattr(result, 'words', None) or [])
+        if not words:
+            raise RuntimeError(f'No word timestamps returned for {part.name}')
+        group: list[str] = []
+        start = 0.0
+        end = 0.0
+        for item in words:
+            word = str(getattr(item, 'word', '') or '').strip()
+            word_start = float(getattr(item, 'start', 0.0) or 0.0)
+            word_end = float(getattr(item, 'end', word_start) or word_start)
+            candidate = joiner.join([*group, word]) if word else joiner.join(group)
+            if group and (len(candidate.replace(' ', '')) > max_chars or word_end - start > 2.4):
+                cues.append((offset + start, offset + end, joiner.join(group)))
+                group = []
+            if word:
+                if not group:
+                    start = word_start
+                group.append(word)
+                end = word_end
+        if group:
+            cues.append((offset + start, offset + end, joiner.join(group)))
+        offset += probe_media_duration(part)
+    if not cues:
+        raise RuntimeError('Speech transcription produced no subtitle cues')
+    chunks = [
+        f'{index}\n{fmt_srt(start)} --> {fmt_srt(max(end, start + 0.12))}\n{text}\n'
+        for index, (start, end, text) in enumerate(cues, 1)
+    ]
+    path.write_text('\n'.join(chunks), encoding='utf-8')
+    return path
+
+
 def prepare_short_frames(
     images: list[Path],
     scenes: list[dict[str, Any]],
@@ -1145,11 +1198,14 @@ def compose_short_video(images: list[Path], scenes: list[dict[str, Any]], audio:
 
     escaped = str(srt.resolve()).replace('\\', '/').replace(':', '\\:').replace("'", "\\'")
     font_name = 'Noto Sans CJK KR' if channel_style == 'ppojjugi_shorts' else 'Noto Sans CJK JP'
-    margin_v = 245 if channel_style == 'ppojjugi_shorts' else 82
+    # Both channels use the same low, center-aligned safe-zone. The previous
+    # Ppojjugi margin placed captions near the middle of the frame.
+    margin_v = 86
     vf = (
         f"subtitles='{escaped}':"
-        f"force_style='FontName={font_name},FontSize=20,Outline=3,Shadow=0,"
-        f"PrimaryColour=&H00FFFFFF,Alignment=2,MarginL=90,MarginR=90,MarginV={margin_v}'"
+        f"force_style='FontName={font_name},FontSize=14,Bold=1,Outline=2,Shadow=0,"
+        f"PrimaryColour=&H00F4F1E8,BackColour=&H70000000,BorderStyle=3,"
+        f"Alignment=2,MarginL=120,MarginR=120,MarginV={margin_v}'"
     )
     total_duration = sum(max(float(scene.get('seconds') or 5), 1.0) for scene in scenes)
     audio_filter = (
@@ -1182,6 +1238,7 @@ def verify_short_artifacts(
     audio: Path,
     srt: Path,
     video: Path,
+    strict_caption_count: bool = True,
 ) -> dict[str, Any]:
     """Verify the final bytes that will be attached/uploaded, not just the plan."""
     if len(images) != len(scenes) or not scenes:
@@ -1197,8 +1254,10 @@ def verify_short_artifacts(
         bool(line.strip().isdigit())
         for line in srt.read_text(encoding='utf-8').splitlines()
     )
-    if observed_captions != expected_captions:
+    if strict_caption_count and observed_captions != expected_captions:
         raise RuntimeError('Shorts subtitle cue count does not match the spoken narration phrases')
+    if observed_captions < 1:
+        raise RuntimeError('Shorts subtitle file contains no timed cues')
     info = probe_video_streams(video)
     streams = info.get('streams') or []
     video_streams = [stream for stream in streams if stream.get('codec_type') == 'video']
