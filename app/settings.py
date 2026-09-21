@@ -19,9 +19,9 @@ class Settings(BaseSettings):
     tts_voice: str = 'Aoede'
     tts_ppojjugi_voice: str = 'Aoede'
     tts_japan_voice: str = 'Gacrux'
-    tts_japan_young_woman_voice: str = ''
-    tts_japan_young_man_voice: str = ''
-    tts_japan_older_man_voice: str = ''
+    tts_japan_young_woman_voice: str = 'Aoede'
+    tts_japan_young_man_voice: str = 'Puck'
+    tts_japan_older_man_voice: str = 'Charon'
     fal_tts_temperature: float = 1.1
     fal_tts_ppojjugi_language: str = 'Korean (South Korea)'
     fal_tts_japan_language: str = 'Japanese (Japan)'
