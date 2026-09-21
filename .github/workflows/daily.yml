@@ -316,10 +316,17 @@ jobs:
           IFS=',' read -ra PAGE_IDS <<< "$RERENDER_PAGE_ID"
           test "${#PAGE_IDS[@]}" -ge 1
           test "${#PAGE_IDS[@]}" -le 25
+          failures=()
           for page_id in "${PAGE_IDS[@]}"; do
             [[ "$page_id" =~ ^[0-9a-fA-F-]{32,36}$ ]]
-            python -m app.main rerender-blog-cards "$page_id"
+            if ! python -m app.main rerender-blog-cards "$page_id"; then
+              failures+=("$page_id")
+            fi
           done
+          if [ "${#failures[@]}" -gt 0 ]; then
+            echo "Rerender failures: ${failures[*]}"
+            exit 1
+          fi
 
       - name: Regenerate one exact Shorts review without YouTube upload
         if: ${{ inputs.mode == 'regenerate_review' && inputs.channel != 'naver_blog' }}
