@@ -579,6 +579,8 @@ class Pipeline:
             raise ValueError(f'Unknown Shorts narration style: {channel_style}')
         voice, narration_instructions = narration_profiles[channel_style]
         narrator_profile = generated.get('narrator_profile') or {}
+        approved_voices: dict[str, str] = {}
+        japan_delivery: dict[str, str] = {}
         if channel_style == 'japan_shorts':
             profile_key = str(narrator_profile.get('profile') or 'older_woman')
             approved_voices = {
@@ -587,21 +589,17 @@ class Pipeline:
                 'young_man': self.s.tts_japan_young_man_voice,
                 'older_man': self.s.tts_japan_older_man_voice,
             }
-            if profile_key not in approved_voices:
+            if profile_key not in {*approved_voices, 'multiple'}:
                 raise ValueError(f'Unknown Japanese narrator profile: {profile_key}')
-            voice = approved_voices[profile_key]
-            if not voice:
-                raise RuntimeError(
-                    f'Japanese narrator profile {profile_key} has no user-approved voice; '
-                    'media generation stopped before TTS'
-                )
-            narration_instructions = (
-                narration_instructions
-                + ' Selected story narrator profile: '
-                + json.dumps(narrator_profile, ensure_ascii=False)
-            )
-        # Use the channel's previously approved, age-matched Fal profile for
-        # every scene. Never silently replace it with a generic OpenAI voice.
+            voice = approved_voices.get(profile_key) or self.s.tts_japan_voice
+            japan_delivery = {
+                'young_woman': 'Japanese woman in her 20s. Speak naturally and intimately, with youthful clarity, real conversational breath, and restrained emotion.',
+                'young_man': 'Japanese man in his 20s. Speak naturally and gently, with an unforced conversational rhythm, subtle hesitation, and sincere emotion.',
+                'older_woman': 'Japanese woman in her 70s recalling an old memory. Speak slowly and warmly, with quiet nostalgia, small breaths, and softly falling sentence endings.',
+                'older_man': 'Japanese man in his 70s recalling an old memory. Use a low, warm, lived-in tone, measured pauses, restrained sadness, and quiet acceptance.',
+            }
+        # Keep one provider throughout, while Japanese dialogue may route each
+        # scene to its age/gender-matched character voice.
         production_tts_model = self.s.tts_model
         production_voice = voice
         media = MediaGenerator(
@@ -636,13 +634,34 @@ class Pipeline:
                 raise RuntimeError('Preserved image set does not match the Shorts scenes')
         total_characters = max(sum(len(text) for text in scene_narrations), 1)
         audio_parts: list[Path] = []
+        voices_used: list[str] = []
         for index, text in enumerate(scene_narrations, 1):
             share = self.s.openai_tts_estimated_cost_usd * len(text) / total_characters
+            scene_instructions = narration_instructions
+            if channel_style == 'japan_shorts':
+                scene_profile = str(scenes[index - 1].get('speaker_profile') or profile_key)
+                if scene_profile not in approved_voices:
+                    raise RuntimeError(
+                        f'Japanese scene {index} has no valid speaker_profile; '
+                        'expected young_woman, young_man, older_woman, or older_man'
+                    )
+                scene_voice = approved_voices[scene_profile]
+                if not scene_voice:
+                    raise RuntimeError(f'Japanese voice profile {scene_profile} is not configured')
+                media.voice = scene_voice
+                scene_instructions = (
+                    japan_delivery[scene_profile]
+                    + ' Preserve the character as a real person, not an anime or announcer performance. '
+                    + 'Follow the emotional meaning of this exact line without exaggeration.'
+                )
+                voices_used.append(f'{scene_profile}:{scene_voice}')
+            else:
+                voices_used.append(production_voice)
             audio_parts.append(media.generate_tts(
                 text,
                 job_dir / 'narration_scenes' / f'{index:02d}.mp3',
                 estimated_cost_usd=share,
-                instructions=narration_instructions,
+                instructions=scene_instructions,
             ))
         audio, durations = concat_scene_audio(audio_parts, job_dir / 'narration.mp3')
         timed_scenes = [
@@ -666,6 +685,7 @@ class Pipeline:
             'scene_durations': durations,
             'narrator_profile': narrator_profile,
             'tts_voice': production_voice,
+            'tts_voices_used': list(dict.fromkeys(voices_used)),
             'tts_provider': 'fal' if production_tts_model.startswith('fal-ai/') else 'openai',
             'verification': verification,
         }
