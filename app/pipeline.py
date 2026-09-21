@@ -32,11 +32,11 @@ def _card_numbers_from_qa_issue(issue: str) -> set[int]:
     """Extract every explicitly referenced card number from Korean QA feedback."""
     numbers: set[int] = set()
     for group in re.findall(
-        r'카드\\s*([1-5](?:\\s*(?:번|,|·|와|과|및|/|-)\\s*[1-5])*)',
+        r'카드\s*([1-5](?:\s*(?:번|,|·|와|과|및|/|-)\s*[1-5])*)',
         str(issue),
     ):
         numbers.update(int(value) for value in re.findall(r'[1-5]', group))
-    numbers.update(int(value) for value in re.findall(r'([1-5])번\\s*카드', str(issue)))
+    numbers.update(int(value) for value in re.findall(r'([1-5])번\s*카드', str(issue)))
     return numbers
 
 
