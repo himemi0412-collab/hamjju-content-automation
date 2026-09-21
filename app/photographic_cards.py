@@ -54,22 +54,21 @@ def _scene_prompt(card: dict[str, Any], index: int, revision_note: str = '') -> 
     item_text = '; '.join(
         f"{x.get('label', '')}: {x.get('detail', '')}" for x in items if isinstance(x, dict)
     )
-    return (
-        'Create one square editorial lifestyle image for a Korean home-appliance help article. '
-        f'Card role: {ROLES[index - 1]}. Topic: {card.get("headline", "")}. '
-        f'Explanation: {card.get("copy", "")}. Visible situation and objects: {item_text}. '
-        _subject_lock(card) + ' ' +
-        'Show a believable unbranded Korean home interior and concrete relevant appliances, '
-        'containers, controls, filters, documents, measurements, or actions. '
-        'The image must explain the situation visually, with a clear subject and natural scale. '
-        'Bright neutral daylight, cool white, pale lavender, muted mint and soft blue accents; '
-        'clean editorial photography with gentle realistic texture. '
-        'Leave calm low-detail negative space across the upper 30 percent for a later typography overlay. '
-        'No people unless hands are essential to demonstrate the action. '
-        'ABSOLUTELY NO text, letters, numbers, logos, labels, UI glyphs, watermark, yellow cast, sepia, '
-        'collage, floating icons, generic infographic nodes, or repeated template boxes. '
-        + (f'Correct this prior QA problem: {revision_note}' if revision_note else '')
-    )
+    parts = [
+        'Create one square editorial lifestyle image for a Korean home-appliance help article.',
+        f'Card role: {ROLES[index - 1]}. Topic: {card.get("headline", "")}.',
+        f'Explanation: {card.get("copy", "")}. Visible situation and objects: {item_text}.',
+        _subject_lock(card),
+        'Show a believable unbranded Korean home interior and concrete relevant appliances, containers, controls, filters, documents, measurements, or actions.',
+        'The image must explain the situation visually, with a clear subject and natural scale.',
+        'Bright neutral daylight, cool white, pale lavender, muted mint and soft blue accents; clean editorial photography with gentle realistic texture.',
+        'Leave calm low-detail negative space across the upper 30 percent for a later typography overlay.',
+        'No people unless hands are essential to demonstrate the action.',
+        'ABSOLUTELY NO text, letters, numbers, logos, labels, UI glyphs, watermark, yellow cast, sepia, collage, floating icons, generic infographic nodes, or repeated template boxes.',
+    ]
+    if revision_note:
+        parts.append(f'Correct this prior QA problem: {revision_note}')
+    return ' '.join(parts)
 
 
 def generate_and_typeset_blog_cards(
