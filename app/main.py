@@ -402,7 +402,6 @@ def rerender_blog_cards(page_id: str):
         result = {'page_id': page_id, 'status': 'failed', 'error': repr(exc)}
     finally:
         notion.close()
-        state.close()
     print_json(result)
     if result.get('status') != 'cards_replaced':
         raise typer.Exit(code=1)
