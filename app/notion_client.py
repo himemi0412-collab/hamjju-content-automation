@@ -146,6 +146,29 @@ class NotionClient:
             if not cursor:
                 raise RuntimeError('Notion block pagination did not return a cursor')
 
+    def read_latest_json_snapshot(self, page_id: str) -> dict[str, Any]:
+        """Recover the newest complete automation snapshot from adjacent JSON code blocks."""
+        groups: list[list[str]] = []
+        current: list[str] = []
+        for block in self.read_page_blocks(page_id):
+            if block.get('type') == 'code' and block.get('code', {}).get('language') == 'json':
+                text = ''.join(x.get('plain_text', '') for x in block['code'].get('rich_text', []))
+                current.append(text)
+            else:
+                if current:
+                    groups.append(current)
+                    current = []
+        if current:
+            groups.append(current)
+        for chunks in reversed(groups):
+            try:
+                value = json.loads(''.join(chunks))
+            except json.JSONDecodeError:
+                continue
+            if isinstance(value, dict) and isinstance(value.get('generated'), dict):
+                return value
+        raise RuntimeError('NOTION_AUTOMATION_SNAPSHOT_MISSING')
+
     def read_page_text(self, page_id: str, max_chars: int = 18000) -> str:
         out: list[str] = []
         cursor = None
