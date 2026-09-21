@@ -306,8 +306,12 @@ def render_blog_cards(
     background = named_style['background'] if named_style else '#FFFFFF'
     surface = named_style['surface'] if named_style else '#FFFFFF'
     accent_text = named_style['accent_text'] if named_style else ink
-    title_size = named_style['title_size'] if named_style else 64
-    copy_size = named_style['copy_size'] if named_style else 33
+    # Mobile cards must stay visual-first. Named styles may propose display sizes,
+    # but Korean glyph density makes the same numeric size feel much heavier than
+    # Latin reference covers. Cap both tiers so the explanatory scene remains the
+    # visual subject instead of becoming decoration behind oversized copy.
+    title_size = min(named_style['title_size'], 54) if named_style else 54
+    copy_size = min(named_style['copy_size'], 25) if named_style else 25
     for i, card in enumerate(cards, 1):
         layout = card.get('layout')
         if layout != layouts[i - 1] or card.get('card') != i:
