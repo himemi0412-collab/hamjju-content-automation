@@ -129,7 +129,7 @@ jobs:
           test -n "$CARD_SUBTITLE"
           python -m app.main explore-card-design --title "$CARD_TITLE" --subtitle "$CARD_SUBTITLE" --output output/card-design-exploration
       - name: Materialize YouTube OAuth files
-        if: ${{ (github.event_name == 'push' && github.event.head_commit.message == 'Run reviewed-script caption repair once') || (github.event_name == 'schedule' && github.event.schedule == '0 12 * * *') || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'execute_media' || inputs.mode == 'produce_daily_shorts' || inputs.mode == 'retry_revision' || inputs.mode == 'repair_av_sync' || inputs.mode == 'verify_youtube_auth')) }}
+        if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 12 * * *') || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'execute_media' || inputs.mode == 'produce_daily_shorts' || inputs.mode == 'retry_revision' || inputs.mode == 'repair_av_sync' || inputs.mode == 'verify_youtube_auth')) }}
         env:
           YOUTUBE_CLIENT_SECRET_JSON_B64: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON_B64 }}
           YOUTUBE_PPOJJUGI_TOKEN_JSON_B64: ${{ secrets.YOUTUBE_PPOJJUGI_TOKEN_JSON_B64 }}
@@ -351,21 +351,6 @@ jobs:
           page_folder="$(printf '%s' "$page_id" | tr -d '-' | cut -c1-16)"
           gh run download "$run_id" --name "hamjju-output-$run_id" --dir recovered
           python -m app.main repair-short-av "${{ inputs.channel }}" "$page_id" "recovered/$page_folder"
-
-      - name: Run the reviewed-script caption repair once
-        if: ${{ github.event_name == 'push' && github.event.head_commit.message == 'Run reviewed-script caption repair once' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
-          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'true'
-        run: |
-          result=0
-          gh run download 35514449697 --name hamjju-output-35514449697 --dir recovered-ppo
-          python -m app.main repair-short-av ppojjugi_shorts 3e015789-1194-813b-ab12-c0d179e0d46c recovered-ppo/3e0157891194813b || result=1
-          gh run download 35512539176 --name hamjju-output-35512539176 --dir recovered-japan
-          python -m app.main repair-short-av japan_shorts 3e015789-1194-81df-94e2-cce5a77da92f recovered-japan/3e015789119481df || result=1
-          exit "$result"
 
       - name: Run scheduled production
         if: ${{ github.event_name == 'schedule' }}
