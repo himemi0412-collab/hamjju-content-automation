@@ -1,6 +1,7 @@
 from __future__ import annotations
 import base64
 import json
+import re
 import shutil
 import subprocess
 import time
@@ -1057,14 +1058,68 @@ def make_srt(scenes: list[dict[str, Any]], path: Path) -> Path:
 
 def make_word_timed_srt(
     audio_parts: list[Path], path: Path, api_key: str, language: str,
-    max_chars: int = 13,
+    max_chars: int = 13, exact_texts: list[str] | None = None,
 ) -> Path:
-    """Transcribe final audio into short, single-line horizontal captions."""
+    """Use speech timestamps but display the reviewed script, never ASR text."""
+    if exact_texts is not None and len(exact_texts) != len(audio_parts):
+        raise ValueError('Exact subtitle text must match the scene audio count')
+
+    def reviewed_phrases(text: str) -> list[str]:
+        text = ' '.join(text.split())
+        if language == 'ko':
+            text = text.replace('계산에서가 아니라', '대단해서가 아니라')
+            text = re.sub(r'아직 아무것도 시작\s*안\s*했는데', '아직 아무것도 시작|안했는데', text)
+            units = [x.strip() for x in re.findall(r'[^.!?…|]+[.!?…]*|\|', text) if x.strip()]
+        else:
+            # Japanese captions follow punctuation and grammatical breath
+            # points, rather than arbitrary transcription token lengths.
+            units = [x.strip() for x in re.findall(r'[^。！？、]+[。！？、]?', text) if x.strip()]
+        phrases: list[str] = []
+        for unit in units:
+            if unit == '|':
+                continue
+            if len(unit.replace(' ', '')) <= max_chars:
+                phrases.append(unit)
+                continue
+            if language == 'ko':
+                words = unit.split()
+                current = ''
+                for word in words:
+                    candidate = f'{current} {word}'.strip()
+                    if current and len(candidate.replace(' ', '')) > max_chars:
+                        phrases.append(current)
+                        current = word
+                    else:
+                        current = candidate
+                if current:
+                    phrases.append(current)
+            else:
+                # Prefer Japanese particle boundaries; use a character limit
+                # only when a clause contains no suitable grammatical break.
+                parts = [
+                    x for x in re.findall(
+                        r'.*?(?:から|まで|けれど|ので|そして|[はがをにへでとのも]|$)', unit
+                    ) if x
+                ]
+                current = ''
+                for part in parts:
+                    candidate = current + part
+                    if current and len(candidate) > max_chars:
+                        phrases.append(current)
+                        current = part
+                    else:
+                        current = candidate
+                while len(current) > max_chars:
+                    phrases.append(current[:max_chars])
+                    current = current[max_chars:]
+                if current:
+                    phrases.append(current)
+        return [x for x in phrases if x]
     client = OpenAI(api_key=api_key)
     cues: list[tuple[float, float, str]] = []
     offset = 0.0
     joiner = '' if language == 'ja' else ' '
-    for part in audio_parts:
+    for part_index, part in enumerate(audio_parts):
         with part.open('rb') as audio_file:
             result = client.audio.transcriptions.create(
                 model='whisper-1',
@@ -1076,9 +1131,6 @@ def make_word_timed_srt(
         words = list(getattr(result, 'words', None) or [])
         if not words:
             raise RuntimeError(f'No word timestamps returned for {part.name}')
-        group: list[str] = []
-        start = 0.0
-        end = 0.0
         timed_words: list[tuple[str, float, float]] = []
         for item in words:
             word = str(getattr(item, 'word', '') or '').strip()
@@ -1094,18 +1146,41 @@ def make_word_timed_srt(
                     word_start + piece_duration * piece_index,
                     word_start + piece_duration * (piece_index + 1),
                 ))
-        for word, word_start, word_end in timed_words:
-            candidate = joiner.join([*group, word]) if word else joiner.join(group)
-            if group and (len(candidate.replace(' ', '')) > max_chars or word_end - start > 2.4):
+        if exact_texts is not None:
+            phrases = reviewed_phrases(exact_texts[part_index])
+            if not phrases:
+                raise RuntimeError(f'Reviewed script produced no captions for {part.name}')
+            weights = [max(len(x.replace(' ', '')), 1) for x in phrases]
+            cumulative = 0
+            word_count = len(timed_words)
+            start_index = 0
+            for phrase_index, (phrase, weight) in enumerate(zip(phrases, weights)):
+                cumulative += weight
+                end_index = word_count if phrase_index == len(phrases) - 1 else max(
+                    start_index + 1,
+                    round(word_count * cumulative / sum(weights)),
+                )
+                end_index = min(end_index, word_count)
+                start_time = timed_words[start_index][1]
+                end_time = timed_words[end_index - 1][2]
+                cues.append((offset + start_time, offset + end_time, phrase))
+                start_index = end_index
+        else:
+            group: list[str] = []
+            start = 0.0
+            end = 0.0
+            for word, word_start, word_end in timed_words:
+                candidate = joiner.join([*group, word]) if word else joiner.join(group)
+                if group and (len(candidate.replace(' ', '')) > max_chars or word_end - start > 2.4):
+                    cues.append((offset + start, offset + end, joiner.join(group)))
+                    group = []
+                if word:
+                    if not group:
+                        start = word_start
+                    group.append(word)
+                    end = word_end
+            if group:
                 cues.append((offset + start, offset + end, joiner.join(group)))
-                group = []
-            if word:
-                if not group:
-                    start = word_start
-                group.append(word)
-                end = word_end
-        if group:
-            cues.append((offset + start, offset + end, joiner.join(group)))
         offset += probe_media_duration(part)
     if not cues:
         raise RuntimeError('Speech transcription produced no subtitle cues')
