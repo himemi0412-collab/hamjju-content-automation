@@ -3,6 +3,7 @@ import hashlib
 import json
 import logging
 import os
+from copy import deepcopy
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
@@ -64,7 +65,7 @@ class Pipeline:
         generated = apply_named_design_contract(generated)
         if hashlib.sha256(str(generated.get('body_markdown') or '').encode('utf-8')).hexdigest() != original_body_hash:
             raise RuntimeError('ARTICLE_BODY_CHANGED_DURING_CARD_RERENDER')
-        baseline = load_blog_reference(self.s.blog_reference_path)
+        baseline = load_blog_reference()
         validate_generated_reference_contract(generated, baseline, require_design_language=True)
         out_dir = self.s.output_dir / page_id.replace('-', '')[:16] / 'cards'
         cards = render_blog_cards(
