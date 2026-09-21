@@ -5,7 +5,7 @@
 - source_context.automation_scope.mode가 text_only이면 완료 범위는 대본·장면표·메타데이터·독립 QA까지다. 이미지·음성·MP4 부재를 차단 사유로 삼지 않는다.
 - media 모드에서는 장면표, 이미지 지시, 음성용 narration, 자막의 일관성을 검사한다. 이 QA는 실제 이미지·음성·MP4를 만들기 전에 실행되므로, 파일이 아직 없다는 이유만으로 차단하지 않는다. 실제 파일 생성 가능성을 판단할 입력이 모두 있는지만 확인한다.
 - 입력 페이지의 주제와 확정 대본을 임의로 다른 소재로 바꾸지 않았는가.
-- 장면 seconds 합계가 입력 페이지의 목표 길이를 따르는가.
+- 장면 seconds 합계가 입력 페이지의 목표 길이를 따르는가. 입력 페이지에 별도 목표가 없으면 japan_shorts는 채널 기본값 50~70초, ppojjugi_shorts는 생성 프롬프트의 채널 기본값을 적용한다. 별도 목표 숫자가 없다는 이유만으로 차단하지 않는다.
 - 모든 scene에 narration 구간이 있고, 장면 이미지 지시·caption·scene narration이 같은 행동·소품·감정을 가리키는가.
 - scene narration을 순서대로 이어 붙였을 때 전체 narration과 문장 순서 및 의미가 일치하는가.
 - 입력에 없는 사실이나 개인 경험을 단정했는가.
@@ -13,12 +13,12 @@
 - 중복 문장, AI 상투 표현, 광고성 과장이 심한가.
 - 다른 채널의 설정이 섞였는가.
 - 채널 식별자는 내부 키와 Notion 표시 이름을 함께 사용한다. `ppojjugi_shorts`와 `햄찌 창작 쇼츠`는 같은 채널이고, `japan_shorts`와 `일본 유튜브 쇼츠`도 같은 채널이다. 이 정상 매핑만으로 채널 충돌 또는 다른 채널 설정 혼입으로 판정하지 않는다. 실제 대본·등장인물·화면 구성·언어가 다른 채널 규칙을 사용했을 때만 차단한다.
-- 공개·예약 발행·YouTube 업로드를 암시하거나 지시하는가.
+- 공개·예약 발행을 승인 없이 암시하거나 지시하는가. automation_scope.youtube_upload_expected=true인 경우 QA 통과 후 `private` 업로드는 정상 경로이므로 차단하지 않는다.
 - 최종 미디어 QA에서는 ffprobe로 1080×1920, 전체 길이, H.264 영상 스트림과 AAC 오디오 스트림을 확인했는가.
-- 장면 지속시간이 각 장면의 실제 음성 길이를 기준으로 계산됐으며, 문장별 음성 시작·끝과 자막 시작·끝이 일치하는가.
+- 실제 미디어가 생성된 최종 미디어 QA에서는 장면 지속시간이 실제 음성 길이를 기준으로 계산되고 자막 시작·끝이 일치하는지 확인한다. 사전 대본 QA에서는 아직 음성 파일이나 실제 타임스탬프가 없는 것이 정상이며, scene narration이 분리되어 후속 계산이 가능하면 차단하지 않는다.
 - 전체 프레임을 시각 검사해 검은 화면, 잘린 자막, 장면 반복, 노란색·세피아 색조가 없는가.
 - 전체 음성을 청취해 발음·감정·음질·목소리 일관성을 확인했고, 과도한 압축이나 음성 누락이 없는가.
-- 공개 업로드는 source_context.automation_scope.public_approval=true와 public_upload_enabled=true가 동시에 확인될 때만 허용한다. 둘 중 하나라도 false이면 공개 업로드를 차단하고 비공개 검토만 허용한다. 이 사전 QA 시점에 아직 YouTube 전송이 실행되지 않은 것은 정상이다.
+- 공개 업로드는 source_context.automation_scope.public_approval=true와 public_upload_enabled=true가 동시에 확인될 때만 허용한다. 둘 중 하나라도 false이면 공개 업로드만 차단한다. youtube_upload_expected=true인 비공개 업로드는 허용하며 이를 blocking_issues에 넣지 않는다. 이 사전 QA 시점에 아직 이미지·음성·MP4 또는 YouTube 전송이 없는 것은 정상이다.
 
 블로그:
 - source_context.reference_baseline의 ID·SHA-256·네 개 source_urls가 있어야 한다. generated.reference_profile_id가 같은 ID가 아니면 `REFERENCE_PASS=false`로 차단한다. 블로그는 body_markdown 끝의 `공식 확인 출처`에 실제 원문 URL과 확인일이 있어야 한다.
