@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import logging
+import shutil
 from dataclasses import replace
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -16,7 +17,10 @@ from .settings import Settings
 from .state import StateStore
 from .youtube import YouTubePrivateUploader
 from .naver import explain as naver_explain
-from .media import compose_short_video
+from .media import (
+    compose_short_video, concat_scene_audio, make_word_timed_srt,
+    verify_short_artifacts,
+)
 from .card_exploration import DEFAULT_SUBTITLE, DEFAULT_TITLE, render_design_exploration
 from .notion_client import property_value
 from .run_report import record_results
@@ -560,7 +564,7 @@ def repair_short_video(channel: str, page_id: str, source_dir: Path):
 
 @app.command('repair-short-av')
 def repair_short_av(channel: str, page_id: str, source_dir: Path):
-    """Preserve approved images while rebuilding voice, timed subtitles, and MP4."""
+    """Preserve approved images/voice and rebuild word-timed subtitles/MP4."""
     s, notion, _, _, pipeline = build()
     channels = load_channels()
     if channel not in {'ppojjugi_shorts', 'japan_shorts'}:
@@ -573,8 +577,11 @@ def repair_short_av(channel: str, page_id: str, source_dir: Path):
     generated = dict(manifest.get('generated') or {})
     scenes = list(generated.get('scenes') or [])
     images = sorted((source_dir / 'scenes').glob('scene_*.png'))
+    source_audio_parts = sorted((source_dir / 'narration_scenes').glob('*.mp3'))
     if not scenes or len(images) != len(scenes):
         raise RuntimeError('Artifact is missing the preserved scene images')
+    if len(source_audio_parts) != len(scenes):
+        raise RuntimeError('Artifact is missing the previously approved scene voices')
     try:
         page = notion.retrieve_page(page_id)
         channel_value = property_value((page.get('properties') or {}).get('채널', {}))
@@ -582,10 +589,42 @@ def repair_short_av(channel: str, page_id: str, source_dir: Path):
             raise RuntimeError('Notion page channel does not match the requested channel')
         output_dir = s.output_dir / page_id.replace('-', '')[:16]
         output_dir.mkdir(parents=True, exist_ok=True)
-        media = pipeline._make_short_media(
-            generated, output_dir, channel, existing_images=images,
+        preserved_audio_dir = output_dir / 'narration_scenes'
+        preserved_audio_dir.mkdir(parents=True, exist_ok=True)
+        audio_parts = []
+        for index, source in enumerate(source_audio_parts, 1):
+            target = preserved_audio_dir / f'{index:02d}.mp3'
+            shutil.copy2(source, target)
+            audio_parts.append(target)
+        audio, durations = concat_scene_audio(audio_parts, output_dir / 'narration.mp3')
+        timed_scenes = [
+            {**scene, 'seconds': round(duration, 3)}
+            for scene, duration in zip(scenes, durations)
+        ]
+        generated['scenes'] = timed_scenes
+        language = 'ko' if channel == 'ppojjugi_shorts' else 'ja'
+        srt = make_word_timed_srt(
+            audio_parts, output_dir / 'captions.srt', s.openai_api_key, language,
         )
-        video = Path(media['video'])
+        video = compose_short_video(
+            images, timed_scenes, audio, srt, output_dir / 'short.mp4',
+            channel_style=channel,
+            hook=str(generated.get('hook') or ''),
+            font_path=s.card_font_path,
+        )
+        verification = verify_short_artifacts(
+            images, timed_scenes, audio, srt, video, strict_caption_count=False,
+        )
+        media = {
+            'images': [str(x) for x in images],
+            'audio': str(audio),
+            'srt': str(srt),
+            'video': str(video),
+            'scene_durations': durations,
+            'voice_source': 'preserved_pre_revision_channel_voice',
+            'subtitle_timing': 'word_timestamps_from_final_audio',
+            'verification': verification,
+        }
         notion_video_attached = True
         try:
             notion.attach_files(page_id, '최종 영상', [video])
