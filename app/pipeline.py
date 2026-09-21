@@ -88,7 +88,7 @@ class Pipeline:
                 'media_expected': True, 'article_body_frozen': True,
                 'visual_ratio': '60-70', 'text_ratio': '30-40',
             },
-        }, image_paths=cards)
+        }, qa_prompt='prompts/qa_photographic_blog_cards.md', image_paths=cards)
         # This route deliberately freezes the approved article.  QA may still
         # report legacy manuscript issues, but only rendered-card defects are in
         # scope here.  Keep every EDITOR_FORMAT/REFERENCE blocker fail-closed.
