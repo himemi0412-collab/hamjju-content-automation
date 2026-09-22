@@ -329,7 +329,13 @@ def channel(
             dry_run=dry_run,
         )
         if auto_retry and not dry_run and not retry_revision:
-            result = retry_qa_rejections_once(pipeline, cfg, result)
+            if cfg.content_kind != 'blog' or s.auto_retry_blog_enabled:
+                result = retry_qa_rejections_once(
+                    pipeline,
+                    cfg,
+                    result,
+                    max_attempts=s.auto_retry_max_attempts,
+                )
     except Exception as exc:
         result = [{'channel': name, 'status': 'failed', 'error': repr(exc)}]
     finally:
@@ -345,9 +351,9 @@ def retry_qa_rejections_once(
     pipeline: Pipeline,
     cfg,
     results: list[dict],
-    max_attempts: int = 2,
+    max_attempts: int = 1,
 ) -> list[dict]:
-    """Retry only QA-rejected items, bounded to avoid wasting free Actions minutes."""
+    """Retry only QA-rejected items with a strict paid-generation bound."""
     retry_cfg = replace(cfg, ready_status=cfg.revision_status)
     final_results: list[dict] = []
     for result in results:
