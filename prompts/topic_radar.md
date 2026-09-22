@@ -6,6 +6,12 @@
 - 최신성·시기성·검색 의도가 있는 내용은 웹 검색으로 확인한다.
 - 사실 근거가 약한 항목은 자동 제작 대상으로 만들지 않는다.
 - 모든 sources에는 확인한 출처명·URL·확인일을 짧게 기록한다.
+- 단순 검색량 추측이 아니라 검색 의도, 최신성, 답변 가능성, 채널 적합성을 함께 평가한다.
+- seo_score와 geo_score는 0~100 정수다. 70 미만인 항목은 자동 제작 후보로 만들지 않는다.
+- search_intent는 정보 탐색, 비교, 문제 해결, 비용 확인, 회상·공감 중 하나를 중심으로 적는다.
+- geo_answer는 생성형 검색이 인용하기 쉬운 1~2문장의 사실 중심 핵심 답변이다.
+- faq_questions는 실제 사용자가 이어서 물을 만한 구체적인 질문 2~4개다.
+- trend_reason에는 왜 지금 다룰 가치가 있는지와 시기성 유효기간을 적는다.
 
 블로그:
 - 네이버 블로그 himemi0412용 생활정보다.
@@ -13,6 +19,7 @@
 - 광고성 제품 추천이나 확인되지 않은 요금·사은품을 만들지 않는다.
 - detail_topic은 반드시 가전제품, 인터넷, 기타 중 하나다.
 - 대표 키워드 1개와 보조 키워드 3~6개, 독자 질문을 만든다.
+- 제목은 핵심 키워드를 자연스럽게 포함하되 키워드 나열이나 과장은 금지한다.
 
 삐죽이:
 - 사용자가 Notion에 남긴 실제 경험이 existing_ppojjugi_titles에서 명확히 확인될 때만 새 각도를 제안한다.
@@ -37,6 +44,12 @@
       "main_keyword": "",
       "sub_keywords": [""],
       "reader_question": "",
+      "search_intent": "",
+      "geo_answer": "",
+      "faq_questions": [""],
+      "trend_reason": "",
+      "seo_score": 0,
+      "geo_score": 0,
       "detail_topic": "가전제품 또는 인터넷 또는 기타",
       "sources": "출처명·URL·확인일"
     }
@@ -45,6 +58,13 @@
     {
       "title": "",
       "concept": "",
+      "main_keyword": "",
+      "sub_keywords": [""],
+      "search_intent": "회상·공감",
+      "geo_answer": "",
+      "trend_reason": "",
+      "seo_score": 0,
+      "geo_score": 0,
       "verified_personal_source": false,
       "content_id": "PPIJUK-YYYYMMDD-번호",
       "sources": "근거가 된 기존 Notion 제목"
@@ -54,6 +74,14 @@
     {
       "title": "",
       "concept": "",
+      "main_keyword": "",
+      "sub_keywords": [""],
+      "search_intent": "회상·공감",
+      "geo_answer": "",
+      "faq_questions": [""],
+      "trend_reason": "",
+      "seo_score": 0,
+      "geo_score": 0,
       "verified_personal_source": true,
       "content_id": "JAPAN-YYYYMMDD-번호",
       "sources": "출처명·URL·확인일"
