@@ -414,6 +414,7 @@ def rerender_blog_cards(page_id: str):
     finally:
         notion.close()
     print_json(result)
+    record_results(s.output_dir, 'naver_blog', [result], 1)
     if result.get('status') != 'cards_replaced':
         raise typer.Exit(code=1)
 
