@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import shutil
 from copy import deepcopy
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -380,6 +381,11 @@ class Pipeline:
             else:
                 generated, gen_usage = self.ai.generate(cfg.prompt_file, context, use_web=use_web)
                 if cfg.content_kind == 'blog':
+                    # The approved production contract is visual-first: generate a
+                    # topic-specific text-free scene, then typeset Korean locally.
+                    # Do not let the model route new daily work back to the legacy
+                    # icon/diagram renderer by returning an older visual family.
+                    generated['visual_family'] = 'photographic_lifestyle'
                     generated = apply_named_design_contract(generated)
             content_version = manuscript_hash(generated)
             ownership_receipt = self.operating_contract.receipt(
@@ -431,12 +437,29 @@ class Pipeline:
                 card_news = generated.get('card_news') or []
                 if len(card_news) != 5:
                     raise RuntimeError('Blog output did not contain exactly five card-news items')
-                cards = render_blog_cards(
-                    card_news, job_dir / 'cards', self.s.card_font_path,
-                    card_format=generated['card_format'], visual_family=generated['visual_family'],
-                    design_language=generated.get('design_language'),
-                    design_blueprint=generated.get('design_blueprint'),
-                )
+                if previous and source_cards:
+                    # Resume means re-reviewing the exact approved artifact, not
+                    # paying for five new stochastic images and then comparing
+                    # those new bytes with the old set (which can never match).
+                    card_dir = job_dir / 'cards'
+                    card_dir.mkdir(parents=True, exist_ok=True)
+                    cards = []
+                    for source in source_cards:
+                        destination = card_dir / source.name
+                        if source.resolve() != destination.resolve():
+                            shutil.copy2(source, destination)
+                        cards.append(destination)
+                else:
+                    cards = generate_and_typeset_blog_cards(
+                        self.ai.client,
+                        card_news,
+                        job_dir / 'cards',
+                        model=self.s.image_model,
+                        quality=self.s.image_quality,
+                        font_path=self.s.card_font_path,
+                        budget=self.budget,
+                        estimated_cost_usd=self.s.openai_image_estimated_cost_usd,
+                    )
                 if len(cards) != 5:
                     raise RuntimeError('Blog card-news render did not produce exactly five images')
                 media['cards'] = [str(x) for x in cards]
@@ -480,7 +503,7 @@ class Pipeline:
                                 'legacy reviewed renderer; preserve original bytes; measured text; '
                                 'cover/flow/comparison/checklist/decision; Cafe24 title font'
                             )},
-                    }, image_paths=cards)
+                    }, qa_prompt='prompts/qa_photographic_blog_cards.md', image_paths=cards)
                 passed = qa.get('pass') is True and not qa.get('blocking_issues')
                 if passed:
                     ownership_receipt = self.operating_contract.receipt(

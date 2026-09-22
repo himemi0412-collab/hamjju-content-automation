@@ -16,7 +16,10 @@ REFERENCE_URLS = (
     'https://blog.naver.com/himemi0412/224398911774',
 )
 CARD_FORMATS = {'square', 'landscape_4_3'}
-VISUAL_FAMILIES = {'soft_scene', 'playful_diagram', 'contract_notebook', 'clipboard_checklist'}
+VISUAL_FAMILIES = {
+    'photographic_lifestyle',
+    'soft_scene', 'playful_diagram', 'contract_notebook', 'clipboard_checklist',
+}
 
 
 def load_blog_reference(path: str | Path = REFERENCE_PATH) -> dict[str, Any]:
@@ -55,7 +58,15 @@ def validate_generated_reference_contract(
     if card_format not in CARD_FORMATS:
         raise RuntimeError('REFERENCE_FORMAT_INVALID: choose square or landscape_4_3')
     generated['card_format'] = card_format
-    if generated.get('visual_family') not in VISUAL_FAMILIES:
+    visual_family = str(generated.get('visual_family') or '').strip().lower()
+    visual_family = {
+        'photo': 'photographic_lifestyle',
+        'photographic': 'photographic_lifestyle',
+        'lifestyle_photo': 'photographic_lifestyle',
+        'photo_lifestyle': 'photographic_lifestyle',
+    }.get(visual_family, visual_family)
+    generated['visual_family'] = visual_family
+    if visual_family not in VISUAL_FAMILIES:
         raise RuntimeError('REFERENCE_VISUAL_FAMILY_INVALID')
     validate_named_design_contract(generated, required=require_design_language)
     if len(generated.get('card_news') or []) != 5:

@@ -31,8 +31,18 @@ def _fit(draw: ImageDraw.ImageDraw, text: str, path: str | None, maximum: int,
 
 
 def _subject_lock(card: dict[str, Any]) -> str:
-    source = ' '.join([str(card.get('headline') or ''), str(card.get('copy') or '')])
+    items = card.get('items') or []
+    source = ' '.join([
+        str(card.get('headline') or ''), str(card.get('copy') or ''),
+        *(
+            f"{item.get('label', '')} {item.get('detail', '')}"
+            for item in items if isinstance(item, dict)
+        ),
+    ])
     locks = (
+        (('고무패킹', '문틈', '곰팡이'), 'Show a close, unmistakable view of a household refrigerator door gasket: the flexible folded rubber seal around the door edge, its narrow groove, visible moisture or small mold spots, a soft cleaning cloth, and a clear comparison between a seal that lies flat and one that is torn or lifted. Never show a washing machine, document, ruler, generic appliance icon or unrelated filter.'),
+        (('배수호스', '실외기'), 'Show the exact home air-conditioner inspection subject named in the card: a wall-mounted indoor air conditioner connected to a real flexible drain hose, or an outdoor condenser unit with open airflow and no cover. When the card is about the drain hose, make the hose, bend, outlet and water path the main subject. Never replace them with a ruler, document, generic appliance or abstract icon.'),
+        (('제습기', '물통'), 'Show a recognizable floor-standing home dehumidifier with its removable transparent water tank pulled out, remaining water droplets, the tank lid and a clean cloth or drying rack. Make emptying and fully air-drying the tank visually obvious. Never substitute an air purifier, humidifier, refrigerator, document or generic white appliance.'),
         (('식기세척기',), 'Show a built-in kitchen dishwasher with dish racks and a door-mounted detergent dispenser. Never show an air purifier, dehumidifier, water purifier, laundry washer or generic white appliance.'),
         (('세탁기',), 'Show a front-loading laundry washing machine with a circular drum door and the pull-out detergent drawer at the upper front. Never show dishwasher racks, spray arms or a kitchen dishwasher.'),
         (('건조기',), 'Show a front-loading tumble clothes dryer with a circular door and a removable lint filter at the door or lower opening. Never show an air purifier, dehumidifier or water tank appliance.'),
@@ -40,8 +50,8 @@ def _subject_lock(card: dict[str, Any]) -> str:
         (('로봇청소기',), 'Show a low round robot vacuum and its dock, dust bin or clean-water tank. Never substitute an air purifier or dehumidifier.'),
         (('공기청정기',), 'Show a floor-standing air purifier with a large removable air filter and intake grille. Never show a dehumidifier water tank.'),
         (('김치냉장고',), 'Show a Korean kimchi refrigerator with sealed kimchi containers, shelf position and cold-air outlet context. No generic document icons.'),
-        (('냉장고',), 'Show a household refrigerator interior with food containers, thermometer or power-outage context as appropriate.'),
-        (('에어컨',), 'Show a wall-mounted home air conditioner, removable mesh filter and dry indoor cooling context.'),
+        (('냉장고',), 'Show a clearly recognizable household refrigerator and the exact part named by the card. If the topic concerns a door, seal or gasket, use a close-up of that physical part rather than the refrigerator interior. Never use a generic appliance, document or abstract icon.'),
+        (('에어컨',), 'Show a clearly recognizable wall-mounted home air conditioner and the exact physical part or action named by the card, such as its mesh filter, flexible drain hose or outdoor condenser unit. Never use a generic appliance, document, ruler or abstract icon.'),
     )
     for keywords, instruction in locks:
         if any(keyword in source for keyword in keywords):
