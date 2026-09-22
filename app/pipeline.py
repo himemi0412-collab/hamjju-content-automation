@@ -18,7 +18,10 @@ from .media import (
     MediaGenerator, compose_short_video, concat_scene_audio, make_srt,
     render_blog_cards, save_manifest, verify_short_artifacts,
 )
-from .notion_client import NotionClient, compact_page_context, extract_page_title, naver_handoff_blocks, result_blocks
+from .notion_client import (
+    NotionClient, compact_page_context, extract_page_title, naver_handoff_blocks,
+    property_value, result_blocks,
+)
 from .settings import Settings
 from .state import StateStore
 from .youtube import YouTubePrivateUploader
@@ -205,30 +208,14 @@ class Pipeline:
         if len(upload_ids) != 5:
             raise RuntimeError('NOTION_CARD_REPLACEMENT_INCOMPLETE')
         self.notion.update_status(page_id, 'CODEX_HANDOFF_READY')
-        image_blocks = []
-        for index, (upload_id, card) in enumerate(zip(upload_ids, cards), 1):
-            image_blocks.extend([
-                {'object': 'block', 'type': 'heading_3', 'heading_3': {'rich_text': [
-                    {'type': 'text', 'text': {'content': f'카드 {index:02d} · {card.name}'}}]}},
-                {'object': 'block', 'type': 'image', 'image': {
-                    'type': 'file_upload', 'file_upload': {'id': upload_id},
-                }},
-            ])
         self.notion.append_blocks(page_id, [
-            {'object': 'block', 'type': 'heading_2', 'heading_2': {'rich_text': [
-                {'type': 'text', 'text': {'content': '카드뉴스 실제 첨부 파일 · 고정 순서'}}]}},
-            *image_blocks,
             {'object': 'block', 'type': 'heading_2', 'heading_2': {'rich_text': [
                 {'type': 'text', 'text': {'content': '카드뉴스 최신 재제작본 · visual-first QA PASS'}}]}},
             {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': [
                 {'type': 'text', 'text': {'content': '기존 원고는 변경하지 않았습니다. 생성 이미지 속성의 5장이 현재 정본이며 네이버 저장·공개·예약발행은 실행하지 않았습니다.'}}]}},
         ])
         return {
-            'channel': 'naver_blog', 'page_id': page_id, 'title': extract_page_title(page),
-            'status': 'cards_replaced', 'qa_pass': True, 'notion_page_updated': True,
-            'output_verified': True, 'budget_blocked': False,
-            'media': {'cards': [str(card) for card in cards], 'notion_cards_attached': True},
-            'naver_draft_verified': False, 'card_count': len(cards),
+            'page_id': page_id, 'status': 'cards_replaced', 'card_count': len(cards),
             'article_body_sha256': original_body_hash, 'qa': qa, 'usage': usage,
             'previous_status': original_status, 'new_status': 'CODEX_HANDOFF_READY',
         }
@@ -239,13 +226,19 @@ class Pipeline:
             ds,
             cfg.ready_status,
             cfg.notion_channel_value,
-            page_size=limit or self.s.max_jobs_per_run,
+            # Read a bounded candidate window so a newly added manual-priority
+            # item can jump ahead even when the normal daily limit is smaller.
+            page_size=100,
             excluded_formula_property=cfg.excluded_formula_property,
             excluded_formula_value=cfg.excluded_formula_value,
             required_select_values=cfg.required_select_values,
             required_number_greater_than=cfg.required_number_greater_than,
             sort_property=cfg.sort_property,
         )
+        # A user may add a sudden topic at any time. A page explicitly marked
+        # as direct/user input jumps ahead of the automated queue while the
+        # relative order of all normal candidates remains unchanged.
+        pages = sorted(pages, key=lambda page: 0 if page_is_manual_priority(page) else 1)
         results = []
         for page in pages[: limit or self.s.max_jobs_per_run]:
             results.append(self.process_page(cfg, page, dry_run=dry_run))
@@ -995,3 +988,16 @@ def page_is_eligible(cfg: ChannelConfig, context: dict[str, Any]) -> bool:
         and properties[property_name] > minimum_value
         for property_name, minimum_value in (cfg.required_number_greater_than or {}).items()
     )
+
+
+def page_is_manual_priority(page: dict[str, Any]) -> bool:
+    properties = page.get('properties') or {}
+    values = {
+        name: property_value(prop)
+        for name, prop in properties.items()
+        if name in {'키워드 출처', '주제 출처', '다음 행동', '수동 우선'}
+    }
+    if values.get('수동 우선') is True:
+        return True
+    text = ' '.join(str(x or '') for x in values.values()).lower()
+    return any(marker in text for marker in ('직접 입력', '사용자 추가', '사용자 직접', '수동 우선'))
