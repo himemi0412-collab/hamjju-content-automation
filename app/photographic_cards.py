@@ -69,7 +69,7 @@ def _subject_lock(card: dict[str, Any]) -> str:
         (('건조기',), 'Show a front-loading tumble clothes dryer with a circular door and a removable lint filter at the door or lower opening. Never show an air purifier, dehumidifier or water tank appliance.'),
         (('와이파이', '2.4GHz'), 'Show only a recognizable wireless router with antennas, a smartphone or laptop, walls and signal-distance context. Never add household cleaning appliances, filters, brushes or vacuum parts.'),
         (('로봇청소기',), 'Show a low round robot vacuum and its dock, dust bin or clean-water tank. Never substitute an air purifier or dehumidifier.'),
-        (('공기청정기',), 'Show a floor-standing air purifier with a large removable air filter and intake grille. Never show a dehumidifier water tank.'),
+        (('공기청정기',), 'Show a floor-standing air purifier with a large removable air filter and intake grille. Explain every point only through the physical purifier, filter condition, airflow, placement, and an inspecting hand. Never show a dehumidifier water tank, product packaging, printed report, test certificate, safety document, smartphone screen, control-panel text, label, model number, badge, seal, or any object that could contain writing.'),
         (('김치냉장고',), 'Show a Korean kimchi refrigerator with sealed kimchi containers, shelf position and cold-air outlet context. No generic document icons.'),
         (('냉장고',), 'Show a clearly recognizable household refrigerator and the exact part named by the card. If the topic concerns a door, seal or gasket, use a close-up of that physical part rather than the refrigerator interior. Never use a generic appliance, document or abstract icon.'),
         (('에어컨',), 'Show a clearly recognizable wall-mounted home air conditioner and the exact physical part or action named by the card, such as its mesh filter, flexible drain hose or outdoor condenser unit. Never use a generic appliance, document, ruler or abstract icon.'),
@@ -96,7 +96,7 @@ def _scene_prompt(
         f'Card role: {ROLES[index - 1]}. Topic: {card.get("headline", "")}.',
         f'Explanation: {card.get("copy", "")}. Visible situation and objects: {item_text}.',
         _subject_lock(card),
-        'Show a believable unbranded Korean home interior and concrete relevant appliances, containers, controls, filters, documents, measurements, or actions.',
+        'Show a believable unbranded Korean home interior and concrete relevant appliances, containers, filters, measurements shown only by physical spacing or scale, and actions. Do not use documents, packaging, certificates, reports, phone screens, control-panel text or labels as visual evidence; all readable information will be typeset locally later.',
         'The image must explain the situation visually, with a clear subject and natural scale.',
         f'Production card role: {role_key}. {ROLE_SCENE_DIRECTIONS[index - 1]}',
         'Reference styling applies only to spacing, cool pastel accents and calm editorial composition. '
