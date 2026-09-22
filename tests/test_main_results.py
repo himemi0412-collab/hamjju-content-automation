@@ -297,6 +297,32 @@ def test_sufficient_blog_backlog_does_not_pay_for_new_topic_research(monkeypatch
     main.seed_topics(blog_count=3, ppojjugi_count=0, japan_count=0)
 
 
+def test_search_ready_topic_requires_scores_keywords_answer_and_sources():
+    from app.main import topic_is_search_ready
+
+    valid = {
+        'title': '검증된 주제', 'main_keyword': '핵심 키워드',
+        'search_intent': '정보 탐색', 'geo_answer': '짧고 검증된 답변',
+        'sources': '공식 출처 https://example.com 2026-09-23',
+        'seo_score': 80, 'geo_score': 75,
+    }
+    assert topic_is_search_ready(valid)
+    assert not topic_is_search_ready({**valid, 'geo_score': 69})
+    assert not topic_is_search_ready({**valid, 'sources': ''})
+
+
+def test_short_topic_backlog_prevents_paid_research():
+    from app.main import missing_short_topics
+
+    class Notion:
+        def query_ready(self, data_source, status, channel, **kwargs):
+            assert status == '작성 요청'
+            assert channel == '일본 유튜브 쇼츠'
+            return [{'id': 'waiting'}]
+
+    assert missing_short_topics(Notion(), 'shorts-ds', '일본 유튜브 쇼츠', 1) == 0
+
+
 @pytest.mark.parametrize('change', [{'page_id': 'other-page'}, {'channel': 'japan_shorts'}, {'generated': {}}])
 def test_resume_blog_rejects_wrong_artifact_before_any_connection(monkeypatch, tmp_path, change):
     import json
