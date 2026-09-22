@@ -70,6 +70,19 @@ def test_workflow_recovery_has_no_topic_seeding_and_no_upload():
     assert "github.event_name == 'push'" not in status
 
 
+def test_rerender_records_verified_notion_output_and_uses_configured_budget(monkeypatch):
+    main = Path('app/main.py').read_text(encoding='utf-8')
+    pipeline = Path('app/pipeline.py').read_text(encoding='utf-8')
+    assert "record_results(s.output_dir, 'naver_blog', [result], 1)" in main
+    assert "'status': 'cards_replaced', 'qa_pass': True" in pipeline
+    assert "'notion_page_updated': True" in pipeline
+    assert "'output_verified': True" in pipeline
+    assert "'type': 'file_upload', 'file_upload': {'id': upload_id}" in pipeline
+    monkeypatch.setenv('OPENAI_MONTHLY_BUDGET_USD', '40')
+    report = markdown_report({}, {'naver_blog': 1}, 'success', 'https://example.org/run')
+    assert 'OpenAI 내부 월 한도: $40' in report
+
+
 def test_workflow_keeps_second_shorts_after_first_failure_and_preserves_budget():
     workflow = Path('.github/workflows/daily.yml').read_text(encoding='utf-8')
     assert 'channel ppojjugi_shorts --limit 1 || result=1' in workflow
