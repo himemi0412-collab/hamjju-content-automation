@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     max_qa_output_tokens: int = 6000
 
     max_jobs_per_run: int = 3
+    # Paid generation retries are deliberately conservative. Blog retries can
+    # recreate five images at once, so they require an explicit reviewed
+    # resume/rerender action instead of an automatic second paid generation.
+    auto_retry_max_attempts: int = 1
+    auto_retry_blog_enabled: bool = False
     enable_web_research: bool = True
     enable_media_generation: bool = False
     auto_private_youtube_upload: bool = False
