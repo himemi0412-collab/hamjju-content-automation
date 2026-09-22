@@ -10,6 +10,24 @@ from .card_design import get_design_blueprint, get_design_language
 
 
 ROLES = ('먼저 답', '왜 그런지', '조건 비교', '지금 확인', '마지막 판단')
+ROLE_KEYS = ('cover', 'flow', 'comparison', 'checklist', 'decision')
+ROLE_SCENE_DIRECTIONS = (
+    'Show the real problem situation immediately, with one unmistakable main household object.',
+    'Show the physical cause or action as a clear before-to-after sequence inside one believable scene.',
+    'Show two real conditions at the same scale and viewing angle so the difference is physically visible.',
+    'Show a hand performing the exact inspection action on the real object; avoid symbolic checkboxes.',
+    'Show the final safe condition or decision using the real object and its surrounding context.',
+)
+EXPLORATION_ONLY_DESIGN_LANGUAGES = frozenset({
+    'Retro Tech UI', 'Screenshot Editorial', 'Prompt Playground', 'Terminal Noir',
+})
+
+
+def production_design_language(name: str | None) -> str:
+    """Keep technology-themed cover exploration out of real blog production."""
+    if not name or name in EXPLORATION_ONLY_DESIGN_LANGUAGES:
+        return 'Bento Editorial'
+    return name
 
 
 def _font(path: str | None, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -42,6 +60,7 @@ def _subject_lock(card: dict[str, Any]) -> str:
         ),
     ])
     locks = (
+        (('노트북', 'RAM', '램', '발열'), 'Show a real open laptop on a clean desk with its ventilation path, cooling fan area, bottom intake grille, memory module or system monitoring context as required by the card. When RAM is mentioned, show a realistic laptop memory module and slot only if the action calls for it. Never show source code, terminal windows, Codex, ChatGPT, AI logos, abstract app UI, floating icons or generic technology cubes.'),
         (('고무패킹', '문틈', '곰팡이'), 'Show a close, unmistakable view of a household refrigerator door gasket: the flexible folded rubber seal around the door edge, its narrow groove, visible moisture or small mold spots, a soft cleaning cloth, and a clear comparison between a seal that lies flat and one that is torn or lifted. Never show a washing machine, document, ruler, generic appliance icon or unrelated filter.'),
         (('배수호스', '실외기'), 'Show the exact home air-conditioner inspection subject named in the card: a wall-mounted indoor air conditioner connected to a real flexible drain hose, or an outdoor condenser unit with open airflow and no cover. When the card is about the drain hose, make the hose, bend, outlet and water path the main subject. Never replace them with a ruler, document, generic appliance or abstract icon.'),
         (('제습기', '물통'), 'Show a recognizable floor-standing home dehumidifier with its removable transparent water tank pulled out, remaining water droplets, the tank lid and a clean cloth or drying rack. Make emptying and fully air-drying the tank visually obvious. Never substitute an air purifier, humidifier, refrigerator, document or generic white appliance.'),
@@ -69,8 +88,9 @@ def _scene_prompt(
     item_text = '; '.join(
         f"{x.get('label', '')}: {x.get('detail', '')}" for x in items if isinstance(x, dict)
     )
-    blueprint = design_blueprint or get_design_blueprint(design_language)
-    role_key = ('cover', 'flow', 'comparison', 'checklist', 'decision')[index - 1]
+    # The cover explorer owns technology/UI motifs. Production backgrounds use
+    # only the factual card role and real-life subject; typography is added later.
+    role_key = ROLE_KEYS[index - 1]
     parts = [
         'Create one square editorial lifestyle image for a Korean home-appliance help article.',
         f'Card role: {ROLES[index - 1]}. Topic: {card.get("headline", "")}.',
@@ -78,16 +98,15 @@ def _scene_prompt(
         _subject_lock(card),
         'Show a believable unbranded Korean home interior and concrete relevant appliances, containers, controls, filters, documents, measurements, or actions.',
         'The image must explain the situation visually, with a clear subject and natural scale.',
-        f'Named design language: {design_language}. Cover-first visual system: '
-        f'{blueprint.get("cover_composition", "")}. Image strategy: {blueprint.get("image_strategy", "")}. '
-        f'Material treatment: {blueprint.get("material_treatment", "")}. '
-        f'This card role must visibly follow: {(blueprint.get("role_expansion") or {}).get(role_key, "")}.',
+        f'Production card role: {role_key}. {ROLE_SCENE_DIRECTIONS[index - 1]}',
+        'Reference styling applies only to spacing, cool pastel accents and calm editorial composition. '
+        'Do not copy cover-exploration motifs, software screens, code, terminals, chat windows or AI branding.',
         'Use a bright paper-white or cool-white editorial base with pale lavender, muted mint, soft blue and restrained coral accents. '
         'No beige, yellow cream, amber light or warm sepia cast.',
         'The concrete scene and objects must occupy roughly 65 to 72 percent of the frame and remain the first thing seen. '
         'Reserve one calm low-detail editorial zone in the lower 28 to 32 percent for later Korean typography.',
         'No people unless hands are essential to demonstrate the action.',
-        'ABSOLUTELY NO text, letters, numbers, logos, labels, UI glyphs, watermark, yellow cast, sepia, collage, floating icons, generic infographic nodes, or repeated template boxes.',
+        'ABSOLUTELY NO text, letters, numbers, logos, labels, UI glyphs, watermark, yellow cast, beige cream, sepia, collage, source code, terminal, Codex, ChatGPT, AI branding, floating icons, generic infographic nodes, or repeated template boxes.',
     ]
     if revision_note:
         parts.append(
@@ -117,11 +136,20 @@ def generate_and_typeset_blog_cards(
     out_dir.mkdir(parents=True, exist_ok=True)
     results: list[Path] = []
     revision_notes = revision_notes or {}
+    design_language = production_design_language(design_language)
     style = get_design_language(design_language)
-    blueprint = design_blueprint or get_design_blueprint(design_language)
+    # A caller-supplied exploration blueprint must never control generated scene
+    # content. Rebuild the deterministic production typography contract instead.
+    blueprint = get_design_blueprint(design_language)
     palette = tuple(style['palette'])
     accent = palette[(0 if design_language != 'Bento Editorial' else 1)]
     for index, card in enumerate(cards, 1):
+        expected_layout = ROLE_KEYS[index - 1]
+        actual_layout = str(card.get('layout') or expected_layout).strip().lower()
+        if actual_layout != expected_layout:
+            raise ValueError(
+                f'Blog card {index} must use role {expected_layout!r}, got {actual_layout!r}'
+            )
         final_path = out_dir / f'card_{index:02d}.png'
         if only_indices is not None and index not in only_indices:
             if not final_path.exists():
