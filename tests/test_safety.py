@@ -29,6 +29,8 @@ def test_github_action_keeps_blog_local_and_uploads_review_shorts_privately():
     assert "OPENAI_MONTHLY_BUDGET_USD: '40'" in workflow
     assert 'IMAGE_QUALITY: medium' in workflow
     assert 'output/openai-cost-ledger.json' in workflow
+    assert "cron: '45 0 * * *'" in workflow
+    assert 'seed-topics --blog-count 3 --ppojjugi-count 1 --japan-count 1' in workflow
     assert "OPENAI_BUDGET_REQUIRE_EXISTING_LEDGER: 'true'" in workflow
     assert "cron: '0 1 * * *'" in workflow
     assert "cron: '0 12 * * *'" in workflow
