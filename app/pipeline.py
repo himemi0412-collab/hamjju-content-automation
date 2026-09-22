@@ -205,14 +205,30 @@ class Pipeline:
         if len(upload_ids) != 5:
             raise RuntimeError('NOTION_CARD_REPLACEMENT_INCOMPLETE')
         self.notion.update_status(page_id, 'CODEX_HANDOFF_READY')
+        image_blocks = []
+        for index, (upload_id, card) in enumerate(zip(upload_ids, cards), 1):
+            image_blocks.extend([
+                {'object': 'block', 'type': 'heading_3', 'heading_3': {'rich_text': [
+                    {'type': 'text', 'text': {'content': f'카드 {index:02d} · {card.name}'}}]}},
+                {'object': 'block', 'type': 'image', 'image': {
+                    'type': 'file_upload', 'file_upload': {'id': upload_id},
+                }},
+            ])
         self.notion.append_blocks(page_id, [
+            {'object': 'block', 'type': 'heading_2', 'heading_2': {'rich_text': [
+                {'type': 'text', 'text': {'content': '카드뉴스 실제 첨부 파일 · 고정 순서'}}]}},
+            *image_blocks,
             {'object': 'block', 'type': 'heading_2', 'heading_2': {'rich_text': [
                 {'type': 'text', 'text': {'content': '카드뉴스 최신 재제작본 · visual-first QA PASS'}}]}},
             {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': [
                 {'type': 'text', 'text': {'content': '기존 원고는 변경하지 않았습니다. 생성 이미지 속성의 5장이 현재 정본이며 네이버 저장·공개·예약발행은 실행하지 않았습니다.'}}]}},
         ])
         return {
-            'page_id': page_id, 'status': 'cards_replaced', 'card_count': len(cards),
+            'channel': 'naver_blog', 'page_id': page_id, 'title': extract_page_title(page),
+            'status': 'cards_replaced', 'qa_pass': True, 'notion_page_updated': True,
+            'output_verified': True, 'budget_blocked': False,
+            'media': {'cards': [str(card) for card in cards], 'notion_cards_attached': True},
+            'naver_draft_verified': False, 'card_count': len(cards),
             'article_body_sha256': original_body_hash, 'qa': qa, 'usage': usage,
             'previous_status': original_status, 'new_status': 'CODEX_HANDOFF_READY',
         }
