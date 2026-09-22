@@ -2,6 +2,15 @@
 
 블로그와 YouTube Shorts 반복 제작을 **기존 Notion 대기열 중심으로 자동화**하는 개인용 Python 프로젝트입니다.
 
+## 저비용 재시도 정책
+
+- 예약 블로그 작업은 QA 실패 시 원고와 카드 5장을 자동으로 통째로 재생성하지 않습니다.
+- 실패한 블로그 결과물은 Actions artifact에 보존하고 `resume_blog` 또는
+  `rerender_blog_cards`로 필요한 단계만 명시적으로 복구합니다.
+- 쇼츠의 QA 자동 재시도는 기본 1회로 제한합니다.
+- 완료된 항목은 Notion 상태와 `output/state.db` 체크포인트로 다시 처리하지 않습니다.
+- 예산 장부와 처리 체크포인트는 실패한 실행에서도 다음 GitHub Actions 실행으로 복원됩니다.
+
 ## 현재 연결 대상
 
 - 블로그 대기열 Data Source: `21a60556-f086-4b7a-96b3-81995c77edef`
