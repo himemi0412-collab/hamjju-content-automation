@@ -390,7 +390,10 @@ jobs:
           result=0
           schedule_expr="${{ github.event.schedule }}"
           if [ "$schedule_expr" = "0 1 * * *" ]; then
-            ENABLE_MEDIA_GENERATION=false python -m app.main channel naver_blog --limit 3 --auto-retry || result=1
+            # A rejected blog can cost five fresh images. Preserve its artifact
+            # for reviewed resume/rerender instead of automatically paying for
+            # another full manuscript and card set.
+            ENABLE_MEDIA_GENERATION=false python -m app.main channel naver_blog --limit 3 || result=1
           elif [ "$schedule_expr" = "0 12 * * *" ]; then
             ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=true python -m app.main channel ppojjugi_shorts --limit 1 --auto-retry || result=1
             ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=true python -m app.main channel japan_shorts --limit 1 --auto-retry || result=1
