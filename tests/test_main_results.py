@@ -125,6 +125,40 @@ def test_automatic_retry_reprocesses_only_qa_rejections():
     assert results[1] == initial[1]
 
 
+def test_automatic_retry_defaults_to_one_paid_retry():
+    from app.main import retry_qa_rejections_once
+    from app.config import load_channels
+
+    class Notion:
+        def retrieve_page(self, page_id):
+            return {'id': page_id}
+
+    class Pipeline:
+        notion = Notion()
+        calls = 0
+
+        def process_page(self, cfg, page):
+            self.calls += 1
+            return {
+                'page_id': page['id'], 'status': '수정 필요',
+                'qa_pass': False, 'blocking_issues': ['still rejected'],
+                'budget_blocked': False,
+            }
+
+    pipeline = Pipeline()
+    retry_qa_rejections_once(
+        pipeline,
+        load_channels()['japan_shorts'],
+        [{
+            'page_id': 'one-retry-only', 'status': '수정 필요',
+            'qa_pass': False, 'blocking_issues': ['initial'],
+            'budget_blocked': False,
+        }],
+    )
+
+    assert pipeline.calls == 1
+
+
 def test_automatic_retry_uses_one_bounded_second_attempt_for_new_qa_issue():
     from app.main import retry_qa_rejections_once
     from app.config import load_channels
@@ -159,6 +193,7 @@ def test_automatic_retry_uses_one_bounded_second_attempt_for_new_qa_issue():
             'qa_pass': False, 'blocking_issues': ['unsupported memory'],
             'budget_blocked': False,
         }],
+        max_attempts=2,
     )
 
     assert pipeline.calls == 2
@@ -199,6 +234,7 @@ def test_automatic_retry_stops_after_two_qa_failures():
             'qa_pass': False, 'blocking_issues': ['initial'],
             'budget_blocked': False,
         }],
+        max_attempts=2,
     )
 
     assert pipeline.calls == 2
