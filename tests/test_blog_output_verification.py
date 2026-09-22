@@ -91,6 +91,7 @@ def make_pipeline(tmp_path, monkeypatch, visual_pass=True):
     for i, path in enumerate(paths):
         path.write_bytes(f'image-{i}'.encode())
     monkeypatch.setattr('app.pipeline.render_blog_cards', lambda *args, **kwargs: paths)
+    monkeypatch.setattr('app.pipeline.generate_and_typeset_blog_cards', lambda *args, **kwargs: paths)
     monkeypatch.setattr('app.pipeline.httpx.get', lambda url, **kwargs: SimpleNamespace(content=notion.paths[url].read_bytes(), raise_for_status=lambda: None))
     settings = Settings(_env_file=None, output_dir=tmp_path / 'output')
     state = StateStore(tmp_path / 'state.db')
