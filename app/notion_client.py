@@ -81,6 +81,11 @@ class NotionClient:
         return r.json().get('results', [])
 
     def create_blog_topic(self, data_source_id: str, topic: dict[str, Any], order: int) -> str:
+        reader_question = str(topic.get('reader_question') or '')
+        faq = [str(x).strip() for x in (topic.get('faq_questions') or []) if str(x).strip()]
+        if faq:
+            reader_question = reader_question + ('\n' if reader_question else '') + '후속 질문: ' + ' / '.join(faq)
+        sources = seo_geo_note(topic, include_sources=True)
         properties: dict[str, Any] = {
             '제목': {'title': [{'text': {'content': str(topic['title'])[:2000]}}]},
             '상태': {'select': {'name': '작성 요청'}},
@@ -93,8 +98,8 @@ class NotionClient:
             '세부 주제': {'select': {'name': str(topic.get('detail_topic') or '기타')}},
             '대표 키워드': {'rich_text': rich(str(topic.get('main_keyword') or ''))},
             '보조 키워드': {'rich_text': rich(', '.join(topic.get('sub_keywords') or []))},
-            '독자 질문': {'rich_text': rich(str(topic.get('reader_question') or ''))},
-            '출처 목록': {'rich_text': rich(str(topic.get('sources') or ''))},
+            '독자 질문': {'rich_text': rich(reader_question)},
+            '출처 목록': {'rich_text': rich(sources)},
             '키워드 출처': {'select': {'name': '계절·시기'}},
             '말투': {'select': {'name': '햄쮸 톤 · 귀엽고 현실적'}},
         }
@@ -116,7 +121,9 @@ class NotionClient:
             '다음 행동': {'rich_text': rich(
                 '자동 제작 진행' if verified else '사용자 실제 경험 근거 확인 후 제작'
             )},
-            '작업 기록': {'rich_text': rich(str(topic.get('concept') or ''))},
+            '작업 기록': {'rich_text': rich(
+                str(topic.get('concept') or '') + '\n' + seo_geo_note(topic, include_sources=False)
+            )},
             '출처·확인일': {'rich_text': rich(str(topic.get('sources') or ''))},
             '버전': {'number': 1},
             '공개 승인': {'checkbox': False},
@@ -611,6 +618,27 @@ def property_value(prop: dict[str, Any]) -> Any:
         formula_type = (value or {}).get('type')
         return (value or {}).get(formula_type) if formula_type else None
     return None
+
+
+def seo_geo_note(topic: dict[str, Any], include_sources: bool) -> str:
+    """Serialize research metadata into existing Notion fields without schema changes."""
+    parts = []
+    if include_sources:
+        parts.append(str(topic.get('sources') or '').strip())
+    for label, value in (
+        ('검색 의도', topic.get('search_intent')),
+        ('GEO 핵심 답변', topic.get('geo_answer')),
+        ('선정 이유·유효기간', topic.get('trend_reason')),
+        ('SEO/GEO 점수', f"{int(topic.get('seo_score') or 0)}/{int(topic.get('geo_score') or 0)}"),
+    ):
+        text = str(value or '').strip()
+        if text:
+            parts.append(f'{label}: {text}')
+    keywords = [str(x).strip() for x in (topic.get('sub_keywords') or []) if str(x).strip()]
+    main_keyword = str(topic.get('main_keyword') or '').strip()
+    if main_keyword or keywords:
+        parts.append('검색 키워드: ' + ', '.join([x for x in [main_keyword, *keywords] if x]))
+    return '\n'.join(x for x in parts if x)[:2000]
 
 
 def extract_page_title(page: dict[str, Any]) -> str:
