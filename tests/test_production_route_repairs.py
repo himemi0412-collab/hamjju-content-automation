@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from app.blog_reference import VISUAL_FAMILIES, validate_generated_reference_contract
-from app.photographic_cards import _subject_lock
+from app.photographic_cards import _scene_prompt, _subject_lock, production_design_language
 
 
 def _reference_ready(visual_family: str) -> dict:
@@ -46,3 +46,30 @@ def test_shorts_prompts_supply_pre_media_voice_and_timeline_contracts():
     assert '"speaker_profile": "young_woman"' in ppijuk
     assert 'time_period' in japan
     assert 'present_day' in japan and 'showa_past' in japan
+
+
+def test_cover_exploration_technology_styles_are_blocked_from_production():
+    for name in ('Retro Tech UI', 'Screenshot Editorial', 'Prompt Playground', 'Terminal Noir'):
+        assert production_design_language(name) == 'Bento Editorial'
+    assert production_design_language('Japanese Editorial') == 'Japanese Editorial'
+
+
+def test_production_scene_prompt_uses_real_laptop_and_rejects_ai_ui_motifs():
+    card = {
+        'layout': 'cover',
+        'headline': '노트북 발열 점검',
+        'copy': 'RAM 추가 뒤 통풍과 팬을 확인해요',
+        'items': [{'label': '통풍구', 'detail': '막힘과 먼지 확인'}],
+    }
+    prompt = _scene_prompt(card, 1, design_language='Screenshot Editorial')
+    assert 'real open laptop' in prompt
+    assert 'Do not copy cover-exploration motifs' in prompt
+    assert 'ABSOLUTELY NO' in prompt
+    assert 'Codex' in prompt and 'ChatGPT' in prompt and 'terminal' in prompt
+    assert 'specific code, chat, file' not in prompt
+
+
+def test_production_route_normalises_exploration_style_before_manifest():
+    pipeline = Path('app/pipeline.py').read_text(encoding='utf-8')
+    assert "generated['design_language'] = production_design_language(" in pipeline
+    assert 'from .photographic_cards import generate_and_typeset_blog_cards, production_design_language' in pipeline
