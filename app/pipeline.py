@@ -26,7 +26,7 @@ from .manuscript_repair import apply_reviewed_corrections, manuscript_hash
 from .blog_reference import load_blog_reference, validate_generated_reference_contract
 from .card_design import apply_named_design_contract
 from .ownership import load_operating_contract
-from .photographic_cards import generate_and_typeset_blog_cards
+from .photographic_cards import generate_and_typeset_blog_cards, production_design_language
 
 
 def _card_numbers_from_qa_issue(issue: str) -> set[int]:
@@ -110,8 +110,9 @@ class Pipeline:
         original_body_hash = hashlib.sha256(
             str(generated.get('body_markdown') or '').encode('utf-8')
         ).hexdigest()
-        if not generated.get('design_language'):
-            generated['design_language'] = 'Bento Editorial'
+        generated['design_language'] = production_design_language(
+            generated.get('design_language')
+        )
         generated = apply_named_design_contract(generated)
         if hashlib.sha256(str(generated.get('body_markdown') or '').encode('utf-8')).hexdigest() != original_body_hash:
             raise RuntimeError('ARTICLE_BODY_CHANGED_DURING_CARD_RERENDER')
@@ -390,6 +391,9 @@ class Pipeline:
                     # Do not let the model route new daily work back to the legacy
                     # icon/diagram renderer by returning an older visual family.
                     generated['visual_family'] = 'photographic_lifestyle'
+                    generated['design_language'] = production_design_language(
+                        generated.get('design_language')
+                    )
                     generated = apply_named_design_contract(generated)
             content_version = manuscript_hash(generated)
             ownership_receipt = self.operating_contract.receipt(
