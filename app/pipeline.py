@@ -127,6 +127,8 @@ class Pipeline:
             font_path=self.s.card_font_path,
             budget=self.budget,
             estimated_cost_usd=self.s.openai_image_estimated_cost_usd,
+            design_language=str(generated.get('design_language') or 'Bento Editorial'),
+            design_blueprint=generated.get('design_blueprint'),
         )
         qa, usage = self.ai.qa(generated, {
             'channel': 'naver_blog',
@@ -175,6 +177,8 @@ class Pipeline:
                     card_number: ' '.join(revision_notes_by_card[card_number])
                     for card_number in notes_by_card
                 },
+                design_language=str(generated.get('design_language') or 'Bento Editorial'),
+                design_blueprint=generated.get('design_blueprint'),
             )
             qa, retry_usage = self.ai.qa(generated, {
                 'channel': 'naver_blog',
@@ -459,6 +463,8 @@ class Pipeline:
                         font_path=self.s.card_font_path,
                         budget=self.budget,
                         estimated_cost_usd=self.s.openai_image_estimated_cost_usd,
+                        design_language=str(generated.get('design_language') or 'Bento Editorial'),
+                        design_blueprint=generated.get('design_blueprint'),
                     )
                 if len(cards) != 5:
                     raise RuntimeError('Blog card-news render did not produce exactly five images')
