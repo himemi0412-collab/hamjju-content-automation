@@ -29,7 +29,7 @@
 
 카드뉴스 기준:
 - 정확히 5장: 질문 표지(cover) → 원리 흐름(flow) → 동일 기준 비교(comparison) → 행동 체크(checklist) → 선택 기준 요약(decision). `card_format`에는 반드시 `square` 또는 `landscape_4_3` 중 정확히 하나만 적는다. 다른 문구, 치수, 두 선택지를 함께 적지 않는다.
-- 시각 계열은 `soft_scene`, `playful_diagram`, `contract_notebook`, `clipboard_checklist` 중 하나를 고른다. 이는 고정 템플릿이 아니라 네 레퍼런스에서 추출한 색·여백·생활 사물·정보 장치 방향이다. 안전·침구처럼 한 장면과 여백이 중요한 글은 soft_scene, 설치·치수는 playful_diagram, 계약·비용은 contract_notebook, 단계·소유권·마지막 행동은 clipboard_checklist를 우선 검토한다.
+- `visual_family`는 반드시 `photographic_lifestyle`로 기록한다. 각 카드의 제목·설명·items에 적힌 정확한 가전 부품과 행동을 무문자 사진형 생활 장면으로 먼저 생성하고, 한글은 코드가 별도로 조판한다. 비슷해 보이는 다른 가전, 문서, 자, 범용 아이콘으로 대체하면 실패다.
 - `예쁘게`, `깔끔하게` 같은 추상 표현으로 끝내지 않는다. 글의 질문·정보 구조·독자·카드 역할을 보고 아래 이름 중 **한 가지 중심 디자인 언어**를 AI가 직접 선택해 `design_language`에 정확히 기록한다. 사용자에게 고르게 하지 않으며, 20개를 한 세트에 섞지 않는다.
 - 허용 디자인 언어: `Swiss Typography`, `Retro Tech UI`, `Bento Editorial`, `Monochrome Magazine`, `Neo Brutalism`, `Japanese Editorial`, `Quiet Luxury Editorial`, `Newspaper 2.0`, `Technical Manual`, `Screenshot Editorial`, `Prompt Playground`, `Terminal Noir`, `Fluorescent Minimal`, `Soft Swiss`, `Index / Catalogue`, `Cinematic Title Card`, `Zine Collage`, `Split Screen`, `Chrome Accent`, `Modular Poster`.
 - 주제 적합성을 우선한다. 치수·설치·원리는 Technical Manual, 조건이 많은 묶음은 Bento Editorial 또는 Index / Catalogue, 비용·약정은 Newspaper 2.0 또는 Monochrome Magazine, 화면 사용법은 Screenshot Editorial 또는 Prompt Playground, 양쪽 선택 비교는 Split Screen을 먼저 검토하되 기계적으로 고정하지 않는다.
@@ -40,7 +40,7 @@
 - **시각 장면 우선 규칙:** 각 카드의 사진형 장면·생활 사물·화면·설명 도식이 체감 면적의 60~70%, 모든 한글 정보가 30~40%를 넘지 않게 설계한다. 제목은 공백 포함 18자 이내, copy는 공백 포함 42자 이내의 1~2문장으로 쓴다. 긴 설명은 블로그 본문으로 보낸다.
 - 제목만 크게 놓고 작은 아이콘을 장식처럼 붙이는 표지는 금지한다. 표지부터 주제와 직접 관련된 사물 또는 장면 두 개 이상이 먼저 읽혀야 하며, 2~5번 카드도 글상자보다 도식·측정·문서·비교 장면이 먼저 보여야 한다.
 - 생성형 이미지 안에 한글·영문 글자를 그리게 하지 않는다. 장면과 사물은 무문자 이미지/도식으로 만들고, headline·copy·label·detail은 코드 렌더러가 별도 타이포그래피로 정확히 합성한다.
-- 제목은 Cafe24 Ssurround, 본문은 가독성 좋은 고딕으로 조판한다. 무료 원본 도식이며 실제 제품 사진이나 AI 생성 사진처럼 설명하지 않는다.
+- 한글 제목과 본문은 가독성 좋은 고딕으로 로컬 조판한다. 배경은 AI가 만든 설명용 사진형 장면이며 실제 제품 촬영 사진처럼 설명하지 않는다.
 - 세트는 중립 배경 외 3~5색을 반복하고 주조색 1개와 강조색 1~2개만 한 장에 사용한다. 흰색은 #FFFFFF로 한다.
 - 노란색·겨자색·금빛·누런 크림색 배경·세피아처럼 AI 특유의 노란 계열을 절대 사용하지 않는다.
 - 긴 문장 상자 반복 대신 관계를 보여주는 화살표, 같은 조건의 비교 열, 체크표시, 판단 경로를 사용한다. 색 상자와 번호만 바꾼 보고서형 구성은 금지한다. 표지에는 질문을 바로 이해시키는 생활 사물 장면, 흐름에는 단계마다 다른 사물, 비교에는 양쪽을 구분하는 서로 다른 사물, 체크리스트에는 항목별 의미가 다른 사물, 판단 카드에는 실제 분기 경로가 있어야 한다. 오이지나 장식 캐릭터를 넣지 않는다.
@@ -51,7 +51,7 @@
 - 3번 comparison: items 정확히 2개. label 최대 16자, detail 최대 50자. 동일 조건의 두 대상/선택을 비교한다. 근거 없는 우열이나 무조건 추천은 금지한다.
 - 4번 checklist: items 3~4개. label 최대 20자, detail 최대 40자. 지금 확인할 행동과 조건을 구체적으로 적는다.
 - 5번 decision: items 정확히 3개. label 최대 17자, detail 최대 42자. 중복 요약보다 상황별 판단과 다음 행동을 짚는다.
-- caption은 각 카드가 설명하는 내용을 정확히 한 문장으로 쓰고 '이해를 돕는 설명 도식'임을 포함한다. 카드마다 source_urls에 해당 주장 근거의 실제 공식 URL, checked_date에 실제 확인일, ai_disclosure에 AI 정리·코드 조판 사실과 실제 제품 사진이 아니라는 설명을 적는다. 이 캡션과 카드 위치를 원고의 image_placements에 함께 기록한다.
+- caption은 각 카드가 설명하는 내용을 정확히 한 문장으로 쓰고 '이해를 돕는 설명 이미지'임을 포함한다. 카드마다 source_urls에 해당 주장 근거의 실제 공식 원문 URL, checked_date에 실제 확인일, ai_disclosure에 AI 생성 배경·코드 조판 사실과 실제 제품 촬영 사진이 아니라는 설명을 적는다. URL은 확인한 원문 주소를 한 글자도 임의 교체·축약하지 않는다. 이 캡션과 카드 위치를 원고의 image_placements에 함께 기록한다.
 - 글자를 줄이거나 잘라 넣지 않는다. 문구가 상한을 넘으면 의미·조건을 보존하여 짧게 다시 쓴 뒤 제출한다.
 - 안전 수칙을 줄일 때도 시간·온도·적용 대상·예외 조건을 보존한다. 예방 조치의 시행 기한이 지난 뒤에도 같은 조치로 안전해지는 것처럼 쓰지 않는다. 정전 식품은 추가 냉각 여부, 복구 직후 재냉각 전 측정, 식품별 폐기·재냉동 예외를 구분한다.
 
@@ -66,16 +66,16 @@
 {
   "reference_profile_id": "HAMZZU_NAVER_REFERENCE_V1",
   "card_format": "square",
-  "visual_family": "soft_scene 또는 playful_diagram 또는 contract_notebook 또는 clipboard_checklist",
+  "visual_family": "photographic_lifestyle",
   "design_language": "위 20개 허용 이름 중 정확히 하나",
   "title": "제목",
   "summary": "짧은 요약",
   "body_markdown": "완성 원고",
   "hashtags": ["태그1"],
   "card_news": [
-    {"card": 1, "layout": "cover", "headline": "", "copy": "", "illustration": "document", "items": [{"label": "", "detail": "", "illustration": "garment"}, {"label": "", "detail": "", "illustration": "care_label"}], "caption": "이해를 돕는 설명 도식: ...", "source_urls": ["실제 공식 URL"], "checked_date": "YYYY-MM-DD", "ai_disclosure": "AI가 정리한 정보를 코드로 조판한 설명 도식이며 실제 제품 사진이 아닙니다."}
+    {"card": 1, "layout": "cover", "headline": "", "copy": "", "illustration": "document", "items": [{"label": "", "detail": "", "illustration": "garment"}, {"label": "", "detail": "", "illustration": "care_label"}], "caption": "이해를 돕는 설명 이미지: ...", "source_urls": ["실제 공식 원문 URL"], "checked_date": "YYYY-MM-DD", "ai_disclosure": "AI 생성 배경에 한글을 코드로 조판한 설명 이미지이며 실제 제품 촬영 사진이 아닙니다."}
   ],
-  "image_placements": [{"card": 1, "after_heading": "도입", "caption": "", "ai_disclosure": "AI가 정리한 정보를 코드로 조판한 설명 도식이며 실제 제품 사진이 아닙니다."}],
+  "image_placements": [{"card": 1, "after_heading": "도입", "caption": "", "ai_disclosure": "AI 생성 배경에 한글을 코드로 조판한 설명 이미지이며 실제 제품 촬영 사진이 아닙니다."}],
   "fact_check_notes": ["근거와 추가 확인 항목"],
   "ready_for_qa": true
 }

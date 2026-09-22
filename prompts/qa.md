@@ -47,6 +47,7 @@
 
 일본 쇼츠:
 - generated.narrator_profile.profile은 young_woman, older_woman, young_man, older_man, multiple 중 하나여야 한다. 여러 등장인물이 말하면 multiple을 사용하고, 모든 scene에 young_woman·young_man·older_woman·older_man 중 정확한 speaker_profile이 있어야 한다. 동일 인물의 연령·성별 프로필이 장면 사이에서 바뀌거나 화자가 바뀌었는데 같은 음색을 쓰면 차단한다.
+- 모든 scene의 time_period는 present_day 또는 showa_past여야 한다. present_day의 현재 노년 인물과 showa_past의 젊은 인물을 같은 장면에 설명 없이 섞거나, 1980년대 공간에 현재 모습의 70대 인물을 과거 당사자처럼 배치하면 차단한다.
 - '일본 쇼츠 영상.mp4' 마스터 가이드대로 전체 화면 일러스트, 첫 장면 상단 일본어 훅, 하단 일본어 자막을 지시했는가.
 - 삐죽이용 흐린 배경·중앙 가로 패널·장면 번호 레이아웃이 섞이면 차단한다.
 - 일본인 60대 이상을 위한 자연스럽고 담백한 일본어인가.
@@ -58,6 +59,7 @@
 - 시대 고증이 필요한 사실을 근거 없이 확정하지 않았는가.
 
 삐죽이 쇼츠:
+- narrator_profile.profile은 young_woman이어야 하고 모든 scene의 speaker_profile도 young_woman이어야 한다. 입력에 별도 목표가 없으면 target_duration_seconds 30~45와 scene 합계를 사용하며, 원래 입력에 목표 숫자가 없다는 이유만으로 차단하지 않는다.
 - '삐죽이 쇼츠 영상.mp4' 마스터 가이드대로 흐린 배경, 흰 테두리 중앙 가로 패널, 상단 '삐죽이의 오늘', 장면 번호, 패널 아래 한국어 자막을 지시했는가.
 - 일본 채널용 전체 화면 일러스트 레이아웃으로 바뀌면 차단한다.
 - 사용자가 확인한 실제 경험만 사용했는가.

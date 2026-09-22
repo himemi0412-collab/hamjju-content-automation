@@ -2,6 +2,7 @@
 
 핵심:
 - 실제 경험/감정을 중심으로 만든다. 입력 페이지에 목표 길이가 있으면 그 길이를 최우선으로 지키고, 없을 때만 30~45초로 구성한다.
+- 입력 페이지에 목표 길이가 없어도 `target_duration_seconds`를 30~45 사이의 정수로 반드시 정하고, scenes의 예상 seconds 합계를 그 값의 ±2초 안에 맞춘다. 목표 길이 누락을 QA 차단 사유로 남기지 않는다.
 - scenes의 seconds 합계가 입력의 목표 길이 범위를 벗어나지 않게 계산한다.
 - 귀엽고 하찮은 느낌은 살리되 감정을 과장하거나 꾸며내지 않는다.
 - 입력에 없는 개인 경험을 사실처럼 추가하지 않는다.
@@ -30,6 +31,8 @@
 - 전체 화면 일러스트만 띄우는 일본 채널 레이아웃으로 대체하면 실패다.
 
 음성·영상:
+- `narrator_profile`은 반드시 `{"profile":"young_woman","reason":"20대 한국 여성의 일기 독백"}`으로 기록한다.
+- 모든 scene에 `speaker_profile: "young_woman"`을 반드시 기록한다. 삐죽이는 한 편 전체에서 같은 Aoede 음색을 유지한다.
 - narration과 발화 caption은 친구에게 바로 털어놓는 자연스러운 한국어 반말로 작성한다. `~습니다`, `~어요`, `~예요` 같은 존댓말 종결은 쓰지 않는다. 살짝 지치고 생각이 많은 20대 한국 여성의 일기 독백처럼 들리게 하되, 무례한 명령조·억지 유행어·과장된 귀여운 캐릭터 연기·광고·아나운서 말투는 금지한다.
 - 장면은 5~7개로 구성하고 각 장면은 보통 3~5초 호흡으로 화면 변화가 이야기 흐름과 일치하게 한다.
 - 각 scene에 그 화면에서 실제로 들릴 narration 구간을 넣는다. scene narration을 순서대로 이어 붙이면 전체 narration과 의미·문장 순서가 정확히 같아야 한다.
@@ -45,9 +48,11 @@
 {
   "title": "",
   "hook": "",
+  "target_duration_seconds": 40,
+  "narrator_profile": {"profile": "young_woman", "reason": "20대 한국 여성의 일기 독백"},
   "narration": "전체 내레이션",
   "scenes": [
-    {"scene": 1, "seconds": 7, "narration": "이 장면에서 들릴 내레이션", "caption": "", "image_prompt": ""}
+    {"scene": 1, "seconds": 7, "speaker_profile": "young_woman", "narration": "이 장면에서 들릴 내레이션", "caption": "", "image_prompt": ""}
   ],
   "youtube": {"title": "", "description": "", "tags": []},
   "fact_check_notes": [],

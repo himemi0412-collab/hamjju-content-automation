@@ -19,6 +19,8 @@
 - 재시도 출력 직전에 모든 scene을 처음부터 끝까지 다시 대조해, 시간축·소품의 존재/개수·행동·화자·caption·image_prompt가 서로 모순되지 않는지 확인한다.
 - 과거 연도·당시 나이·현재 나이를 함께 쓸 때는 현재 날짜 기준으로 계산이 정확해야 한다. 정확한 현재 나이가 핵심이 아니면 `今はもう六十歳前後`처럼 범위를 쓰거나 현재 나이를 생략한다.
 - 내레이션·자막·image_prompt 사이에서 사진·물건의 개수와 행동 상태(붙이는 중/이미 붙어 있음 등)를 반드시 일치시킨다.
+- 시간축을 scene마다 `time_period`로 명시한다. 현재의 회상 장면은 `present_day`, 과거 재현은 `showa_past`로 기록한다. `showa_past` 장면에는 당시 나이의 인물만, `present_day` 장면에는 현재 나이의 인물만 보여준다. 한 장면 안에서 현재의 70대 인물과 1980년대 거실을 설명 없이 동시에 배치하지 않는다.
+- 입력 근거에 없는 어머니·아버지·배우자·자녀의 구체적인 행동은 개인 기억처럼 쓰지 않는다. 일반적인 시대 풍경은 `재구성한 보편적 장면`임을 fact_check_notes에 명시한다.
 
 마스터 참고 영상 편집 구조(필수, 2026-09-17 고정):
 - '일본 쇼츠 영상.mp4'의 편집 문법을 마스터 가이드로 사용한다. 원본 512×910 해상도는 참고만 하고 최종은 1080×1920으로 재구성한다.
@@ -53,7 +55,7 @@
   "narrator_profile": {"profile": "multiple", "reason": "이 이야기의 시점과 등장인물에 맞는 이유"},
   "narration": "일본어 전체 내레이션",
   "scenes": [
-    {"scene": 1, "seconds": 8, "speaker_profile": "older_woman", "narration": "この場面で実際に流れるナレーション", "caption": "일본어 자막", "image_prompt": "장면 연속성과 금지 색상까지 포함한 시각 지시"}
+    {"scene": 1, "time_period": "present_day", "seconds": 8, "speaker_profile": "older_woman", "narration": "この場面で実際に流れるナレーション", "caption": "일본어 자막", "image_prompt": "장면 연속성과 금지 색상까지 포함한 시각 지시"}
   ],
   "youtube": {"title": "", "description": "", "tags": []},
   "fact_check_notes": ["확인한 근거 또는 시대 고증 추가 확인 항목"],
