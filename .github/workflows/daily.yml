@@ -2,7 +2,7 @@ name: Hamjju Daily Content Production
 
 env:
   IMAGE_QUALITY: medium
-  OPENAI_MONTHLY_BUDGET_USD: '22'
+  OPENAI_MONTHLY_BUDGET_USD: '40'
   OPENAI_BUDGET_LEDGER: output/openai-cost-ledger.json
   OPENAI_BUDGET_REQUIRE_EXISTING_LEDGER: 'true'
   # The project dashboard showed $0.64 spent when this guard was introduced.
