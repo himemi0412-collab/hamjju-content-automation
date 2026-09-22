@@ -62,6 +62,31 @@ class NotionQueue:
                 return results
             cursor = data.get("next_cursor")
 
+    def card_urls(self, page_id: str) -> list[str]:
+        response = self.client.get(f"/pages/{page_id}")
+        response.raise_for_status()
+        files = response.json().get("properties", {}).get("생성 이미지", {}).get("files", [])
+        urls = []
+        for item in files:
+            kind = item.get("type")
+            value = item.get(kind, {}) if kind else {}
+            if value.get("url"):
+                urls.append(value["url"])
+        if len(urls) != 5:
+            raise RuntimeError(f"exactly five blog cards required; found {len(urls)}")
+        return urls
+
+    def download_cards(self, page_id: str, target: Path) -> list[Path]:
+        target.mkdir(parents=True, exist_ok=True)
+        paths = []
+        for index, url in enumerate(self.card_urls(page_id), 1):
+            response = httpx.get(url, timeout=60, follow_redirects=True)
+            response.raise_for_status()
+            path = target / f"card-{index:02d}.png"
+            path.write_bytes(response.content)
+            paths.append(path)
+        return paths
+
     def update_done(self, page_id: str, draft_url: str) -> None:
         page = self.client.get(f"/pages/{page_id}").json()
         props = page.get("properties", {})
@@ -112,7 +137,7 @@ def first_visible(page, selectors: list[str]):
     raise AttentionRequired("네이버 편집기 구조가 바뀌었습니다. 화면 확인이 필요합니다.")
 
 
-def save_one(page, blog_id: str, title: str, body: str) -> str:
+def save_one(page, blog_id: str, title: str, body: str, cards: list[Path]) -> str:
     page.goto(f"https://blog.naver.com/PostWriteForm.naver?blogId={blog_id}", wait_until="domcontentloaded")
     page.wait_for_timeout(2500)
     if challenge_visible(page):
@@ -127,6 +152,19 @@ def save_one(page, blog_id: str, title: str, body: str) -> str:
     title_box.fill(title)
     body_box.click()
     body_box.fill(body)
+    if len(cards) != 5:
+        raise RuntimeError("five cards are required before draft save")
+    upload = page.locator("input[type=file]").first
+    if upload.count():
+        upload.set_input_files([str(path.resolve()) for path in cards])
+    else:
+        photo = page.get_by_text("사진", exact=True).first
+        if not photo.is_visible(timeout=2000):
+            raise AttentionRequired("카드뉴스 첨부 버튼을 찾지 못했습니다. 자동 작업을 중단했습니다.")
+        with page.expect_file_chooser() as chooser:
+            photo.click()
+        chooser.value.set_files([str(path.resolve()) for path in cards])
+    page.wait_for_timeout(5000)
     # Safety invariant: only an exact temporary-save label is eligible.
     save = page.get_by_text("임시저장", exact=True).first
     if not save.is_visible(timeout=3000):
@@ -169,7 +207,8 @@ def run_once(headless: bool = False) -> int:
             page = context.pages[0] if context.pages else context.new_page()
             for job in jobs:
                 title, body = payload_from_blocks(queue.blocks(job["id"]))
-                url = save_one(page, blog_id, title, body)
+                cards = queue.download_cards(job["id"], state_dir / job["id"] / "cards")
+                url = save_one(page, blog_id, title, body, cards)
                 queue.update_done(job["id"], url)
         finally:
             context.close()
