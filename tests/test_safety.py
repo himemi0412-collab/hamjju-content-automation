@@ -26,7 +26,7 @@ def test_github_action_keeps_blog_local_and_uploads_review_shorts_privately():
     assert 'actions/upload-artifact@v7' in workflow
     assert 'actions/cache/restore@v6' in workflow
     assert 'actions/cache/save@v6' in workflow
-    assert "OPENAI_MONTHLY_BUDGET_USD: '22'" in workflow
+    assert "OPENAI_MONTHLY_BUDGET_USD: '40'" in workflow
     assert 'IMAGE_QUALITY: medium' in workflow
     assert 'output/openai-cost-ledger.json' in workflow
     assert "OPENAI_BUDGET_REQUIRE_EXISTING_LEDGER: 'true'" in workflow
