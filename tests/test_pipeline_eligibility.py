@@ -2,6 +2,7 @@ from dataclasses import replace
 
 from app.config import load_channels
 from app.pipeline import page_is_eligible
+from app.pipeline import page_is_manual_priority
 
 
 def blog_context(**overrides):
@@ -57,3 +58,15 @@ def test_revision_short_is_only_eligible_for_explicit_retry():
     assert not page_is_eligible(cfg, context)
     retry_cfg = replace(cfg, ready_status=cfg.revision_status)
     assert page_is_eligible(retry_cfg, context)
+
+
+def test_direct_user_topic_is_manual_priority():
+    assert page_is_manual_priority({'properties': {
+        '키워드 출처': {'type': 'select', 'select': {'name': '직접 입력'}},
+    }})
+    assert page_is_manual_priority({'properties': {
+        '다음 행동': {'type': 'rich_text', 'rich_text': [{'plain_text': '사용자 직접 추가 · 우선 제작'}]},
+    }})
+    assert not page_is_manual_priority({'properties': {
+        '키워드 출처': {'type': 'select', 'select': {'name': '계절·시기'}},
+    }})

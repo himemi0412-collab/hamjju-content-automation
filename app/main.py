@@ -68,7 +68,13 @@ def seed_topics(blog_count: int = 3, ppojjugi_count: int = 1, japan_count: int =
         # every morning while older unprocessed topics are still waiting.
         requested_blog_count = max(blog_count, 0)
         blog_count = missing_blog_topics(notion, s.blog_data_source_id, requested_blog_count)
-        if not any((blog_count, max(ppojjugi_count, 0), max(japan_count, 0))):
+        ppojjugi_count = missing_short_topics(
+            notion, s.shorts_data_source_id, '햄찌 창작 쇼츠', max(ppojjugi_count, 0),
+        )
+        japan_count = missing_short_topics(
+            notion, s.shorts_data_source_id, '일본 유튜브 쇼츠', max(japan_count, 0),
+        )
+        if not any((blog_count, ppojjugi_count, japan_count)):
             print_json({'blog': [], 'ppojjugi': [], 'japan': [], 'reason': 'ready_backlog_sufficient'})
             return
         blog_pages = notion.query_recent(s.blog_data_source_id, 100)
@@ -103,6 +109,8 @@ def seed_topics(blog_count: int = 3, ppojjugi_count: int = 1, japan_count: int =
         created = {'blog': [], 'ppojjugi': [], 'japan': [], 'usage': usage}
         base_order = int(datetime.now(timezone.utc).strftime('%Y%m%d')) * 100
         for i, topic in enumerate((planned.get('blog') or [])[:max(blog_count, 0)], 1):
+            if not topic_is_search_ready(topic):
+                continue
             if normalize_title(topic.get('title')) in known:
                 continue
             created['blog'].append(notion.create_blog_topic(s.blog_data_source_id, topic, base_order + i))
@@ -112,6 +120,8 @@ def seed_topics(blog_count: int = 3, ppojjugi_count: int = 1, japan_count: int =
             ('japan', '일본 유튜브 쇼츠', japan_count),
         ):
             for topic in (planned.get(key) or [])[:max(count, 0)]:
+                if not topic_is_search_ready(topic):
+                    continue
                 if normalize_title(topic.get('title')) in known:
                     continue
                 created[key].append(notion.create_short_topic(s.shorts_data_source_id, topic, channel))
@@ -252,6 +262,24 @@ def normalize_title(value) -> str:
     return ''.join(str(value or '').lower().split())
 
 
+def topic_is_search_ready(topic: dict) -> bool:
+    """Reject weak or unsourced automatic ideas before they enter production."""
+    try:
+        seo_score = int(topic.get('seo_score') or 0)
+        geo_score = int(topic.get('geo_score') or 0)
+    except (TypeError, ValueError):
+        return False
+    return bool(
+        normalize_title(topic.get('title'))
+        and str(topic.get('main_keyword') or '').strip()
+        and str(topic.get('search_intent') or '').strip()
+        and str(topic.get('geo_answer') or '').strip()
+        and str(topic.get('sources') or '').strip()
+        and seo_score >= 70
+        and geo_score >= 70
+    )
+
+
 def missing_blog_topics(notion: NotionClient, data_source_id: str, target: int) -> int:
     if target <= 0:
         return 0
@@ -264,6 +292,25 @@ def missing_blog_topics(notion: NotionClient, data_source_id: str, target: int) 
         required_select_values=cfg.required_select_values,
         required_number_greater_than=cfg.required_number_greater_than,
         sort_property=cfg.sort_property,
+    )
+    return max(target - len(ready), 0)
+
+
+def missing_short_topics(
+    notion: NotionClient,
+    data_source_id: str,
+    channel: str,
+    target: int,
+) -> int:
+    if target <= 0:
+        return 0
+    cfg_name = 'ppojjugi_shorts' if channel == '햄찌 창작 쇼츠' else 'japan_shorts'
+    cfg = load_channels()[cfg_name]
+    ready = notion.query_ready(
+        data_source_id,
+        cfg.ready_status,
+        channel,
+        page_size=target,
     )
     return max(target - len(ready), 0)
 

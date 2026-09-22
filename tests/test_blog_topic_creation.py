@@ -98,3 +98,28 @@ def test_new_blog_is_selected_by_production_filter_without_unarchiving_old_topic
     )
 
     assert [page['id'] for page in results] == [created_id]
+
+
+def test_blog_topic_persists_seo_geo_metadata_in_existing_fields():
+    notion = client_with_fake_queue()
+    notion.create_blog_topic('blog-data-source', {
+        'title': '에어컨 전기요금 줄이는 법',
+        'main_keyword': '에어컨 전기요금',
+        'sub_keywords': ['인버터 에어컨', '절전 설정'],
+        'reader_question': '하루 종일 켜도 될까?',
+        'faq_questions': ['제습이 더 저렴할까?'],
+        'search_intent': '비용 확인',
+        'geo_answer': '인버터형은 짧게 반복해 끄는 것보다 설정 온도를 유지하는 편이 효율적일 수 있다.',
+        'trend_reason': '여름철, 8월까지',
+        'seo_score': 88,
+        'geo_score': 84,
+        'sources': '공식 에너지 자료 https://example.com 2026-09-23',
+    }, 1)
+
+    props = notion.client.creation_payload['properties']
+    question = ''.join(x['text']['content'] for x in props['독자 질문']['rich_text'])
+    sources = ''.join(x['text']['content'] for x in props['출처 목록']['rich_text'])
+    assert '후속 질문: 제습이 더 저렴할까?' in question
+    assert '검색 의도: 비용 확인' in sources
+    assert 'GEO 핵심 답변:' in sources
+    assert 'SEO/GEO 점수: 88/84' in sources

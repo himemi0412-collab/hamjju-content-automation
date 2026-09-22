@@ -15,7 +15,8 @@ env:
 
 on:
   schedule:
-    # GitHub cron is UTC: 01:00=10:00 KST, 12:00=21:00 KST
+    # GitHub cron is UTC: 00:45=09:45 KST topic radar, 01:00=10:00 KST blog, 12:00=21:00 KST Shorts
+    - cron: '45 0 * * *'
     - cron: '0 1 * * *'
     - cron: '0 12 * * *'
   push:
@@ -389,7 +390,11 @@ jobs:
         run: |
           result=0
           schedule_expr="${{ github.event.schedule }}"
-          if [ "$schedule_expr" = "0 1 * * *" ]; then
+          if [ "$schedule_expr" = "45 0 * * *" ]; then
+            # Fill only queue gaps. If enough reviewed topics already exist,
+            # seed-topics exits before paying for web research or AI analysis.
+            ENABLE_MEDIA_GENERATION=false AUTO_PRIVATE_YOUTUBE_UPLOAD=false python -m app.main seed-topics --blog-count 3 --ppojjugi-count 1 --japan-count 1 || result=1
+          elif [ "$schedule_expr" = "0 1 * * *" ]; then
             # A rejected blog can cost five fresh images. Preserve its artifact
             # for reviewed resume/rerender instead of automatically paying for
             # another full manuscript and card set.
@@ -418,7 +423,7 @@ jobs:
           key: hamjju-processing-state-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Summarize actual production evidence
-        if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design')) }}
+        if: ${{ always() && ((github.event_name == 'schedule' && github.event.schedule != '45 0 * * *') || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design')) }}
         env:
           RUN_STATUS: ${{ job.status }}
           EVENT_NAME: ${{ github.event_name }}
@@ -438,7 +443,7 @@ jobs:
           retention-days: 14
 
       - name: Update production status board
-        if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design')) }}
+        if: ${{ always() && ((github.event_name == 'schedule' && github.event.schedule != '45 0 * * *') || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design')) }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
