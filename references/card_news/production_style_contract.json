@@ -1,0 +1,115 @@
+{
+  "version": "2026-09-22",
+  "canonical_reference_root": "references/card_news",
+  "explorer_asset_root": "references/card_news/cover_explorer",
+  "separation": {
+    "cover_design_explorer": "layout and typography exploration only",
+    "production_blog_cards": "real household objects and actions only",
+    "forbidden_transfer": [
+      "Codex",
+      "ChatGPT",
+      "terminal",
+      "source code",
+      "app UI",
+      "AI logos",
+      "floating tech icons",
+      "generic technology cubes"
+    ]
+  },
+  "pipeline": [
+    "generate_text_free_scene",
+    "reject_generated_text_and_logos",
+    "composite_korean_locally",
+    "role_and_visual_qa",
+    "draft_handoff_only"
+  ],
+  "cards": [
+    {
+      "index": 1,
+      "role": "cover",
+      "goal": "Show the real problem situation immediately with one unmistakable main household object."
+    },
+    {
+      "index": 2,
+      "role": "flow",
+      "goal": "Show the physical cause or action flow inside one believable real-life scene."
+    },
+    {
+      "index": 3,
+      "role": "comparison",
+      "goal": "Show two real conditions at the same scale and viewing angle."
+    },
+    {
+      "index": 4,
+      "role": "checklist",
+      "goal": "Show a hand performing the exact inspection action; do not use symbolic checkboxes."
+    },
+    {
+      "index": 5,
+      "role": "decision",
+      "goal": "Show the final safe condition or decision using the real object and its context."
+    }
+  ],
+  "composition": {
+    "canvas": "1254x1254",
+    "scene_ratio": "65-72%",
+    "korean_type_ratio": "28-35%",
+    "mobile_first": true,
+    "distinct_layout_per_card": true,
+    "max_core_sentences_per_card": 2
+  },
+  "palette": {
+    "base": [
+      "bright white",
+      "cool white",
+      "cool gray"
+    ],
+    "accents": [
+      "lavender",
+      "mint",
+      "powder blue",
+      "coral"
+    ],
+    "forbidden": [
+      "yellow",
+      "mustard",
+      "gold",
+      "yellow cream",
+      "dominant beige",
+      "sepia"
+    ]
+  },
+  "text": {
+    "generated_inside_scene": false,
+    "composite_after_generation": true,
+    "korean_exact": true,
+    "weight": "bold",
+    "fake_text_allowed": false
+  },
+  "qa": {
+    "require_real_subject": true,
+    "require_real_action": true,
+    "require_five_distinct_roles": true,
+    "reject_repeated_crop": true,
+    "preserve_passed_cards": true,
+    "max_targeted_retries": 2
+  },
+  "publishing": {
+    "naver_public": false,
+    "naver_scheduled": false,
+    "draft_only": true
+  },
+  "satisfied_test_reference": {
+    "date": "2026-09-22",
+    "topic": "노트북 RAM 추가 후 발열 점검",
+    "result": "approved by user",
+    "traits": [
+      "real laptop, RAM and ventilation actions",
+      "text-free scene first",
+      "Korean composited separately",
+      "five distinct compositions",
+      "white/lavender/mint/blue/coral",
+      "no tech UI or yellow cast"
+    ]
+  }
+}
