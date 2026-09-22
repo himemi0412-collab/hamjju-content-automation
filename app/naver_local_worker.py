@@ -216,6 +216,8 @@ def run_once(headless: bool = False) -> int:
 
 
 def main() -> None:
+    from dotenv import load_dotenv
+    load_dotenv()
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("once", "watch", "login"), default="once", nargs="?")
     parser.add_argument("--interval", type=int, default=300)
