@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from app.blog_reference import VISUAL_FAMILIES, validate_generated_reference_contract
-from app.photographic_cards import _scene_prompt, _subject_lock, production_design_language
+from app.photographic_cards import (\n    _scene_prompt, _subject_lock, load_production_style_bundle, production_design_language,\n)
 
 
 def _reference_ready(visual_family: str) -> dict:
@@ -73,3 +73,29 @@ def test_production_route_normalises_exploration_style_before_manifest():
     pipeline = Path('app/pipeline.py').read_text(encoding='utf-8')
     assert "generated['design_language'] = production_design_language(" in pipeline
     assert 'from .photographic_cards import generate_and_typeset_blog_cards, production_design_language' in pipeline
+
+
+
+def test_v3_production_prompt_and_contract_are_loaded_by_every_scene():
+    prompt_text, contract = load_production_style_bundle()
+    assert contract['version'].endswith('-v3')
+    assert contract['qa']['ai_likeness_max_exclusive'] == 5
+    assert contract['qa']['fail_when_score_gte'] == 5
+    assert '사람이 편집한' in prompt_text
+    card = {
+        'layout': 'cover',
+        'headline': '냉장고 문틈 점검',
+        'copy': '고무패킹 상태를 확인해요',
+        'items': [{'label': '고무패킹', 'detail': '들뜸 확인'}],
+    }
+    scene = _scene_prompt(card, 1)
+    assert 'Canonical v3 human-edit signals' in scene
+    assert 'strict AI-likeness gate below 5/100' in scene
+    assert 'Apply the following canonical production prompt as binding art direction' in scene
+
+
+def test_production_bundle_is_a_fail_closed_runtime_dependency():
+    source = Path('app/photographic_cards.py').read_text(encoding='utf-8')
+    assert 'load_production_style_bundle()' in source
+    assert 'BLOG_CARD_PRODUCTION_STYLE_BUNDLE_UNAVAILABLE' in source
+    assert 'BLOG_CARD_AI_LIKENESS_GATE_INVALID' in source
