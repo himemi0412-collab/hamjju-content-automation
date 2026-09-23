@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import base64
+import json
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +23,29 @@ ROLE_SCENE_DIRECTIONS = (
 EXPLORATION_ONLY_DESIGN_LANGUAGES = frozenset({
     'Retro Tech UI', 'Screenshot Editorial', 'Prompt Playground', 'Terminal Noir',
 })
+
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_PRODUCTION_PROMPT_PATH = _REPO_ROOT / 'references' / 'card_news' / 'production_prompt_ko.md'
+_PRODUCTION_CONTRACT_PATH = _REPO_ROOT / 'references' / 'card_news' / 'production_style_contract.json'
+
+
+@lru_cache(maxsize=1)
+def load_production_style_bundle() -> tuple[str, dict[str, Any]]:
+    """Load the canonical v3 generation prompt and fail closed on drift or absence."""
+    try:
+        prompt = _PRODUCTION_PROMPT_PATH.read_text(encoding='utf-8').strip()
+        contract = json.loads(_PRODUCTION_CONTRACT_PATH.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError('BLOG_CARD_PRODUCTION_STYLE_BUNDLE_UNAVAILABLE') from exc
+    if not prompt or not str(contract.get('version', '')).endswith('-v3'):
+        raise RuntimeError('BLOG_CARD_PRODUCTION_STYLE_BUNDLE_INVALID')
+    qa = contract.get('qa') or {}
+    if qa.get('ai_likeness_max_exclusive') != 5 or qa.get('fail_when_score_gte') != 5:
+        raise RuntimeError('BLOG_CARD_AI_LIKENESS_GATE_INVALID')
+    if contract.get('production_prompt') != 'references/card_news/production_prompt_ko.md':
+        raise RuntimeError('BLOG_CARD_PRODUCTION_PROMPT_PATH_MISMATCH')
+    return prompt, contract
 
 
 def production_design_language(name: str | None) -> str:
@@ -88,6 +113,12 @@ def _scene_prompt(
     item_text = '; '.join(
         f"{x.get('label', '')}: {x.get('detail', '')}" for x in items if isinstance(x, dict)
     )
+    # Every production call loads the canonical v3 files. Missing or weakened
+    # contracts fail closed instead of silently falling back to an older prompt.
+    canonical_prompt, production_contract = load_production_style_bundle()
+    ai_gate = (production_contract.get('qa') or {}).get('ai_likeness_max_exclusive')
+    human_signals = '; '.join(production_contract.get('human_edit_signals') or [])
+    forbidden = '; '.join(production_contract.get('forbidden') or [])
     # The cover explorer owns technology/UI motifs. Production backgrounds use
     # only the factual card role and real-life subject; typography is added later.
     role_key = ROLE_KEYS[index - 1]
@@ -107,6 +138,12 @@ def _scene_prompt(
         'Reserve one calm low-detail editorial zone in the lower 28 to 32 percent for later Korean typography.',
         'No people unless hands are essential to demonstrate the action.',
         'ABSOLUTELY NO text, letters, numbers, logos, labels, UI glyphs, watermark, yellow cast, beige cream, sepia, collage, source code, terminal, Codex, ChatGPT, AI branding, floating icons, generic infographic nodes, or repeated template boxes.',
+        f'Canonical v3 human-edit signals: {human_signals}.',
+        f'Canonical v3 forbidden signals: {forbidden}.',
+        f'This scene must be capable of passing the strict AI-likeness gate below {ai_gate}/100 after local Korean typesetting.',
+        'Apply the following canonical production prompt as binding art direction. '
+        'Where it discusses typography, reserve space only; never draw text inside the generated scene:\n'
+        + canonical_prompt,
     ]
     if revision_note:
         parts.append(
