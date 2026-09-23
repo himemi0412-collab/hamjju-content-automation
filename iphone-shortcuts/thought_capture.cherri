@@ -13,7 +13,8 @@ menu "뭐가 생각났어?" {
         showNotification("미리 알림에 저장했어.", "🧠 생각났어!")
 
     item "📅 일정":
-        run("📅 일정 넣기", "")
+        @emptyInput = text("")
+        run("📅 일정 넣기", @emptyInput)
 
     item "💡 아이디어":
         @idea = prompt("아이디어를 적어줘")
