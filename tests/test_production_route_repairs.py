@@ -179,3 +179,18 @@ def test_renderer_omits_redundant_role_label_that_visual_qa_read_as_clipped_copy
     renderer = Path('app/photographic_cards.py').read_text(encoding='utf-8')
     assert "draw.text(spec['role'], ROLES[index - 1]" not in renderer
     assert "draw.text(spec['number'], f'{index:02d} / 05'" in renderer
+
+
+
+def test_background_generation_is_photo_only_and_editorial_layers_are_local():
+    prompt = _scene_prompt(
+        {'headline': '냉장고 문틈', 'copy': '고무패킹 비교', 'items': []}, 3
+    )
+    assert 'photograph layer only' in prompt
+    assert 'Do not design a card' in prompt
+    assert 'zero printed material' in prompt
+    assert 'pale lavender, muted mint' not in prompt
+    renderer = Path('app/photographic_cards.py').read_text(encoding='utf-8')
+    assert '(222, 241, 235, 255)' in renderer
+    assert "if index == 3:" in renderer
+    assert "item_anchor = (" in renderer
