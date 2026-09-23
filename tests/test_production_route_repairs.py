@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from app.blog_reference import VISUAL_FAMILIES, validate_generated_reference_contract
+from app.pipeline import _card_numbers_from_qa_issue
 from app.photographic_cards import (
     _scene_prompt, _subject_lock, load_production_style_bundle, production_design_language,
 )
@@ -150,3 +151,31 @@ def test_visual_gate_and_targeted_retries_apply_to_normal_production():
     assert 'only_indices=retry_cards' in pipeline
     assert 'for attempt in range(1, 3)' in main
     assert 'only_indices=retry_cards' in main
+
+
+
+def test_visual_qa_retry_parser_accepts_singular_and_plural_card_fields():
+    assert _card_numbers_from_qa_issue({'card': 1, 'issue': '보조 문구 잘림'}) == {1}
+    assert _card_numbers_from_qa_issue({'cards': [2, '3'], 'issue': '피사체 오류'}) == {2, 3}
+    assert _card_numbers_from_qa_issue({'cards': 4, 'issue': '점검 장면 오류'}) == {4}
+
+
+def test_refrigerator_card_roles_are_subject_locked_without_conflicting_blank_band():
+    flow = _scene_prompt(
+        {'headline': '냉장고 문틈', 'copy': '고무패킹 홈 오염', 'items': []}, 2
+    )
+    comparison = _scene_prompt(
+        {'headline': '냉장고 문틈', 'copy': '고무패킹 비교', 'items': []}, 3
+    )
+    assert 'NEVER show a washing machine' in flow
+    assert 'extreme documentary close-up' in flow
+    assert 'LEFT gasket lies flat' in comparison
+    assert 'Do not leave a blank lower area' in comparison
+    assert 'lower 28 to 32 percent' not in comparison
+    assert 'Never create a large empty lower band' in comparison
+
+
+def test_renderer_omits_redundant_role_label_that_visual_qa_read_as_clipped_copy():
+    renderer = Path('app/photographic_cards.py').read_text(encoding='utf-8')
+    assert "draw.text(spec['role'], ROLES[index - 1]" not in renderer
+    assert "draw.text(spec['number'], f'{index:02d} / 05'" in renderer
