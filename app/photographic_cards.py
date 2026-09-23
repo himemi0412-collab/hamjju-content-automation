@@ -161,7 +161,7 @@ def _scene_prompt(
         'The concrete scene and objects must occupy roughly 65 to 72 percent of the frame and remain the first thing seen. '
         'Reserve one calm low-detail editorial zone in the lower 28 to 32 percent for later Korean typography.',
         'No people unless hands are essential to demonstrate the action.',
-        'ABSOLUTELY NO text, letters, numbers, logos, labels, UI glyphs, watermark, yellow cast, beige cream, sepia, collage, source code, terminal, Codex, ChatGPT, AI branding, floating icons, generic infographic nodes, repeated template boxes, circles, arrows, badges, check marks, crosses, decorative labels, glossy product-ad lighting, perfect showroom cleanliness, cinematic bokeh or synthetic depth of field.',
+        'ABSOLUTELY NO text, letters, numbers, logos, labels, UI glyphs, watermark, yellow cast, beige cream, sepia, collage, source code, terminal, Codex, ChatGPT, AI branding, floating icons, generic infographic nodes, repeated template boxes, circles, arrows, badges, check marks, crosses, decorative labels, decorative waves, curved swooshes, ornamental underlines, glossy product-ad lighting, perfect showroom cleanliness, cinematic bokeh or synthetic depth of field.',
         f'Canonical v3 human-edit signals: {human_signals}.',
         f'Canonical v3 forbidden signals: {forbidden}.',
         f'This scene must be capable of passing the strict AI-likeness gate below {ai_gate}/100 after local Korean typesetting.',
@@ -265,9 +265,23 @@ def generate_and_typeset_blog_cards(
         }
         spec = layouts[index]
         x1, y1, x2, y2 = spec['panel']
-        vd.rounded_rectangle((x1, y1, x2, y2), radius=18, fill=(*panel_rgb, 232))
-        # Leave the scene unobscured outside the text area. Repeated accent
-        # rules made unrelated cards look like the same template.
+        # Role-specific surfaces prevent a mechanically repeated white-card template.
+        # These are flat cool tints, never gradients or decorative devices.
+        role_surfaces = {
+            1: (247, 248, 252, 238),  # compact cool-white note
+            2: (232, 228, 247, 242),  # lavender vertical field
+            3: (224, 239, 246, 242),  # powder-blue top band
+            4: (222, 241, 235, 242),  # mint right column
+            5: (247, 230, 232, 240),  # restrained coral decision block
+        }
+        if index in {1, 5}:
+            vd.rounded_rectangle((x1, y1, x2, y2), radius=18, fill=role_surfaces[index])
+        elif index == 3:
+            vd.rectangle((0, y1, 1080, y2), fill=role_surfaces[index])
+        else:
+            vd.rectangle((x1, y1, x2, y2), fill=role_surfaces[index])
+        # Leave the scene unobscured outside the text area. No repeated accent
+        # rule, wave, badge, icon or ornamental underline is added.
         canvas = Image.alpha_composite(canvas, veil)
         draw = ImageDraw.Draw(canvas)
 
