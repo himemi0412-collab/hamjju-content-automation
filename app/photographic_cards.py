@@ -169,7 +169,8 @@ def _scene_prompt(
         f'Production card role: {role_key}. {ROLE_SCENE_DIRECTIONS[index - 1]}',
         'Generate a plain real-life photograph only. Do not design a card, layout, poster, checklist, comparison board or infographic inside the photograph. '
         'Do not place paper notes, printed cards, colored panels, frames, captions or readable marks anywhere in the scene. '
-        'All pastel surfaces, typography and editorial layout are added later by deterministic local code.',
+        'All pastel surfaces, typography and editorial layout are added later by deterministic local code. '
+        'Do not copy cover-exploration motifs, software screens, code, terminals, chat windows or AI branding.',
         'Use neutral daylight with accurate whites and cool natural shadows. No beige, yellow cream, amber light or warm sepia cast.',
         'The concrete scene and objects must occupy roughly 70 to 82 percent of the frame and remain the first thing seen. '
         'Reserve low-detail space only where this card role explicitly requests it; keep every other area visually complete. '
