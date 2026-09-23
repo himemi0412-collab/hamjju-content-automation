@@ -1,0 +1,9 @@
+#include 'actions/calendar'
+#include 'actions/settings'
+
+@now = currentDate()
+@endTime = adjustDate("{@now}", "Add", qty(25, "min"))
+
+setFocusMode("Work", "Time", "{@endTime}")
+startTimer(qty(25, "min"))
+showNotification("25분 동안 이것만 해보자.", "🔥 집중 시작")
