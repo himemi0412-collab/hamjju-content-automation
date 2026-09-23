@@ -1,5 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
+import re
+from urllib.parse import parse_qs, urlparse
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -47,6 +49,21 @@ class YouTubePrivateUploader:
             'id': str(item.get('id') or ''),
             'title': str((item.get('snippet') or {}).get('title') or ''),
         }
+
+    def verify_uploaded(self, url: str, privacy_status: str) -> bool:
+        """Confirm the video exists under these credentials with the expected privacy."""
+        parsed = urlparse(url)
+        video_ids = parse_qs(parsed.query).get('v', [])
+        if (parsed.scheme != 'https' or parsed.netloc != 'www.youtube.com'
+                or parsed.path != '/watch' or len(video_ids) != 1
+                or re.fullmatch(r'[A-Za-z0-9_-]{11}', video_ids[0]) is None
+                or privacy_status not in {'private', 'public'}):
+            raise ValueError('Invalid reviewed YouTube video identity')
+        youtube = build('youtube', 'v3', credentials=self._credentials(), cache_discovery=False)
+        response = youtube.videos().list(part='status', id=video_ids[0]).execute()
+        items = response.get('items') or []
+        return len(items) == 1 and items[0].get('id') == video_ids[0] and (
+            items[0].get('status') or {}).get('privacyStatus') == privacy_status
 
     def upload_private(self, video: Path, title: str, description: str = '', tags: list[str] | None = None) -> str:
         return self.upload_reviewed(video, title, description, tags, privacy_status='private')

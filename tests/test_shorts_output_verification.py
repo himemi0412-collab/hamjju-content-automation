@@ -62,3 +62,30 @@ def test_scheduled_shorts_cannot_pass_without_required_video_and_upload():
         pipeline._verify_shorts_output('page', '확인 영상', '비공개 업로드 완료', blocks,
                                       {'video': 'short.mp4', 'verification': {'pass': True}},
                                       require_media=True, require_youtube=True)
+
+
+def test_scheduled_shorts_checks_youtube_privacy_after_notion_readback(monkeypatch):
+    blocks = result_blocks('japan_shorts', {'title': '확인 영상'}, {'pass': True})
+    pipeline = object.__new__(Pipeline)
+    pipeline.notion = SimpleNamespace(retrieve_page=lambda _: make_page(),
+                                     read_page_blocks=lambda _: blocks)
+    pipeline.s = SimpleNamespace(youtube_client_secrets_file=Path('client.json'),
+                                 youtube_ppojjugi_token_file=Path('ppojjugi.json'),
+                                 youtube_japan_token_file=Path('japan.json'))
+    checked = []
+
+    class Uploader:
+        def __init__(self, client, token):
+            assert token == Path('japan.json')
+
+        def verify_uploaded(self, url, privacy):
+            checked.append((url, privacy))
+            return False
+
+    monkeypatch.setattr('app.pipeline.YouTubePrivateUploader', Uploader)
+    media = {'video': 'short.mp4', 'verification': {'pass': True},
+             'youtube_url': 'https://www.youtube.com/watch?v=abc', 'youtube_privacy': 'private'}
+    with pytest.raises(RuntimeError, match='YouTube video/privacy'):
+        pipeline._verify_shorts_output('page', '확인 영상', '비공개 업로드 완료', blocks, media,
+                                      require_media=True, require_youtube=True, channel_name='japan_shorts')
+    assert checked == [(media['youtube_url'], 'private')]

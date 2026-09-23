@@ -785,6 +785,7 @@ class Pipeline:
                 observation = self._verify_shorts_output(
                     page_id, page_title, final_status, blocks, media,
                     require_media=media_expected, require_youtube=bool(media_expected and self.s.auto_private_youtube_upload),
+                    channel_name=cfg.name,
                 )
                 save_manifest(job_dir / 'notion-readback.json', observation)
                 output_verified = True
@@ -833,7 +834,7 @@ class Pipeline:
     def _verify_shorts_output(
         self, page_id: str, page_title: str, status: str,
         expected_blocks: list[dict[str, Any]], media: dict[str, Any],
-        require_media: bool = False, require_youtube: bool = False,
+        require_media: bool = False, require_youtube: bool = False, channel_name: str = '',
     ) -> dict[str, Any]:
         page = self.notion.retrieve_page(page_id)
         observed_blocks = self.notion.read_page_blocks(page_id)
@@ -861,10 +862,21 @@ class Pipeline:
                 saved_url = (props.get('YouTube 비공개 주소') or {}).get('url')
                 if saved_url != media['youtube_url']:
                     raise RuntimeError('Shorts read-back YouTube URL did not match')
+                if require_youtube:
+                    token_file = {
+                        'ppojjugi_shorts': self.s.youtube_ppojjugi_token_file,
+                        'japan_shorts': self.s.youtube_japan_token_file,
+                    }.get(channel_name)
+                    if token_file is None:
+                        raise RuntimeError('Shorts YouTube channel is not configured for read-back')
+                    uploader = YouTubePrivateUploader(self.s.youtube_client_secrets_file, token_file)
+                    if not uploader.verify_uploaded(media['youtube_url'], media['youtube_privacy']):
+                        raise RuntimeError('Shorts YouTube video/privacy read-back did not match')
         return {'page_id': page_id, 'title': page_title, 'status': status,
                 'body_blocks_verified': len(expected),
                 'video_attachment_verified': media.get('notion_video_attached') is True,
                 'youtube_url_verified': bool(media.get('youtube_url')),
+                'youtube_video_verified': bool(require_youtube and media.get('youtube_url')),
                 'verified_at': datetime.now(timezone.utc).isoformat()}
 
     def _match_prior_blog_blocks(self, page_id: str, previous: dict[str, Any]) -> list[dict[str, Any]]:
