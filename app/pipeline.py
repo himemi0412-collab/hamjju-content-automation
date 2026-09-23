@@ -36,7 +36,16 @@ def _card_numbers_from_qa_issue(issue: Any) -> set[int]:
     """Extract card numbers from either legacy text or the structured visual-QA schema."""
     numbers: set[int] = set()
     if isinstance(issue, dict):
-        for value in issue.get('cards') or []:
+        raw_cards: list[Any] = []
+        single_card = issue.get('card')
+        if single_card is not None:
+            raw_cards.append(single_card)
+        many_cards = issue.get('cards')
+        if isinstance(many_cards, (list, tuple, set)):
+            raw_cards.extend(many_cards)
+        elif many_cards is not None:
+            raw_cards.append(many_cards)
+        for value in raw_cards:
             if str(value).isdigit() and 1 <= int(value) <= 5:
                 numbers.add(int(value))
         issue = ' '.join(
