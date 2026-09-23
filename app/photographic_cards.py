@@ -14,11 +14,11 @@ from .card_design import get_design_blueprint, get_design_language
 ROLES = ('먼저 답', '왜 그런지', '조건 비교', '지금 확인', '마지막 판단')
 ROLE_KEYS = ('cover', 'flow', 'comparison', 'checklist', 'decision')
 ROLE_SCENE_DIRECTIONS = (
-    'Show the real problem situation immediately, with one unmistakable main household object.',
-    'Show the physical cause or action as a clear before-to-after sequence inside one believable scene.',
-    'Show two real conditions at the same scale and viewing angle so the difference is physically visible.',
-    'Show a hand performing the exact inspection action on the real object; avoid symbolic checkboxes.',
-    'Show the final safe condition or decision using the real object and its surrounding context.',
+    'Use a candid close crop with the subject offset to the right and quiet negative space at the lower left. Show the real problem immediately with one unmistakable household object.',
+    'Use an eye-level documentary view with the action running diagonally from lower left to upper right. Show the physical cause as one believable moment, not circular callouts or a diagram.',
+    'Use a restrained straight-on split created by the two real conditions themselves at the same scale and viewpoint. Leave a quiet band only at the top; do not add arrows, badges, circles or dividers.',
+    'Use an over-the-shoulder or hand-level inspection crop with the active hand and object low in frame and quiet negative space at the right. Avoid symbolic checkboxes and callout bubbles.',
+    'Use a wider lived-in context with the resolved object left of center and natural empty wall or counter space in the lower right. Show exactly one next action; no icons, badges or approval symbols.',
 )
 EXPLORATION_ONLY_DESIGN_LANGUAGES = frozenset({
     'Retro Tech UI', 'Screenshot Editorial', 'Prompt Playground', 'Terminal Noir',
@@ -127,7 +127,7 @@ def _scene_prompt(
         f'Card role: {ROLES[index - 1]}. Topic: {card.get("headline", "")}.',
         f'Explanation: {card.get("copy", "")}. Visible situation and objects: {item_text}.',
         _subject_lock(card),
-        'Show a believable unbranded Korean home interior and concrete relevant appliances, containers, filters, measurements shown only by physical spacing or scale, and actions. Do not use documents, packaging, certificates, reports, phone screens, control-panel text or labels as visual evidence; all readable information will be typeset locally later.',
+        'Show a believable, modest, actually used Korean home interior and concrete relevant appliances and actions. Preserve tiny signs of ordinary life: slight surface wear, faint fingerprints, an imperfectly folded cloth, small natural dust or water traces, mildly uneven spacing and one or two relevant background objects. Keep them subtle and physically plausible, never dirty for effect. Use ordinary window light or ceiling light with realistic falloff, not studio lighting. Do not use documents, packaging, certificates, reports, phone screens, control-panel text or labels as visual evidence; all readable information will be typeset locally later.',
         'The image must explain the situation visually, with a clear subject and natural scale.',
         f'Production card role: {role_key}. {ROLE_SCENE_DIRECTIONS[index - 1]}',
         'Reference styling applies only to spacing, cool pastel accents and calm editorial composition. '
@@ -137,7 +137,7 @@ def _scene_prompt(
         'The concrete scene and objects must occupy roughly 65 to 72 percent of the frame and remain the first thing seen. '
         'Reserve one calm low-detail editorial zone in the lower 28 to 32 percent for later Korean typography.',
         'No people unless hands are essential to demonstrate the action.',
-        'ABSOLUTELY NO text, letters, numbers, logos, labels, UI glyphs, watermark, yellow cast, beige cream, sepia, collage, source code, terminal, Codex, ChatGPT, AI branding, floating icons, generic infographic nodes, or repeated template boxes.',
+        'ABSOLUTELY NO text, letters, numbers, logos, labels, UI glyphs, watermark, yellow cast, beige cream, sepia, collage, source code, terminal, Codex, ChatGPT, AI branding, floating icons, generic infographic nodes, repeated template boxes, circles, arrows, badges, check marks, crosses, decorative labels, glossy product-ad lighting, perfect showroom cleanliness, cinematic bokeh or synthetic depth of field.',
         f'Canonical v3 human-edit signals: {human_signals}.',
         f'Canonical v3 forbidden signals: {forbidden}.',
         f'This scene must be capable of passing the strict AI-likeness gate below {ai_gate}/100 after local Korean typesetting.',
@@ -218,38 +218,44 @@ def generate_and_typeset_blog_cards(
         canvas = background.convert('RGBA')
         veil = Image.new('RGBA', canvas.size, (0, 0, 0, 0))
         vd = ImageDraw.Draw(veil)
-        # The scene stays dominant.  The selected named design language controls
-        # the typography surface instead of every set receiving the old fixed
-        # lavender header template.
-        panel_y = 716
+        # Five intentionally different editorial structures. Typography is local and exact,
+        # but no repeated bottom panel, badge row, callout circle, arrow or decorative icon is used.
         panel_rgb = tuple(int(style['surface'][i:i + 2], 16) for i in (1, 3, 5))
         accent_rgb = tuple(int(accent[i:i + 2], 16) for i in (1, 3, 5))
-        radius = min(int(style['radius']), 28)
-        if style['panel'] in {'rule', 'sharp', 'split', 'modular'}:
-            vd.rectangle((0, panel_y, 1080, 1080), fill=(*panel_rgb, 244))
-            vd.rectangle((0, panel_y, 18, 1080), fill=(*accent_rgb, 255))
-            vd.line((56, 812, 1024, 812), fill=(*accent_rgb, 210), width=max(2, int(style['border_width'])))
+        layouts = {
+            1: {'panel': (42, 690, 720, 1040), 'role': (70, 718), 'number': (580, 718),
+                'title': (70, 782, 680, 900), 'copy': (70, 922, 680, 1005), 'align': 'left'},
+            2: {'panel': (36, 82, 520, 998), 'role': (70, 118), 'number': (390, 118),
+                'title': (70, 190, 480, 360), 'copy': (70, 392, 480, 520), 'align': 'left'},
+            3: {'panel': (72, 42, 1008, 314), 'role': (104, 72), 'number': (866, 72),
+                'title': (104, 126, 976, 216), 'copy': (104, 232, 976, 286), 'align': 'center'},
+            4: {'panel': (570, 102, 1042, 1008), 'role': (606, 138), 'number': (900, 138),
+                'title': (606, 212, 1002, 390), 'copy': (606, 424, 1002, 570), 'align': 'left'},
+            5: {'panel': (408, 674, 1038, 1038), 'role': (442, 708), 'number': (894, 708),
+                'title': (442, 772, 1000, 900), 'copy': (442, 922, 1000, 1004), 'align': 'right'},
+        }
+        spec = layouts[index]
+        x1, y1, x2, y2 = spec['panel']
+        vd.rounded_rectangle((x1, y1, x2, y2), radius=18, fill=(*panel_rgb, 232))
+        # One restrained rule is the only editorial device added by code.
+        if index in {1, 3, 5}:
+            vd.line((x1 + 28, y1 + 54, x2 - 28, y1 + 54), fill=(*accent_rgb, 210), width=3)
         else:
-            vd.rounded_rectangle((30, panel_y, 1050, 1058), radius=radius, fill=(*panel_rgb, 244))
-            vd.rounded_rectangle((58, 744, 258, 792), radius=min(radius, 18), fill=(*accent_rgb, 245))
+            vd.rectangle((x1, y1, x1 + 9, y2), fill=(*accent_rgb, 225))
         canvas = Image.alpha_composite(canvas, veil)
         draw = ImageDraw.Draw(canvas)
 
         headline = str(card.get('headline') or '').strip()
         copy = str(card.get('copy') or '').strip()
-        role_font = _font(font_path, 23)
-        role_fill = style['accent_text'] if style['panel'] not in {'rule', 'sharp', 'split', 'modular'} else accent
-        role_x = 82 if style['panel'] not in {'rule', 'sharp', 'split', 'modular'} else 58
-        draw.text((role_x, 754), ROLES[index - 1], font=role_font, fill=role_fill)
-        draw.text((900, 754), f'{index:02d} / 05', font=_font(font_path, 22), fill='#202329')
-        title_box = (58, 830, 1022, 930)
-        copy_box = (58, 944, 1022, 1008)
-        title_font = _fit(draw, headline, font_path, min(int(style['title_size']), 56), title_box, minimum=34)
-        copy_font = _fit(draw, copy, font_path, min(int(style['copy_size']), 27), copy_box, minimum=21)
-        draw.multiline_text((58, 830), headline, font=title_font, fill='#202329', spacing=8)
-        draw.multiline_text((58, 944), copy, font=copy_font, fill='#343741', spacing=7)
-        draw.text((58, 1020), 'AI 생성 설명 장면 · 실제 제품과 다를 수 있음',
-                  font=_font(font_path, 19), fill='#565A63')
+        draw.text(spec['role'], ROLES[index - 1], font=_font(font_path, 22), fill=accent)
+        draw.text(spec['number'], f'{index:02d} / 05', font=_font(font_path, 20), fill='#343741')
+        title_font = _fit(draw, headline, font_path, 54, spec['title'], minimum=32)
+        copy_font = _fit(draw, copy, font_path, 27, spec['copy'], minimum=20)
+        anchor = 'ma' if spec['align'] == 'center' else ('ra' if spec['align'] == 'right' else None)
+        title_x = (spec['title'][0] + spec['title'][2]) // 2 if anchor == 'ma' else (spec['title'][2] if anchor == 'ra' else spec['title'][0])
+        copy_x = (spec['copy'][0] + spec['copy'][2]) // 2 if anchor == 'ma' else (spec['copy'][2] if anchor == 'ra' else spec['copy'][0])
+        draw.multiline_text((title_x, spec['title'][1]), headline, font=title_font, fill='#202329', spacing=8, anchor=anchor)
+        draw.multiline_text((copy_x, spec['copy'][1]), copy, font=copy_font, fill='#343741', spacing=7, anchor=anchor)
 
         canvas.convert('RGB').save(final_path, quality=95)
         results.append(final_path)
