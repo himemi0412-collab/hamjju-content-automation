@@ -1,62 +1,92 @@
 {
-  "version": "2026-09-22",
+  "version": "2026-09-23-v3",
+  "reference_count": 38,
   "canonical_reference_root": "references/card_news",
-  "explorer_asset_root": "references/card_news/cover_explorer",
-  "separation": {
-    "cover_design_explorer": "layout and typography exploration only",
-    "production_blog_cards": "real household objects and actions only",
-    "forbidden_transfer": [
-      "Codex",
-      "ChatGPT",
-      "terminal",
-      "source code",
-      "app UI",
-      "AI logos",
-      "floating tech icons",
-      "generic technology cubes"
+  "production_prompt": "references/card_news/production_prompt_ko.md",
+  "intent": "Human-edited Korean card news; AI-generated visual feel must score below 5/100.",
+  "reference_usage": {
+    "extract_only": [
+      "layout rhythm",
+      "typographic hierarchy",
+      "whitespace",
+      "information structure",
+      "editorial devices"
+    ],
+    "never_copy": [
+      "copy",
+      "logo",
+      "brand",
+      "character",
+      "exact composition"
     ]
   },
   "pipeline": [
+    "plan_one_message_per_card",
     "generate_text_free_scene",
-    "reject_generated_text_and_logos",
-    "composite_korean_locally",
-    "role_and_visual_qa",
+    "reject_text_logo_anatomy_object_errors",
+    "composite_exact_korean_locally",
+    "independent_visual_and_ai_likeness_qa",
     "draft_handoff_only"
   ],
   "cards": [
     {
       "index": 1,
       "role": "cover",
-      "goal": "Show the real problem situation immediately with one unmistakable main household object."
+      "goal": "one short question or answer plus one unmistakable real subject"
     },
     {
       "index": 2,
       "role": "flow",
-      "goal": "Show the physical cause or action flow inside one believable real-life scene."
+      "goal": "two or three causes or actions inside a believable scene"
     },
     {
       "index": 3,
       "role": "comparison",
-      "goal": "Show two real conditions at the same scale and viewing angle."
+      "goal": "A/B at the same scale and viewpoint with two or three differences"
     },
     {
       "index": 4,
       "role": "checklist",
-      "goal": "Show a hand performing the exact inspection action; do not use symbolic checkboxes."
+      "goal": "three to five items combined with a real inspection action"
     },
     {
       "index": 5,
       "role": "decision",
-      "goal": "Show the final safe condition or decision using the real object and its context."
+      "goal": "final judgment plus exactly one next action"
     }
   ],
   "composition": {
     "canvas": "1254x1254",
-    "scene_ratio": "65-72%",
-    "korean_type_ratio": "28-35%",
+    "safe_margin": "8-10%",
+    "scene_ratio": "58-72%",
+    "korean_type_ratio": "28-38%",
     "mobile_first": true,
-    "distinct_layout_per_card": true,
-    "max_core_sentences_per_card": 2
+    "one_message_per_card": true,
+    "distinct_spatial_partition_per_card": true,
+    "repeated_header_template": false
+  },
+  "typography": {
+    "generated_inside_scene": false,
+    "composite_after_generation": true,
+    "korean_exact": true,
+    "hierarchy_levels_min": 3,
+    "max_core_sentences_per_card": 2,
+    "manual_line_breaks": true
+  },
+  "editorial_devices": {
+    "allowed": [
+      "note paper",
+      "memo",
+      "window",
+      "card",
+      "checklist",
+      "label",
+      "tape",
+      "clip",
+      "underline"
+    ],
+    "max_per_card": 2,
+    "must_support_content": true
   },
   "palette": {
     "base": [
@@ -70,6 +100,7 @@
       "powder blue",
       "coral"
     ],
+    "accent_colors_per_set": "3-5",
     "forbidden": [
       "yellow",
       "mustard",
@@ -79,18 +110,50 @@
       "sepia"
     ]
   },
-  "text": {
-    "generated_inside_scene": false,
-    "composite_after_generation": true,
-    "korean_exact": true,
-    "weight": "bold",
-    "fake_text_allowed": false
-  },
+  "human_edit_signals": [
+    "clear alignment axis",
+    "intentional whitespace",
+    "mild asymmetry",
+    "manual line breaks",
+    "natural object contact and scale",
+    "non-mechanical variation across cards"
+  ],
+  "forbidden": [
+    "generated text",
+    "fake characters",
+    "watermark",
+    "logo",
+    "Codex",
+    "ChatGPT",
+    "terminal",
+    "source code",
+    "app UI",
+    "AI logo",
+    "floating meaningless icons",
+    "generic cubes",
+    "heavy gradients",
+    "glassmorphism",
+    "neon",
+    "3D gloss",
+    "anatomy errors",
+    "warped objects",
+    "impossible shadow reflection or contact",
+    "stock-ad smile",
+    "oversaturation",
+    "cinematic bokeh",
+    "mechanically repeated decoration",
+    "same template crop and title position across all cards",
+    "unsupported product or numeric claims"
+  ],
   "qa": {
+    "ai_likeness_score_scale": "0-100",
+    "ai_likeness_max_exclusive": 5,
+    "fail_when_score_gte": 5,
     "require_real_subject": true,
     "require_real_action": true,
     "require_five_distinct_roles": true,
     "reject_repeated_crop": true,
+    "reject_repeated_header_template": true,
     "preserve_passed_cards": true,
     "max_targeted_retries": 2
   },
@@ -98,18 +161,5 @@
     "naver_public": false,
     "naver_scheduled": false,
     "draft_only": true
-  },
-  "satisfied_test_reference": {
-    "date": "2026-09-22",
-    "topic": "노트북 RAM 추가 후 발열 점검",
-    "result": "approved by user",
-    "traits": [
-      "real laptop, RAM and ventilation actions",
-      "text-free scene first",
-      "Korean composited separately",
-      "five distinct compositions",
-      "white/lavender/mint/blue/coral",
-      "no tech UI or yellow cast"
-    ]
   }
 }
