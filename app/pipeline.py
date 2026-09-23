@@ -53,7 +53,7 @@ def _card_numbers_from_qa_issue(issue: Any) -> set[int]:
 
 def _visual_qa_passed(qa: dict[str, Any]) -> bool:
     try:
-        ai_score = int(qa.get('ai_likeness_score', 0) if qa.get('ai_likeness_score') is not None else 0)
+        ai_score = int(qa.get('ai_likeness_score', 100))
     except (TypeError, ValueError):
         ai_score = 100
     return qa.get('pass') is True and ai_score < 5 and not (qa.get('blocking_issues') or [])
