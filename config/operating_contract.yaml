@@ -89,6 +89,9 @@ channels:
 
 schedules:
   github_actions:
+    - cron: "45 0 * * *"
+      timezone_display: Asia/Seoul 09:45
+      owns: blog_topic_radar
     - cron: "0 1 * * *"
       timezone_display: Asia/Seoul 10:00
       owns: naver_blog_production
