@@ -1,8 +1,9 @@
 #include 'actions/device'
 
 @battery = getBatteryLevel()
+@batteryNumber = number(@battery)
 
-if @battery < 31 {
+if @batteryNumber < 31 {
     setLowPowerMode(true)
     showNotification("배터리가 낮아서 저전력 모드를 켰어.", "🔋 배터리 관리")
 } else {
