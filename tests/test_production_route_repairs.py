@@ -120,11 +120,11 @@ def test_live_card_verification_is_no_save_and_workflow_isolated():
 
 def test_five_card_typesetting_uses_distinct_spatial_structures():
     source = Path('app/photographic_cards.py').read_text(encoding='utf-8')
-    assert "1: {'panel': (42, 690, 720, 1040)" in source
-    assert "2: {'panel': (36, 82, 520, 998)" in source
-    assert "3: {'panel': (72, 42, 1008, 314)" in source
-    assert "4: {'panel': (570, 102, 1042, 1008)" in source
-    assert "5: {'panel': (408, 674, 1038, 1038)" in source
+    assert "1: {'panel': (42, 510, 770, 1040)" in source
+    assert "2: {'panel': (36, 82, 550, 998)" in source
+    assert "3: {'panel': (72, 42, 1008, 490)" in source
+    assert "4: {'panel': (532, 102, 1042, 1008)" in source
+    assert "5: {'panel': (350, 530, 1038, 1038)" in source
     assert "AI 생성 설명 장면" not in source
 
 
