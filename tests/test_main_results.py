@@ -65,6 +65,14 @@ def test_blog_requires_output_readback():
         }])
 
 
+def test_shorts_requires_output_readback():
+    with pytest.raises(RuntimeError, match='read-back'):
+        validate_results([{
+            'channel': 'japan_shorts', 'status': '비공개 업로드 완료',
+            'qa_pass': True, 'notion_page_updated': True, 'output_verified': False,
+        }])
+
+
 def test_batch_with_fewer_than_requested_outputs_is_incomplete():
     with pytest.raises(RuntimeError, match='expected 3 items'):
         validate_results([{
