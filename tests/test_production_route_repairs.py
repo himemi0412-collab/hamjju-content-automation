@@ -194,3 +194,14 @@ def test_background_generation_is_photo_only_and_editorial_layers_are_local():
     assert '(222, 241, 235, 255)' in renderer
     assert "if index == 3:" in renderer
     assert "item_anchor = (" in renderer
+
+
+
+def test_comparison_scene_uses_visible_refrigerator_anchors_not_round_washer_parts():
+    prompt = _scene_prompt(
+        {'headline': '냉장고 문틈', 'copy': '고무패킹 비교', 'items': []}, 3
+    )
+    assert 'OPEN RECTANGULAR REFRIGERATOR' in prompt
+    assert 'interior shelves, bottles and food containers' in prompt
+    assert 'Absolutely no circular door' in prompt
+    assert 'laundry appliance' in prompt
