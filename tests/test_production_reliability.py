@@ -1,7 +1,7 @@
 import httpx
 
 from app.notion_client import NotionClient
-from app.pipeline import align_single_speaker_profile
+from app.pipeline import align_single_speaker_profile, _shorts_script_qa_passed, _visual_qa_passed
 
 
 def test_notion_block_read_recovers_after_transient_520(monkeypatch):
@@ -55,3 +55,10 @@ def test_japanese_single_speaker_metadata_is_aligned_without_changing_scenes():
     mixed = {'narrator_profile': {'profile': 'multiple'},
              'scenes': [{'speaker_profile': 'older_woman'}, {'speaker_profile': 'young_man'}]}
     assert align_single_speaker_profile(mixed)['narrator_profile']['profile'] == 'multiple'
+
+
+def test_short_script_qa_uses_its_own_pass_gate_before_images_exist():
+    qa = {'pass': True, 'score': 95, 'blocking_issues': []}
+    assert _shorts_script_qa_passed(qa)
+    assert not _visual_qa_passed(qa)
+    assert not _shorts_script_qa_passed({**qa, 'blocking_issues': ['missing voice']})
