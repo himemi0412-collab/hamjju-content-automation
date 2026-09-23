@@ -91,7 +91,7 @@ def _wrap_to_width(draw: ImageDraw.ImageDraw, value: str,
     return '\n'.join(lines)
 
 
-def _subject_lock(card: dict[str, Any]) -> str:
+def _subject_lock(card: dict[str, Any], index: int | None = None) -> str:
     items = card.get('items') or []
     source = ' '.join([
         str(card.get('headline') or ''), str(card.get('copy') or ''),
@@ -111,7 +111,20 @@ def _subject_lock(card: dict[str, Any]) -> str:
                 'outdoor condenser, dehumidifier, purifier or laundry washer.')
     locks = (
         (('노트북', 'RAM', '램', '발열'), 'Show a real open laptop on a clean desk with its ventilation path, cooling fan area, bottom intake grille, memory module or system monitoring context as required by the card. When RAM is mentioned, show a realistic laptop memory module and slot only if the action calls for it. Never show source code, terminal windows, Codex, ChatGPT, AI logos, abstract app UI, floating icons or generic technology cubes.'),
-        (('고무패킹', '문틈', '곰팡이'), 'Show a close, unmistakable view of a household refrigerator door gasket: the flexible folded rubber seal around the door edge, its narrow groove, visible moisture or small mold spots, a soft cleaning cloth, and a clear comparison between a seal that lies flat and one that is torn or lifted. Never show a washing machine, document, ruler, generic appliance icon or unrelated filter.'),
+        (('고무패킹', '문틈', '곰팡이'), (
+            'ONLY photograph a household REFRIGERATOR DOOR GASKET: the flexible folded '
+            'rubber seal attached around the rectangular refrigerator door edge. '
+            'It must not have a circular glass drum door. NEVER show a washing machine, '
+            'laundry room, washer controls, document, ruler, generic appliance icon or '
+            'unrelated filter. '
+            + {
+                1: 'Show one close crop of the gasket visibly lifting away from the refrigerator frame; keep the problem unmistakable.',
+                2: 'Show an extreme documentary close-up of moisture and small dust trapped inside the folded gasket groove. Do not show a whole appliance.',
+                3: 'Fill the lower scene with a same-scale side-by-side physical comparison: LEFT gasket lies flat and evenly sealed; RIGHT gasket is visibly lifted or split. Both halves must be unmistakably different. Do not leave a blank lower area.',
+                4: 'Show one natural hand gently opening the gasket groove to inspect moisture, discoloration and a small split. The rectangular refrigerator door edge must remain visible.',
+                5: 'Show a dry cloth beside a cleaned gasket that still lifts slightly from the rectangular refrigerator frame, making the need for inspection clear.',
+            }.get(index, 'Show the exact gasket condition and action named by the card.')
+        )),
         (('배수호스', '실외기'), 'Show the exact home air-conditioner inspection subject named in the card: a wall-mounted indoor air conditioner connected to a real flexible drain hose, or an outdoor condenser unit with open airflow and no cover. When the card is about the drain hose, make the hose, bend, outlet and water path the main subject. Never replace them with a ruler, document, generic appliance or abstract icon.'),
         (('제습기', '물통'), 'Show a recognizable floor-standing home dehumidifier with its removable transparent water tank pulled out, remaining water droplets, the tank lid and a clean cloth or drying rack. Make emptying and fully air-drying the tank visually obvious. Never substitute an air purifier, humidifier, refrigerator, document or generic white appliance.'),
         (('세탁기',), 'Show a front-loading laundry washing machine with a circular drum door and the pull-out detergent drawer at the upper front. Never show dishwasher racks, spray arms or a kitchen dishwasher.'),
@@ -150,7 +163,7 @@ def _scene_prompt(
         'Create one square editorial lifestyle image for a Korean home-appliance help article.',
         f'Card role: {ROLES[index - 1]}. Topic: {card.get("headline", "")}.',
         f'Explanation: {card.get("copy", "")}. Visible situation and objects: {item_text}.',
-        _subject_lock(card),
+        _subject_lock(card, index),
         'Show a believable, modest, actually used Korean home interior and concrete relevant appliances and actions. Preserve tiny signs of ordinary life: slight surface wear, faint fingerprints, an imperfectly folded cloth, small natural dust or water traces, mildly uneven spacing and one or two relevant background objects. Keep them subtle and physically plausible, never dirty for effect. Use ordinary window light or ceiling light with realistic falloff, not studio lighting. Do not use documents, packaging, certificates, reports, phone screens, control-panel text or labels as visual evidence; all readable information will be typeset locally later.',
         'The image must explain the situation visually, with a clear subject and natural scale.',
         f'Production card role: {role_key}. {ROLE_SCENE_DIRECTIONS[index - 1]}',
@@ -158,8 +171,9 @@ def _scene_prompt(
         'Do not copy cover-exploration motifs, software screens, code, terminals, chat windows or AI branding.',
         'Use a bright paper-white or cool-white editorial base with pale lavender, muted mint, soft blue and restrained coral accents. '
         'No beige, yellow cream, amber light or warm sepia cast.',
-        'The concrete scene and objects must occupy roughly 65 to 72 percent of the frame and remain the first thing seen. '
-        'Reserve one calm low-detail editorial zone in the lower 28 to 32 percent for later Korean typography.',
+        'The concrete scene and objects must occupy roughly 70 to 82 percent of the frame and remain the first thing seen. '
+        'Reserve low-detail space only where this card role explicitly requests it; keep every other area visually complete. '
+        'Never create a large empty lower band or an accidental blank half.',
         'No people unless hands are essential to demonstrate the action.',
         'ABSOLUTELY NO text, letters, numbers, logos, labels, UI glyphs, watermark, yellow cast, beige cream, sepia, collage, source code, terminal, Codex, ChatGPT, AI branding, floating icons, generic infographic nodes, repeated template boxes, circles, arrows, badges, check marks, crosses, decorative labels, decorative waves, curved swooshes, ornamental underlines, glossy product-ad lighting, perfect showroom cleanliness, cinematic bokeh or synthetic depth of field.',
         f'Canonical v3 human-edit signals: {human_signals}.',
@@ -287,7 +301,8 @@ def generate_and_typeset_blog_cards(
 
         headline = str(card.get('headline') or '').strip()
         copy = str(card.get('copy') or '').strip()
-        draw.text(spec['role'], ROLES[index - 1], font=_font(font_path, 22), fill=accent)
+        # Omit the redundant role label. It was read as clipped helper copy in visual QA
+        # and added a template-like accent without carrying article information.
         draw.text(spec['number'], f'{index:02d} / 05', font=_font(font_path, 20), fill='#343741')
         title_font = _fit(draw, headline, font_path, 54, spec['title'], minimum=32)
         copy_font = _fit(draw, copy, font_path, 27, spec['copy'], minimum=20)
