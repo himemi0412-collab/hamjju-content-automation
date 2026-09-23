@@ -68,6 +68,21 @@ def _visual_qa_passed(qa: dict[str, Any]) -> bool:
     return qa.get('pass') is True and ai_score < 5 and not (qa.get('blocking_issues') or [])
 
 
+def align_single_speaker_profile(generated: dict[str, Any]) -> dict[str, Any]:
+    """Correct contradictory metadata without changing dialogue or scene voices."""
+    narrator = generated.get('narrator_profile')
+    scenes = generated.get('scenes')
+    if not isinstance(narrator, dict) or narrator.get('profile') != 'multiple':
+        return generated
+    if not isinstance(scenes, list) or not scenes or any(not isinstance(s, dict) for s in scenes):
+        return generated
+    speakers = {str(s.get('speaker_profile') or '').strip() for s in scenes}
+    if len(speakers) == 1 and speakers <= {'older_woman', 'older_man', 'young_woman', 'young_man'}:
+        speaker = speakers.pop()
+        generated['narrator_profile'] = {**narrator, 'profile': speaker}
+    return generated
+
+
 class Pipeline:
     def __init__(
         self,
@@ -446,6 +461,8 @@ class Pipeline:
                         generated.get('design_language')
                     )
                     generated = apply_named_design_contract(generated)
+            if cfg.name == 'japan_shorts':
+                generated = align_single_speaker_profile(generated)
             content_version = manuscript_hash(generated)
             ownership_receipt = self.operating_contract.receipt(
                 cfg.name,
