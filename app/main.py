@@ -12,7 +12,7 @@ from .ai import AIClient
 from .budget import BudgetGuard
 from .config import load_channels
 from .notion_client import NotionClient, extract_page_title
-from .pipeline import Pipeline
+from .pipeline import Pipeline, _card_numbers_from_qa_issue
 from .settings import Settings
 from .state import StateStore
 from .youtube import YouTubePrivateUploader
@@ -852,15 +852,17 @@ def verify_blog_card_style_live():
             }
             revision_parts: dict[int, list[str]] = {}
             for issue in qa.get('blocking_issues') or []:
-                if isinstance(issue, dict):
-                    message = ' / '.join(
-                        str(issue.get(key) or '') for key in ('issue', 'evidence') if issue.get(key)
+                message = (
+                    ' / '.join(
+                        str(issue.get(key) or '')
+                        for key in ('issue', 'evidence')
+                        if issue.get(key)
                     )
-                    for value in issue.get('cards') or []:
-                        if str(value).isdigit() and 1 <= int(value) <= 5:
-                            card_number = int(value)
-                            retry_cards.add(card_number)
-                            revision_parts.setdefault(card_number, []).append(message)
+                    if isinstance(issue, dict) else str(issue)
+                )
+                for card_number in _card_numbers_from_qa_issue(issue):
+                    retry_cards.add(card_number)
+                    revision_parts.setdefault(card_number, []).append(message)
             # A set-wide AI-likeness or repetition failure has no safe passed card.
             if not retry_cards:
                 retry_cards = {1, 2, 3, 4, 5}
