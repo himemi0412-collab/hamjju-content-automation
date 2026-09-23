@@ -75,6 +75,22 @@ def _fit(draw: ImageDraw.ImageDraw, text: str, path: str | None, maximum: int,
     raise ValueError('Korean overlay text does not fit its reserved region')
 
 
+def _wrap_to_width(draw: ImageDraw.ImageDraw, value: str,
+                   font: ImageFont.ImageFont, width: int) -> str:
+    lines: list[str] = []
+    line = ''
+    for char in value:
+        candidate = line + char
+        if line and draw.textbbox((0, 0), candidate, font=font)[2] > width:
+            lines.append(line)
+            line = char
+        else:
+            line = candidate
+    if line:
+        lines.append(line)
+    return '\n'.join(lines)
+
+
 def _subject_lock(card: dict[str, Any]) -> str:
     items = card.get('items') or []
     source = ' '.join([
@@ -84,12 +100,20 @@ def _subject_lock(card: dict[str, Any]) -> str:
             for item in items if isinstance(item, dict)
         ),
     ])
+    # The article topic wins over incidental words in individual card items.
+    # In particular, a dishwasher water-tank comparison must not become a
+    # dehumidifier or an air-conditioner drain-hose photograph.
+    if '식기세척기' in source:
+        return ('Show an unmistakable compact kitchen dishwasher with its open '
+                'dish rack and plates. For water-tank supply, show the dishwasher '
+                'reservoir being filled; for direct supply, show the dishwasher '
+                'connected to a kitchen faucet. Never show an air conditioner, '
+                'outdoor condenser, dehumidifier, purifier or laundry washer.')
     locks = (
         (('노트북', 'RAM', '램', '발열'), 'Show a real open laptop on a clean desk with its ventilation path, cooling fan area, bottom intake grille, memory module or system monitoring context as required by the card. When RAM is mentioned, show a realistic laptop memory module and slot only if the action calls for it. Never show source code, terminal windows, Codex, ChatGPT, AI logos, abstract app UI, floating icons or generic technology cubes.'),
         (('고무패킹', '문틈', '곰팡이'), 'Show a close, unmistakable view of a household refrigerator door gasket: the flexible folded rubber seal around the door edge, its narrow groove, visible moisture or small mold spots, a soft cleaning cloth, and a clear comparison between a seal that lies flat and one that is torn or lifted. Never show a washing machine, document, ruler, generic appliance icon or unrelated filter.'),
         (('배수호스', '실외기'), 'Show the exact home air-conditioner inspection subject named in the card: a wall-mounted indoor air conditioner connected to a real flexible drain hose, or an outdoor condenser unit with open airflow and no cover. When the card is about the drain hose, make the hose, bend, outlet and water path the main subject. Never replace them with a ruler, document, generic appliance or abstract icon.'),
         (('제습기', '물통'), 'Show a recognizable floor-standing home dehumidifier with its removable transparent water tank pulled out, remaining water droplets, the tank lid and a clean cloth or drying rack. Make emptying and fully air-drying the tank visually obvious. Never substitute an air purifier, humidifier, refrigerator, document or generic white appliance.'),
-        (('식기세척기',), 'Show a built-in kitchen dishwasher with dish racks and a door-mounted detergent dispenser. Never show an air purifier, dehumidifier, water purifier, laundry washer or generic white appliance.'),
         (('세탁기',), 'Show a front-loading laundry washing machine with a circular drum door and the pull-out detergent drawer at the upper front. Never show dishwasher racks, spray arms or a kitchen dishwasher.'),
         (('건조기',), 'Show a front-loading tumble clothes dryer with a circular door and a removable lint filter at the door or lower opening. Never show an air purifier, dehumidifier or water tank appliance.'),
         (('와이파이', '2.4GHz'), 'Show only a recognizable wireless router with antennas, a smartphone or laptop, walls and signal-distance context. Never add household cleaning appliances, filters, brushes or vacuum parts.'),
@@ -223,25 +247,27 @@ def generate_and_typeset_blog_cards(
         panel_rgb = tuple(int(style['surface'][i:i + 2], 16) for i in (1, 3, 5))
         accent_rgb = tuple(int(accent[i:i + 2], 16) for i in (1, 3, 5))
         layouts = {
-            1: {'panel': (42, 690, 720, 1040), 'role': (70, 718), 'number': (580, 718),
-                'title': (70, 782, 680, 900), 'copy': (70, 922, 680, 1005), 'align': 'left'},
-            2: {'panel': (36, 82, 520, 998), 'role': (70, 118), 'number': (390, 118),
-                'title': (70, 190, 480, 360), 'copy': (70, 392, 480, 520), 'align': 'left'},
-            3: {'panel': (72, 42, 1008, 314), 'role': (104, 72), 'number': (866, 72),
-                'title': (104, 126, 976, 216), 'copy': (104, 232, 976, 286), 'align': 'center'},
-            4: {'panel': (570, 102, 1042, 1008), 'role': (606, 138), 'number': (900, 138),
-                'title': (606, 212, 1002, 390), 'copy': (606, 424, 1002, 570), 'align': 'left'},
-            5: {'panel': (408, 674, 1038, 1038), 'role': (442, 708), 'number': (894, 708),
-                'title': (442, 772, 1000, 900), 'copy': (442, 922, 1000, 1004), 'align': 'right'},
+            1: {'panel': (42, 510, 770, 1040), 'role': (70, 534), 'number': (640, 534),
+                'title': (70, 584, 730, 682), 'copy': (70, 700, 730, 770),
+                'items': (70, 800, 730, 1020), 'align': 'left'},
+            2: {'panel': (36, 82, 550, 998), 'role': (68, 108), 'number': (422, 108),
+                'title': (68, 168, 510, 302), 'copy': (68, 326, 510, 426),
+                'items': (68, 468, 510, 962), 'align': 'left'},
+            3: {'panel': (72, 42, 1008, 490), 'role': (104, 65), 'number': (866, 65),
+                'title': (104, 116, 976, 205), 'copy': (104, 218, 976, 275),
+                'items': (104, 310, 976, 470), 'align': 'center'},
+            4: {'panel': (532, 102, 1042, 1008), 'role': (562, 127), 'number': (910, 127),
+                'title': (562, 182, 1002, 304), 'copy': (562, 322, 1002, 430),
+                'items': (562, 464, 1002, 974), 'align': 'left'},
+            5: {'panel': (350, 530, 1038, 1038), 'role': (380, 555), 'number': (906, 555),
+                'title': (380, 608, 1000, 702), 'copy': (380, 714, 1000, 775),
+                'items': (380, 800, 1000, 1010), 'align': 'right'},
         }
         spec = layouts[index]
         x1, y1, x2, y2 = spec['panel']
         vd.rounded_rectangle((x1, y1, x2, y2), radius=18, fill=(*panel_rgb, 232))
-        # One restrained rule is the only editorial device added by code.
-        if index in {1, 3, 5}:
-            vd.line((x1 + 28, y1 + 54, x2 - 28, y1 + 54), fill=(*accent_rgb, 210), width=3)
-        else:
-            vd.rectangle((x1, y1, x1 + 9, y2), fill=(*accent_rgb, 225))
+        # Leave the scene unobscured outside the text area. Repeated accent
+        # rules made unrelated cards look like the same template.
         canvas = Image.alpha_composite(canvas, veil)
         draw = ImageDraw.Draw(canvas)
 
@@ -256,6 +282,46 @@ def generate_and_typeset_blog_cards(
         copy_x = (spec['copy'][0] + spec['copy'][2]) // 2 if anchor == 'ma' else (spec['copy'][2] if anchor == 'ra' else spec['copy'][0])
         draw.multiline_text((title_x, spec['title'][1]), headline, font=title_font, fill='#202329', spacing=8, anchor=anchor)
         draw.multiline_text((copy_x, spec['copy'][1]), copy, font=copy_font, fill='#343741', spacing=7, anchor=anchor)
+
+        # Every item contains distinct information from the approved five-card
+        # plan. The former renderer dropped label/detail entirely, leaving an
+        # empty white panel and making comparison/checklist cards unusable.
+        item_box = spec['items']
+        items = card.get('items') or []
+        if not items or any(not isinstance(item, dict) or
+                            not str(item.get('label') or '').strip() or
+                            not str(item.get('detail') or '').strip() for item in items):
+            raise ValueError(f'Blog card {index} has incomplete items')
+        slot_height = (item_box[3] - item_box[1]) // len(items)
+        for item_index, item in enumerate(items):
+            top = item_box[1] + item_index * slot_height
+            label = str(item['label']).strip()
+            detail = str(item['detail']).strip()
+            label_box = (item_box[0], top, item_box[2], top + min(38, slot_height // 2))
+            detail_box = (item_box[0], top + min(38, slot_height // 2),
+                          item_box[2], top + slot_height - 4)
+            label_font = _fit(draw, label, font_path, 24, label_box, minimum=16)
+            detail_font = None
+            wrapped = ''
+            for font_size in range(19, 12, -1):
+                candidate_font = _font(font_path, font_size)
+                candidate = _wrap_to_width(
+                    draw, detail, candidate_font, detail_box[2] - detail_box[0]
+                )
+                bounds = draw.multiline_textbbox((0, 0), candidate,
+                                                  font=candidate_font, spacing=3)
+                if bounds[3] - bounds[1] <= detail_box[3] - detail_box[1]:
+                    detail_font, wrapped = candidate_font, candidate
+                    break
+            if detail_font is None:
+                raise ValueError(f'Blog card {index} item {item_index + 1} does not fit')
+            item_anchor = 'ra' if spec['align'] == 'right' else None
+            item_x = item_box[2] if item_anchor else item_box[0]
+            draw.text((item_x, top), label, font=label_font,
+                      fill='#202329', anchor=item_anchor)
+            draw.multiline_text((item_x, detail_box[1]), wrapped,
+                                font=detail_font, fill='#343741',
+                                spacing=3, anchor=item_anchor)
 
         canvas.convert('RGB').save(final_path, quality=95)
         results.append(final_path)
