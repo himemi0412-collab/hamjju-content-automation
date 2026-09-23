@@ -116,3 +116,37 @@ def test_live_card_verification_is_no_save_and_workflow_isolated():
     assert "qa_prompt='prompts/qa_photographic_blog_cards.md'" in command
     assert "inputs.mode == 'verify_blog_card_style_live'" in workflow
     assert "inputs.mode != 'verify_blog_card_style_live'" in workflow
+
+
+def test_five_card_typesetting_uses_distinct_spatial_structures():
+    source = Path('app/photographic_cards.py').read_text(encoding='utf-8')
+    assert "1: {'panel': (42, 690, 720, 1040)" in source
+    assert "2: {'panel': (36, 82, 520, 998)" in source
+    assert "3: {'panel': (72, 42, 1008, 314)" in source
+    assert "4: {'panel': (570, 102, 1042, 1008)" in source
+    assert "5: {'panel': (408, 674, 1038, 1038)" in source
+    assert "AI 생성 설명 장면" not in source
+
+
+def test_scene_prompt_requires_lived_in_photography_and_bans_callouts():
+    scene = _scene_prompt({
+        'layout': 'cover',
+        'headline': '냉장고 고무패킹',
+        'copy': '들뜸을 확인해요',
+        'items': [{'label': '패킹', 'detail': '물기와 들뜸'}],
+    }, 1)
+    assert 'slight surface wear' in scene
+    assert 'faint fingerprints' in scene
+    assert 'perfect showroom cleanliness' in scene
+    assert 'circles, arrows, badges' in scene
+
+
+def test_visual_gate_and_targeted_retries_apply_to_normal_production():
+    pipeline = Path('app/pipeline.py').read_text(encoding='utf-8')
+    main = Path('app/main.py').read_text(encoding='utf-8')
+    assert 'def _visual_qa_passed' in pipeline
+    assert "ai_score < 5" in pipeline
+    assert "'stage': 'targeted_visual_retry'" in pipeline
+    assert 'only_indices=retry_cards' in pipeline
+    assert 'for attempt in range(1, 3)' in main
+    assert 'only_indices=retry_cards' in main
