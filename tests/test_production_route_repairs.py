@@ -211,4 +211,4 @@ def test_comparison_scene_uses_visible_refrigerator_anchors_not_round_washer_par
 def test_flow_panel_preserves_more_than_half_the_frame_for_the_photograph():
     renderer = Path('app/photographic_cards.py').read_text(encoding='utf-8')
     assert "2: {'panel': (36, 82, 462, 998)" in renderer
-    assert "2: {'panel': (36, 82, 462, 998)" not in renderer
+    assert "2: {'panel': (36, 82, 550, 998)" not in renderer
