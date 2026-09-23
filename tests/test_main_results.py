@@ -289,11 +289,12 @@ def test_sufficient_blog_backlog_does_not_pay_for_new_topic_research(monkeypatch
     from types import SimpleNamespace
     import app.main as main
 
-    settings = SimpleNamespace(blog_data_source_id='blog-ds')
+    settings = SimpleNamespace(blog_data_source_id='blog-ds', shorts_data_source_id='shorts-ds')
     notion = SimpleNamespace(close=lambda: None)
     ai = SimpleNamespace(research_topics=lambda *_a: pytest.fail('research should not run'))
     monkeypatch.setattr(main, 'build', lambda: (settings, notion, ai, None, None))
     monkeypatch.setattr(main, 'missing_blog_topics', lambda *_a: 0)
+    monkeypatch.setattr(main, 'missing_short_topics', lambda *_a: 0)
     main.seed_topics(blog_count=3, ppojjugi_count=0, japan_count=0)
 
 

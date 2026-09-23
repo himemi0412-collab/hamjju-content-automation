@@ -99,7 +99,7 @@ def load_operating_contract(path: str | Path = 'config/operating_contract.yaml')
         raise RuntimeError('Operating contract must define exactly the three production channels')
     schedules = data.get('schedules') or {}
     github_crons = [item.get('cron') for item in schedules.get('github_actions', [])]
-    if github_crons != ['0 1 * * *', '0 12 * * *']:
+    if github_crons != ['45 0 * * *', '0 1 * * *', '0 12 * * *']:
         raise RuntimeError('Operating contract contains an unexpected GitHub schedule')
     return OperatingContract(
         contract_id=str(data['contract_id']),
