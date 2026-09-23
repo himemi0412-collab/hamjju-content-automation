@@ -782,7 +782,10 @@ class Pipeline:
                 save_manifest(job_dir / 'notion-readback.json', observation)
                 output_verified = True
             elif cfg.content_kind == 'shorts' and passed:
-                observation = self._verify_shorts_output(page_id, page_title, final_status, blocks, media)
+                observation = self._verify_shorts_output(
+                    page_id, page_title, final_status, blocks, media,
+                    require_media=media_expected, require_youtube=bool(media_expected and self.s.auto_private_youtube_upload),
+                )
                 save_manifest(job_dir / 'notion-readback.json', observation)
                 output_verified = True
             complete = passed and not media.get('budget_blocked')
@@ -830,6 +833,7 @@ class Pipeline:
     def _verify_shorts_output(
         self, page_id: str, page_title: str, status: str,
         expected_blocks: list[dict[str, Any]], media: dict[str, Any],
+        require_media: bool = False, require_youtube: bool = False,
     ) -> dict[str, Any]:
         page = self.notion.retrieve_page(page_id)
         observed_blocks = self.notion.read_page_blocks(page_id)
@@ -842,6 +846,10 @@ class Pipeline:
             raise RuntimeError('Shorts read-back status did not match the saved result')
         if not expected or observed != expected:
             raise RuntimeError('Shorts read-back script blocks did not match generated result')
+        if require_media and not media.get('video'):
+            raise RuntimeError('Shorts video required but missing')
+        if require_youtube and (not media.get('youtube_url') or media.get('youtube_privacy') not in {'private', 'public'}):
+            raise RuntimeError('Shorts reviewed YouTube upload required but missing')
         if media.get('video'):
             if (media.get('verification') or {}).get('pass') is not True:
                 raise RuntimeError('Shorts media verification did not pass')
