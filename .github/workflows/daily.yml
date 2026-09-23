@@ -1,5 +1,7 @@
 name: Hamjju Daily Content Production
 
+# One-shot no-save verifier trigger revision: photo-layer-v2
+
 env:
   IMAGE_QUALITY: medium
   OPENAI_MONTHLY_BUDGET_USD: '40'
