@@ -49,3 +49,16 @@ def test_shorts_readback_rejects_unverified_media():
     with pytest.raises(RuntimeError, match='media verification'):
         pipeline._verify_shorts_output('page', '확인 영상', '비공개 업로드 완료', blocks,
                                       {'video': 'short.mp4', 'verification': {'pass': False}})
+
+
+def test_scheduled_shorts_cannot_pass_without_required_video_and_upload():
+    blocks = result_blocks('japan_shorts', {'title': '확인 영상'}, {'pass': True})
+    pipeline = object.__new__(Pipeline)
+    pipeline.notion = SimpleNamespace(retrieve_page=lambda _: make_page(),
+                                     read_page_blocks=lambda _: blocks)
+    with pytest.raises(RuntimeError, match='video required'):
+        pipeline._verify_shorts_output('page', '확인 영상', '비공개 업로드 완료', blocks, {}, require_media=True)
+    with pytest.raises(RuntimeError, match='YouTube upload required'):
+        pipeline._verify_shorts_output('page', '확인 영상', '비공개 업로드 완료', blocks,
+                                      {'video': 'short.mp4', 'verification': {'pass': True}},
+                                      require_media=True, require_youtube=True)
