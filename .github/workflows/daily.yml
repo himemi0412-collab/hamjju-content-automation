@@ -1,6 +1,6 @@
 name: Hamjju Daily Content Production
 
-# One-shot no-save verifier trigger revision: refrigerator-anchor-v3
+# One-shot no-save verifier trigger revision: human-layout-v4
 
 env:
   IMAGE_QUALITY: medium
