@@ -178,7 +178,7 @@ def test_refrigerator_card_roles_are_subject_locked_without_conflicting_blank_ba
 def test_renderer_omits_redundant_role_label_that_visual_qa_read_as_clipped_copy():
     renderer = Path('app/photographic_cards.py').read_text(encoding='utf-8')
     assert "draw.text(spec['role'], ROLES[index - 1]" not in renderer
-    assert "draw.text(spec['number'], f'{index:02d} / 05'" in renderer
+    assert "draw.text(spec['number'], f'{index:02d} / 05'" not in renderer
 
 
 
@@ -205,3 +205,10 @@ def test_comparison_scene_uses_visible_refrigerator_anchors_not_round_washer_par
     assert 'interior shelves, bottles and food containers' in prompt
     assert 'Absolutely no circular door' in prompt
     assert 'laundry appliance' in prompt
+
+
+
+def test_flow_panel_preserves_more_than_half_the_frame_for_the_photograph():
+    renderer = Path('app/photographic_cards.py').read_text(encoding='utf-8')
+    assert "2: {'panel': (36, 82, 462, 998)" in renderer
+    assert "2: {'panel': (36, 82, 550, 998)" not in renderer
