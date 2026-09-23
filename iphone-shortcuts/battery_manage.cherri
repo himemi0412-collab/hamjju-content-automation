@@ -1,0 +1,11 @@
+#include 'actions/device'
+
+@battery = getBatteryLevel()
+
+if @battery < 31 {
+    setLowPowerMode(true)
+    showNotification("배터리가 낮아서 저전력 모드를 켰어.", "🔋 배터리 관리")
+} else {
+    setLowPowerMode(false)
+    showNotification("충전이 충분해서 저전력 모드를 껐어.", "🔋 배터리 관리")
+}
