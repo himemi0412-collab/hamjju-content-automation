@@ -1,0 +1,58 @@
+name: Build iPhone Shortcuts Pack
+
+on:
+  push:
+    branches:
+      - iphone-shortcuts-pack
+    paths:
+      - "iphone-shortcuts/**"
+      - ".github/workflows/build-iphone-shortcuts-pack.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Cherri v2.3.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL             "https://github.com/electrikmilk/cherri/releases/download/v2.3.0/cherri_linux-x86_64.zip"             -o cherri.zip
+          mkdir -p cherri-bin
+          unzip -q cherri.zip -d cherri-bin
+          CHERRI="$(find cherri-bin -type f -name 'cherri*' | head -n 1)"
+          test -n "$CHERRI"
+          chmod +x "$CHERRI"
+          echo "CHERRI=$CHERRI" >> "$GITHUB_ENV"
+          "$CHERRI" --version || true
+
+      - name: Compile and sign shortcuts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+
+          "$CHERRI" iphone-shortcuts/thought_capture.cherri --hubsign --output="out/🧠 생각났어!.shortcut"
+          "$CHERRI" iphone-shortcuts/calendar_entry.cherri --hubsign --output="out/📅 일정 넣기.shortcut"
+          "$CHERRI" iphone-shortcuts/today_one.cherri --hubsign --output="out/🎯 오늘 딱 하나.shortcut"
+          "$CHERRI" iphone-shortcuts/focus_25.cherri --hubsign --output="out/🔥 25분 집중.shortcut"
+          "$CHERRI" iphone-shortcuts/battery_manage.cherri --hubsign --output="out/🔋 배터리 관리.shortcut"
+
+          test "$(find out -type f -name '*.shortcut' | wc -l)" -eq 5
+          find out -type f -name '*.shortcut' -size +0c -print
+
+      - name: Upload signed shortcut pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: hamjju-iphone-shortcuts-pack
+          path: out/*.shortcut
+          if-no-files-found: error
+          retention-days: 7
