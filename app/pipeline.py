@@ -68,6 +68,11 @@ def _visual_qa_passed(qa: dict[str, Any]) -> bool:
     return qa.get('pass') is True and ai_score < 5 and not (qa.get('blocking_issues') or [])
 
 
+def _shorts_script_qa_passed(qa: dict[str, Any]) -> bool:
+    """Script QA precedes image creation; visual likeness is reviewed later."""
+    return qa.get('pass') is True and not (qa.get('blocking_issues') or [])
+
+
 def align_single_speaker_profile(generated: dict[str, Any]) -> dict[str, Any]:
     """Correct contradictory metadata without changing dialogue or scene voices."""
     narrator = generated.get('narrator_profile')
@@ -480,7 +485,8 @@ class Pipeline:
                 qa, qa_usage = {'pass': False, 'status': 'PENDING_RENDER_REVIEW'}, {}
             else:
                 qa, qa_usage = self.ai.qa(generated, {'channel': cfg.name, **context})
-            passed = _visual_qa_passed(qa)
+            passed = (_shorts_script_qa_passed(qa) if cfg.content_kind == 'shorts'
+                      else _visual_qa_passed(qa))
             if cfg.content_kind == 'shorts' and passed:
                 ownership_receipt = self.operating_contract.receipt(
                     cfg.name, document_id=page_id, source_version=content_version, stage='QA_PASS',
