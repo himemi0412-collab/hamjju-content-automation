@@ -841,6 +841,67 @@ def verify_blog_card_style_live():
             qa_prompt='prompts/qa_photographic_blog_cards.md',
             image_paths=paths,
         )
+        qa_usages = [{'attempt': 0, 'usage': usage, 'cards': [1, 2, 3, 4, 5]}]
+        for attempt in range(1, 3):
+            ai_score = int(qa.get('ai_likeness_score', 100))
+            if qa.get('pass') is True and ai_score < 5 and not (qa.get('blocking_issues') or []):
+                break
+            retry_cards = {
+                int(value) for value in (qa.get('cards_to_regenerate') or [])
+                if str(value).isdigit() and 1 <= int(value) <= 5
+            }
+            revision_parts: dict[int, list[str]] = {}
+            for issue in qa.get('blocking_issues') or []:
+                if isinstance(issue, dict):
+                    message = ' / '.join(
+                        str(issue.get(key) or '') for key in ('issue', 'evidence') if issue.get(key)
+                    )
+                    for value in issue.get('cards') or []:
+                        if str(value).isdigit() and 1 <= int(value) <= 5:
+                            card_number = int(value)
+                            retry_cards.add(card_number)
+                            revision_parts.setdefault(card_number, []).append(message)
+            # A set-wide AI-likeness or repetition failure has no safe passed card.
+            if not retry_cards:
+                retry_cards = {1, 2, 3, 4, 5}
+            paths = generate_and_typeset_blog_cards(
+                ai.client,
+                cards,
+                Path(temp_dir),
+                model=s.image_model,
+                quality=s.image_quality,
+                font_path=s.card_font_path,
+                budget=None,
+                only_indices=retry_cards,
+                revision_notes={
+                    number: ' '.join(revision_parts.get(number) or [
+                        'Reduce synthetic polish, repeated template rhythm and unnecessary editorial devices. '
+                        'Use an ordinary lived-in documentary scene with natural imperfections.'
+                    ])
+                    for number in retry_cards
+                },
+                design_language='Bento Editorial',
+            )
+            qa, retry_usage = ai.qa(
+                {'card_news': cards, 'visual_family': 'photographic_lifestyle'},
+                {
+                    'channel': 'naver_blog',
+                    'automation_scope': {
+                        'mode': 'live_no_save_card_verification',
+                        'selective_retry_attempt': attempt,
+                        'preserved_cards': sorted(set(range(1, 6)) - retry_cards),
+                        'notion_write_allowed': False,
+                        'naver_write_allowed': False,
+                        'artifact_upload_allowed': False,
+                    },
+                },
+                qa_prompt='prompts/qa_photographic_blog_cards.md',
+                image_paths=paths,
+            )
+            qa_usages.append({
+                'attempt': attempt, 'usage': retry_usage, 'cards': sorted(retry_cards),
+            })
+        usage = {'attempts': qa_usages}
     ai_score = int(qa.get('ai_likeness_score', 100))
     passed = qa.get('pass') is True and ai_score < 5 and not (qa.get('blocking_issues') or [])
     print_json({
@@ -853,6 +914,7 @@ def verify_blog_card_style_live():
         'qa_pass': passed,
         'ai_likeness_score': ai_score,
         'blocking_issues': qa.get('blocking_issues') or [],
+        'generation_attempts': len(usage.get('attempts') or []),
         'usage': usage,
     })
     if not passed:
