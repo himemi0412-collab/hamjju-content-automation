@@ -1,0 +1,9 @@
+action 'getupcomingreminders' getUpcomingReminders(
+    number count: 'WFGetUpcomingItemCount'
+): array {
+    "WFGetUpcomingItemCalendar": "All Lists"
+}
+
+@items = getUpcomingReminders(5)
+@choice = chooseFromList(@items, "오늘은 하나만 골라")
+show("🎯 오늘은 이것만 먼저 해\n\n{@choice}")
