@@ -224,7 +224,14 @@ jobs:
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'true'
           AUTO_PRIVATE_YOUTUBE_UPLOAD: 'true'
-        run: python -m app.main channel "${{ inputs.channel }}" --limit 1 --require-item
+          MEDIA_PAGE_ID: ${{ inputs.page_id }}
+        run: |
+          if [ -n "$MEDIA_PAGE_ID" ]; then
+            [[ "$MEDIA_PAGE_ID" =~ ^[0-9a-fA-F-]{32,36}$ ]]
+            python -m app.main page "${{ inputs.channel }}" "$MEDIA_PAGE_ID"
+          else
+            python -m app.main channel "${{ inputs.channel }}" --limit 1 --require-item
+          fi
 
       - name: Recover one existing blog without creating new topics
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'recover_blog' }}
