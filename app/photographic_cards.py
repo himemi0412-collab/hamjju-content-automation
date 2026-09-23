@@ -267,9 +267,9 @@ def generate_and_typeset_blog_cards(
             1: {'panel': (42, 510, 770, 1040), 'role': (70, 534), 'number': (640, 534),
                 'title': (70, 584, 730, 682), 'copy': (70, 700, 730, 770),
                 'items': (70, 800, 730, 1020), 'align': 'left'},
-            2: {'panel': (36, 82, 550, 998), 'role': (68, 108), 'number': (422, 108),
-                'title': (68, 168, 510, 302), 'copy': (68, 326, 510, 426),
-                'items': (68, 468, 510, 962), 'align': 'left'},
+            2: {'panel': (36, 82, 462, 998), 'role': (68, 108), 'number': (366, 108),
+                'title': (68, 168, 430, 302), 'copy': (68, 326, 430, 426),
+                'items': (68, 468, 430, 962), 'align': 'left'},
             3: {'panel': (72, 42, 1008, 490), 'role': (104, 65), 'number': (866, 65),
                 'title': (104, 116, 976, 205), 'copy': (104, 218, 976, 275),
                 'items': (104, 310, 976, 470), 'align': 'center'},
@@ -306,7 +306,6 @@ def generate_and_typeset_blog_cards(
         copy = str(card.get('copy') or '').strip()
         # Omit the redundant role label. It was read as clipped helper copy in visual QA
         # and added a template-like accent without carrying article information.
-        draw.text(spec['number'], f'{index:02d} / 05', font=_font(font_path, 20), fill='#343741')
         title_font = _fit(draw, headline, font_path, 54, spec['title'], minimum=32)
         copy_font = _fit(draw, copy, font_path, 27, spec['copy'], minimum=20)
         anchor = 'ma' if spec['align'] == 'center' else ('ra' if spec['align'] == 'right' else None)
