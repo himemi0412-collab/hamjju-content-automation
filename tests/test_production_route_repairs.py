@@ -1,7 +1,9 @@
 from pathlib import Path
 
 from app.blog_reference import VISUAL_FAMILIES, validate_generated_reference_contract
-from app.photographic_cards import (\n    _scene_prompt, _subject_lock, load_production_style_bundle, production_design_language,\n)
+from app.photographic_cards import (
+    _scene_prompt, _subject_lock, load_production_style_bundle, production_design_language,
+)
 
 
 def _reference_ready(visual_family: str) -> dict:
