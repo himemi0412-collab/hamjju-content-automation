@@ -207,7 +207,9 @@ class Pipeline:
         upload_ids = self.notion.attach_files(page_id, '생성 이미지', cards)
         if len(upload_ids) != 5:
             raise RuntimeError('NOTION_CARD_REPLACEMENT_INCOMPLETE')
-        self.notion.update_status(page_id, 'CODEX_HANDOFF_READY')
+        # Card-only QA cannot certify the frozen article or create the handoff marker.
+        # Keep the page in the revision queue until full manuscript/card QA passes.
+        self.notion.update_status(page_id, '수정 필요')
         image_blocks = []
         for index, (upload_id, card) in enumerate(zip(upload_ids, cards), 1):
             image_blocks.extend([
@@ -233,7 +235,7 @@ class Pipeline:
             'media': {'cards': [str(card) for card in cards], 'notion_cards_attached': True},
             'naver_draft_verified': False, 'card_count': len(cards),
             'article_body_sha256': original_body_hash, 'qa': qa, 'usage': usage,
-            'previous_status': original_status, 'new_status': 'CODEX_HANDOFF_READY',
+            'previous_status': original_status, 'new_status': '수정 필요',
         }
 
     def run_channel(self, cfg: ChannelConfig, limit: int | None = None, dry_run: bool = False) -> list[dict[str, Any]]:
