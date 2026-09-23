@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 import mimetypes
 import re
+import time
 from pathlib import Path
 from typing import Any
 import httpx
@@ -13,6 +14,22 @@ NOTION_MAX_PARTS = 1000
 
 
 class NotionClient:
+    def _read_block_children(self, page_id: str, params: dict[str, Any]) -> dict[str, Any]:
+        """Retry only transient failures on this safe, read-only request."""
+        for attempt in range(4):
+            try:
+                response = self.client.get(f'/blocks/{page_id}/children', params=params)
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code not in {429, 500, 502, 503, 504, 520, 522} or attempt == 3:
+                    raise
+            except httpx.TransportError:
+                if attempt == 3:
+                    raise
+            time.sleep(2 ** attempt)
+        raise AssertionError('unreachable')
+
     def __init__(self, token: str, multipart_upload_enabled: bool = False):
         self.token = token
         self.multipart_upload_enabled = multipart_upload_enabled
@@ -147,9 +164,7 @@ class NotionClient:
             params: dict[str, Any] = {'page_size': 100}
             if cursor:
                 params['start_cursor'] = cursor
-            response = self.client.get(f'/blocks/{page_id}/children', params=params)
-            response.raise_for_status()
-            data = response.json()
+            data = self._read_block_children(page_id, params)
             blocks.extend(data.get('results', []))
             if not data.get('has_more'):
                 return blocks
@@ -187,9 +202,7 @@ class NotionClient:
             params: dict[str, Any] = {'page_size': 100}
             if cursor:
                 params['start_cursor'] = cursor
-            r = self.client.get(f'/blocks/{page_id}/children', params=params)
-            r.raise_for_status()
-            data = r.json()
+            data = self._read_block_children(page_id, params)
             for block in data.get('results', []):
                 kind = block.get('type')
                 payload = block.get(kind, {}) if kind else {}
