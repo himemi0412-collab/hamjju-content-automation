@@ -48,6 +48,16 @@ def test_blog_without_readback_does_not_count_as_reviewed_output(tmp_path):
     assert data['batches'][0]['reviewed_outputs'] == 0
 
 
+def test_shorts_without_readback_does_not_count_as_reviewed_output(tmp_path):
+    result = {'page_id': 'short-page', 'title': '검증 대기', 'status': '비공개 업로드 완료',
+              'qa_pass': True, 'notion_page_updated': True, 'output_verified': False,
+              'media': {'notion_video_attached': True, 'verification': {'pass': True}}}
+    path = record_results(tmp_path, 'japan_shorts', [result], 1)
+    data = json.loads(path.read_text(encoding='utf-8'))
+    assert data['batches'][0]['reviewed_outputs'] == 0
+    assert '제작 미완료' in markdown_report(data, {'japan_shorts': 1}, 'success', 'https://example.org/run')
+
+
 @pytest.mark.parametrize(('event', 'mode', 'production'), [
     ('push', '', False), ('workflow_dispatch', 'dry_run', False),
     ('workflow_dispatch', 'verify_youtube_auth', False),

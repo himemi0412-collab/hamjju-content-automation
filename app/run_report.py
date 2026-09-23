@@ -33,7 +33,7 @@ def compact_result(channel: str, result: dict) -> dict:
 def reviewed_output(result: dict) -> bool:
     return bool(
         result['qa_pass'] and result['notion_page_updated']
-        and (result['channel'] != 'naver_blog' or result['output_verified'])
+        and result['output_verified']
         and not result['budget_blocked']
         and result['status'] not in {'failed', 'skipped', '수정 필요', 'unknown'}
     )

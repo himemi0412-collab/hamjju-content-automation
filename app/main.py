@@ -528,10 +528,10 @@ def validate_results(
         raise RuntimeError('Notion page update was not confirmed')
     if not dry_run and any(x.get('qa_pass') is not True for x in results):
         raise RuntimeError('Independent QA pass was not confirmed')
-    if not dry_run and any(x.get('channel') == 'naver_blog' and x.get('output_verified') is not True for x in results):
-        raise RuntimeError('Blog output read-back verification was not confirmed')
     if not dry_run and expected_count is not None and len(results) < expected_count:
         raise RuntimeError(f'Production incomplete: expected {expected_count} items, processed {len(results)}')
+    if not dry_run and any(x.get('output_verified') is not True for x in results):
+        raise RuntimeError('Output read-back verification was not confirmed')
 
 
 @app.command('setup-youtube-auth')
