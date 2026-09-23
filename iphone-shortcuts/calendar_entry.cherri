@@ -1,0 +1,16 @@
+#include 'actions/calendar'
+
+action 'addnewevent' addNewEvent(
+    text title: 'WFCalendarItemTitle',
+    text startDate: 'WFCalendarItemStartDate',
+    text endDate: 'WFCalendarItemEndDate'
+) {
+    "WFCalendarItemDates": true
+}
+
+@title = prompt("무슨 일정이야?")
+@startDate = prompt("시작 날짜와 시간을 골라줘", "Date and Time")
+@endDate = adjustDate("{@startDate}", "Add", qty(1, "hr"))
+
+addNewEvent("{@title}", "{@startDate}", "{@endDate}")
+showNotification("캘린더에 1시간 일정으로 저장했어.", "📅 일정 넣기")
