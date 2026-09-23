@@ -44,6 +44,6 @@ def test_operating_contract_has_only_permanent_github_schedules():
     workflow = Path('.github/workflows/daily.yml').read_text(encoding='utf-8')
     workflow_crons = re.findall(r"^\s+- cron: '([^']+)'$", workflow, flags=re.MULTILINE)
 
-    assert crons == ['0 1 * * *', '0 12 * * *']
+    assert crons == ['45 0 * * *', '0 1 * * *', '0 12 * * *']
     assert workflow_crons == crons
     assert 'HAMZZU_OPERATING_CONTRACT_V1' in Path('docs/OPERATING_CONTRACT.md').read_text(encoding='utf-8')
