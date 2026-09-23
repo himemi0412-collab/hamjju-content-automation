@@ -527,7 +527,7 @@ def test_resume_rechecks_image_bytes_after_qa_before_overwriting(tmp_path, monke
     pipeline.notion.attach_files = Mock()
     def edit_during_qa(*args, **kwargs):
         cards[2].write_bytes(b'manual-edit-during-review')
-        return {'pass': True}, {}
+        return {'pass': True, 'ai_likeness_score': 2}, {}
     pipeline.ai.qa.side_effect = edit_during_qa
     source = tmp_path / 'previous.json'
     source.write_text(json.dumps(prior), encoding='utf-8')
