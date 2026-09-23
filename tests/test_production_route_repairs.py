@@ -122,7 +122,7 @@ def test_live_card_verification_is_no_save_and_workflow_isolated():
 def test_five_card_typesetting_uses_distinct_spatial_structures():
     source = Path('app/photographic_cards.py').read_text(encoding='utf-8')
     assert "1: {'panel': (42, 510, 770, 1040)" in source
-    assert "2: {'panel': (36, 82, 550, 998)" in source
+    assert "2: {'panel': (36, 82, 462, 998)" in source
     assert "3: {'panel': (72, 42, 1008, 490)" in source
     assert "4: {'panel': (532, 102, 1042, 1008)" in source
     assert "5: {'panel': (350, 530, 1038, 1038)" in source
@@ -211,4 +211,4 @@ def test_comparison_scene_uses_visible_refrigerator_anchors_not_round_washer_par
 def test_flow_panel_preserves_more_than_half_the_frame_for_the_photograph():
     renderer = Path('app/photographic_cards.py').read_text(encoding='utf-8')
     assert "2: {'panel': (36, 82, 462, 998)" in renderer
-    assert "2: {'panel': (36, 82, 550, 998)" not in renderer
+    assert "2: {'panel': (36, 82, 462, 998)" not in renderer
