@@ -445,6 +445,7 @@ class Pipeline:
             stage='CLAIMED',
         )
         self.state.record_stage(page_id, cfg.name, source_version, 'github_actions', 'CLAIMED', run_id)
+        media: dict[str, Any] = {}
         try:
             self.notion.update_status(page_id, cfg.processing_status)
             use_web = cfg.name in {'naver_blog', 'japan_shorts'}
@@ -514,7 +515,6 @@ class Pipeline:
                 manifest['resume_source_manuscript_sha256'] = manuscript_hash(previous['generated'])
             save_manifest(job_dir / 'manifest.json', manifest)
 
-            media: dict[str, Any] = {}
             if cfg.content_kind == 'blog':
                 card_news = generated.get('card_news') or []
                 if len(card_news) != 5:
@@ -781,6 +781,10 @@ class Pipeline:
                 observation = self._verify_blog_output(page_id, page_title, final_status, blocks, [Path(x) for x in media.get('cards', [])])
                 save_manifest(job_dir / 'notion-readback.json', observation)
                 output_verified = True
+            elif cfg.content_kind == 'shorts' and passed:
+                observation = self._verify_shorts_output(page_id, page_title, final_status, blocks, media)
+                save_manifest(job_dir / 'notion-readback.json', observation)
+                output_verified = True
             complete = passed and not media.get('budget_blocked')
             if cfg.content_kind == 'blog' and passed:
                 self.state.record_stage(page_id, cfg.name, content_version, 'github_actions', 'HANDOFF_READY', run_id)
@@ -808,7 +812,10 @@ class Pipeline:
             }
         except Exception as exc:
             try:
-                self.notion.update_status(page_id, cfg.revision_status)
+                # A private upload cannot safely be undone or regenerated. Keep
+                # its current Notion state for explicit reconciliation.
+                if not (cfg.content_kind == 'shorts' and media.get('youtube_url')):
+                    self.notion.update_status(page_id, cfg.revision_status)
             except Exception:
                 pass
             self.state.finish(key, 'failed', repr(exc))
@@ -819,6 +826,38 @@ class Pipeline:
             except Exception:
                 pass
             return {'page_id': page_id, 'title': page_title, 'status': 'failed', 'error': repr(exc)}
+
+    def _verify_shorts_output(
+        self, page_id: str, page_title: str, status: str,
+        expected_blocks: list[dict[str, Any]], media: dict[str, Any],
+    ) -> dict[str, Any]:
+        page = self.notion.retrieve_page(page_id)
+        observed_blocks = self.notion.read_page_blocks(page_id)
+        expected = [block_signature(block) for block in expected_blocks]
+        observed = [block_signature(block) for block in observed_blocks[-len(expected):]] if expected else []
+        props = page.get('properties') or {}
+        if extract_page_title(page) != page_title:
+            raise RuntimeError('Shorts read-back title changed during production')
+        if compact_page_context(page, '').get('properties', {}).get('상태') != status:
+            raise RuntimeError('Shorts read-back status did not match the saved result')
+        if not expected or observed != expected:
+            raise RuntimeError('Shorts read-back script blocks did not match generated result')
+        if media.get('video'):
+            if (media.get('verification') or {}).get('pass') is not True:
+                raise RuntimeError('Shorts media verification did not pass')
+            if media.get('notion_video_attached') is True:
+                files = (props.get('최종 영상') or {}).get('files') or []
+                if not any(f.get('name') == Path(media['video']).name for f in files):
+                    raise RuntimeError('Shorts read-back video attachment was not found')
+            if media.get('youtube_url'):
+                saved_url = (props.get('YouTube 비공개 주소') or {}).get('url')
+                if saved_url != media['youtube_url']:
+                    raise RuntimeError('Shorts read-back YouTube URL did not match')
+        return {'page_id': page_id, 'title': page_title, 'status': status,
+                'body_blocks_verified': len(expected),
+                'video_attachment_verified': media.get('notion_video_attached') is True,
+                'youtube_url_verified': bool(media.get('youtube_url')),
+                'verified_at': datetime.now(timezone.utc).isoformat()}
 
     def _match_prior_blog_blocks(self, page_id: str, previous: dict[str, Any]) -> list[dict[str, Any]]:
         observed = self.notion.read_page_blocks(page_id)
