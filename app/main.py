@@ -789,6 +789,76 @@ def doctor():
     print_json(checks)
 
 
+@app.command('verify-blog-card-style-live')
+def verify_blog_card_style_live():
+    """Generate and visually QA five cards without reading or writing Notion."""
+    import tempfile
+    from .photographic_cards import generate_and_typeset_blog_cards
+
+    s = Settings()
+    if not s.openai_ready:
+        raise typer.BadParameter('OPENAI_API_KEY is required')
+    ai = AIClient(
+        s.openai_api_key,
+        s.text_model,
+        s.qa_model,
+        False,
+        None,
+        s.openai_text_reserve_usd,
+        s.openai_web_text_reserve_usd,
+        s.max_generation_output_tokens,
+        s.max_qa_output_tokens,
+    )
+    cards = [
+        {'layout': 'cover', 'headline': '냉장고 문틈, 괜찮을까?', 'copy': '고무패킹 들뜸부터 확인해요', 'items': [{'label': '문틈', 'detail': '차가운 공기가 새는 상황'}]},
+        {'layout': 'flow', 'headline': '물기와 먼지가 쌓여요', 'copy': '접힌 홈 안쪽부터 오염돼요', 'items': [{'label': '물기', 'detail': '홈 안쪽에 남은 물방울'}, {'label': '먼지', 'detail': '고무 접힘 사이의 작은 먼지'}, {'label': '들뜸', 'detail': '문과 밀착되지 않은 부분'}]},
+        {'layout': 'comparison', 'headline': '밀착 상태를 비교해요', 'copy': '평평한 패킹과 들뜬 패킹', 'items': [{'label': '정상', 'detail': '문에 고르게 밀착'}, {'label': '점검', 'detail': '한쪽이 들뜨거나 갈라짐'}]},
+        {'layout': 'checklist', 'headline': '손으로 천천히 확인해요', 'copy': '홈·갈라짐·밀착을 차례로 봐요', 'items': [{'label': '홈', 'detail': '물기와 이물질'}, {'label': '표면', 'detail': '갈라짐과 변색'}, {'label': '모서리', 'detail': '들뜬 부분'}, {'label': '밀착', 'detail': '문을 닫았을 때 틈'}]},
+        {'layout': 'decision', 'headline': '들뜨면 점검이 필요해요', 'copy': '청소 후에도 뜨면 교체를 확인해요', 'items': [{'label': '청소 후', 'detail': '마른 천으로 물기 제거'}, {'label': '다시 확인', 'detail': '문을 닫아 밀착 확인'}, {'label': '지속될 때', 'detail': '패킹 상태 점검'}]},
+    ]
+    with tempfile.TemporaryDirectory(prefix='hamjju-live-card-check-') as temp_dir:
+        paths = generate_and_typeset_blog_cards(
+            ai.client,
+            cards,
+            Path(temp_dir),
+            model=s.image_model,
+            quality=s.image_quality,
+            font_path=s.card_font_path,
+            budget=None,
+            design_language='Bento Editorial',
+        )
+        qa, usage = ai.qa(
+            {'card_news': cards, 'visual_family': 'photographic_lifestyle'},
+            {
+                'channel': 'naver_blog',
+                'automation_scope': {
+                    'mode': 'live_no_save_card_verification',
+                    'notion_write_allowed': False,
+                    'naver_write_allowed': False,
+                    'artifact_upload_allowed': False,
+                },
+            },
+            qa_prompt='prompts/qa_photographic_blog_cards.md',
+            image_paths=paths,
+        )
+    ai_score = int(qa.get('ai_likeness_score', 100))
+    passed = qa.get('pass') is True and ai_score < 5 and not (qa.get('blocking_issues') or [])
+    print_json({
+        'mode': 'live_no_save_card_verification',
+        'generated_card_count': 5,
+        'temporary_files_deleted': True,
+        'notion_written': False,
+        'naver_written': False,
+        'artifact_saved': False,
+        'qa_pass': passed,
+        'ai_likeness_score': ai_score,
+        'blocking_issues': qa.get('blocking_issues') or [],
+        'usage': usage,
+    })
+    if not passed:
+        raise typer.Exit(code=1)
+
+
 def print_json(value):
     print(json.dumps(value, ensure_ascii=False, indent=2, default=str))
 
