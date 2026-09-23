@@ -160,17 +160,17 @@ def _scene_prompt(
     # only the factual card role and real-life subject; typography is added later.
     role_key = ROLE_KEYS[index - 1]
     parts = [
-        'Create one square editorial lifestyle image for a Korean home-appliance help article.',
+        'Create one square full-bleed documentary photograph for a Korean home-appliance help article. This generation is the photograph layer only, never a finished card design.',
         f'Card role: {ROLES[index - 1]}. Topic: {card.get("headline", "")}.',
         f'Explanation: {card.get("copy", "")}. Visible situation and objects: {item_text}.',
         _subject_lock(card, index),
         'Show a believable, modest, actually used Korean home interior and concrete relevant appliances and actions. Preserve tiny signs of ordinary life: slight surface wear, faint fingerprints, an imperfectly folded cloth, small natural dust or water traces, mildly uneven spacing and one or two relevant background objects. Keep them subtle and physically plausible, never dirty for effect. Use ordinary window light or ceiling light with realistic falloff, not studio lighting. Do not use documents, packaging, certificates, reports, phone screens, control-panel text or labels as visual evidence; all readable information will be typeset locally later.',
         'The image must explain the situation visually, with a clear subject and natural scale.',
         f'Production card role: {role_key}. {ROLE_SCENE_DIRECTIONS[index - 1]}',
-        'Reference styling applies only to spacing, cool pastel accents and calm editorial composition. '
-        'Do not copy cover-exploration motifs, software screens, code, terminals, chat windows or AI branding.',
-        'Use a bright paper-white or cool-white editorial base with pale lavender, muted mint, soft blue and restrained coral accents. '
-        'No beige, yellow cream, amber light or warm sepia cast.',
+        'Generate a plain real-life photograph only. Do not design a card, layout, poster, checklist, comparison board or infographic inside the photograph. '
+        'Do not place paper notes, printed cards, colored panels, frames, captions or readable marks anywhere in the scene. '
+        'All pastel surfaces, typography and editorial layout are added later by deterministic local code.',
+        'Use neutral daylight with accurate whites and cool natural shadows. No beige, yellow cream, amber light or warm sepia cast.',
         'The concrete scene and objects must occupy roughly 70 to 82 percent of the frame and remain the first thing seen. '
         'Reserve low-detail space only where this card role explicitly requests it; keep every other area visually complete. '
         'Never create a large empty lower band or an accidental blank half.',
@@ -178,6 +178,8 @@ def _scene_prompt(
         'ABSOLUTELY NO text, letters, numbers, logos, labels, UI glyphs, watermark, yellow cast, beige cream, sepia, collage, source code, terminal, Codex, ChatGPT, AI branding, floating icons, generic infographic nodes, repeated template boxes, circles, arrows, badges, check marks, crosses, decorative labels, decorative waves, curved swooshes, ornamental underlines, glossy product-ad lighting, perfect showroom cleanliness, cinematic bokeh or synthetic depth of field.',
         f'Canonical v3 human-edit signals: {human_signals}.',
         f'Canonical v3 forbidden signals: {forbidden}.',
+        _subject_lock(card, index),
+        'FINAL CHECK: output only the requested real photograph, with zero text, zero printed material and zero graphic-design layers.',
         f'This scene must be capable of passing the strict AI-likeness gate below {ai_gate}/100 after local Korean typesetting.',
         'Apply the following canonical production prompt as binding art direction. '
         'Where it discusses typography, reserve space only; never draw text inside the generated scene:\n'
@@ -282,11 +284,11 @@ def generate_and_typeset_blog_cards(
         # Role-specific surfaces prevent a mechanically repeated white-card template.
         # These are flat cool tints, never gradients or decorative devices.
         role_surfaces = {
-            1: (247, 248, 252, 238),  # compact cool-white note
-            2: (232, 228, 247, 242),  # lavender vertical field
-            3: (224, 239, 246, 242),  # powder-blue top band
-            4: (222, 241, 235, 242),  # mint right column
-            5: (247, 230, 232, 240),  # restrained coral decision block
+            1: (247, 248, 252, 255),  # compact cool-white note
+            2: (232, 228, 247, 255),  # lavender vertical field
+            3: (224, 239, 246, 255),  # powder-blue top band
+            4: (222, 241, 235, 255),  # mint right column
+            5: (247, 230, 232, 255),  # restrained coral decision block
         }
         if index in {1, 5}:
             vd.rounded_rectangle((x1, y1, x2, y2), radius=18, fill=role_surfaces[index])
@@ -323,12 +325,24 @@ def generate_and_typeset_blog_cards(
             raise ValueError(f'Blog card {index} has incomplete items')
         slot_height = (item_box[3] - item_box[1]) // len(items)
         for item_index, item in enumerate(items):
-            top = item_box[1] + item_index * slot_height
+            if index == 3:
+                # Comparison items map left-to-right to the two photographed conditions.
+                gap = 28
+                column_width = (item_box[2] - item_box[0] - gap) // 2
+                item_left = item_box[0] + item_index * (column_width + gap)
+                item_right = item_left + column_width
+                top = item_box[1]
+                current_slot_height = item_box[3] - item_box[1]
+            else:
+                item_left, item_right = item_box[0], item_box[2]
+                top = item_box[1] + item_index * slot_height
+                current_slot_height = slot_height
             label = str(item['label']).strip()
             detail = str(item['detail']).strip()
-            label_box = (item_box[0], top, item_box[2], top + min(38, slot_height // 2))
-            detail_box = (item_box[0], top + min(38, slot_height // 2),
-                          item_box[2], top + slot_height - 4)
+            label_box = (item_left, top, item_right,
+                         top + min(38, current_slot_height // 2))
+            detail_box = (item_left, top + min(38, current_slot_height // 2),
+                          item_right, top + current_slot_height - 4)
             label_font = _fit(draw, label, font_path, 24, label_box, minimum=16)
             detail_font = None
             wrapped = ''
@@ -344,8 +358,13 @@ def generate_and_typeset_blog_cards(
                     break
             if detail_font is None:
                 raise ValueError(f'Blog card {index} item {item_index + 1} does not fit')
-            item_anchor = 'ra' if spec['align'] == 'right' else None
-            item_x = item_box[2] if item_anchor else item_box[0]
+            item_anchor = (
+                'ma' if index == 3 else ('ra' if spec['align'] == 'right' else None)
+            )
+            item_x = (
+                (item_left + item_right) // 2 if item_anchor == 'ma'
+                else (item_right if item_anchor == 'ra' else item_left)
+            )
             draw.text((item_x, top), label, font=label_font,
                       fill='#202329', anchor=item_anchor)
             draw.multiline_text((item_x, detail_box[1]), wrapped,
