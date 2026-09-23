@@ -1,0 +1,22 @@
+#include 'actions/shortcuts'
+
+action 'addnewreminder' addNewReminder(text title: 'WFCalendarItemTitle') {
+    "WFAlertEnabled": "No Alert"
+}
+
+action 'com.apple.mobilenotes.SharingExtension' createNote(text input: 'WFCreateNoteInput')
+
+menu "뭐가 생각났어?" {
+    item "✅ 할 일":
+        @task = prompt("할 일을 입력해줘")
+        addNewReminder("{@task}")
+        showNotification("미리 알림에 저장했어.", "🧠 생각났어!")
+
+    item "📅 일정":
+        run("📅 일정 넣기", "")
+
+    item "💡 아이디어":
+        @idea = prompt("아이디어를 적어줘")
+        createNote("💡 햄찌 아이디어\n\n{@idea}")
+        showNotification("메모에 저장했어.", "🧠 생각났어!")
+}
