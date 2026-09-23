@@ -54,6 +54,7 @@ on:
           - repair_av_sync
           - explore_card_design
           - verify_youtube_auth
+          - verify_blog_card_style_live
       source_run_id:
         description: Previous Actions artifact run ID for resume_blog or repair_video
         required: false
@@ -98,7 +99,7 @@ jobs:
           restore-keys: |
             hamjju-openai-budget-${{ runner.os }}-
       - name: Restore processing checkpoints
-        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design') }}
+        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design' && inputs.mode != 'verify_blog_card_style_live' && inputs.mode != 'verify_blog_card_style_live') }}
         uses: actions/cache/restore@v6
         with:
           path: output/state.db
@@ -152,6 +153,15 @@ jobs:
           FAL_KEY: ${{ secrets.FAL_KEY }}
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
         run: python -m app.main doctor
+      - name: Generate and QA five blog cards without saving
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'verify_blog_card_style_live' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ENABLE_WEB_RESEARCH: 'false'
+          ENABLE_MEDIA_GENERATION: 'true'
+          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
+        run: python -m app.main verify-blog-card-style-live
+
       - name: Research and save one topic for the selected channel
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'prepare_topic' }}
         env:
@@ -409,21 +419,21 @@ jobs:
           exit "$result"
 
       - name: Save charged budget even when production fails
-        if: ${{ always() && hashFiles('output/openai-cost-ledger.json') != '' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'repair_video' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design')) }}
+        if: ${{ always() && hashFiles('output/openai-cost-ledger.json') != '' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'dry_run' && inputs.mode != 'repair_video' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design' && inputs.mode != 'verify_blog_card_style_live')) }}
         uses: actions/cache/save@v6
         with:
           path: output/openai-cost-ledger.json
           key: hamjju-openai-budget-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Save processing checkpoints even when one item fails
-        if: ${{ always() && hashFiles('output/state.db') != '' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design')) }}
+        if: ${{ always() && hashFiles('output/state.db') != '' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design' && inputs.mode != 'verify_blog_card_style_live' && inputs.mode != 'verify_blog_card_style_live')) }}
         uses: actions/cache/save@v6
         with:
           path: output/state.db
           key: hamjju-processing-state-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Summarize actual production evidence
-        if: ${{ always() && ((github.event_name == 'schedule' && github.event.schedule != '45 0 * * *') || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design')) }}
+        if: ${{ always() && ((github.event_name == 'schedule' && github.event.schedule != '45 0 * * *') || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design' && inputs.mode != 'verify_blog_card_style_live' && inputs.mode != 'verify_blog_card_style_live')) }}
         env:
           RUN_STATUS: ${{ job.status }}
           EVENT_NAME: ${{ github.event_name }}
@@ -435,7 +445,7 @@ jobs:
         run: python -m app.run_report
 
       - name: Keep generated files for inspection
-        if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'verify_blog_card_style_live')) }}
         uses: actions/upload-artifact@v7
         with:
           name: hamjju-output-${{ github.run_id }}
@@ -443,7 +453,7 @@ jobs:
           retention-days: 14
 
       - name: Update production status board
-        if: ${{ always() && ((github.event_name == 'schedule' && github.event.schedule != '45 0 * * *') || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design')) }}
+        if: ${{ always() && ((github.event_name == 'schedule' && github.event.schedule != '45 0 * * *') || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design' && inputs.mode != 'verify_blog_card_style_live' && inputs.mode != 'verify_blog_card_style_live')) }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
