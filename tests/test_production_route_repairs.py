@@ -101,3 +101,18 @@ def test_production_bundle_is_a_fail_closed_runtime_dependency():
     assert 'load_production_style_bundle()' in source
     assert 'BLOG_CARD_PRODUCTION_STYLE_BUNDLE_UNAVAILABLE' in source
     assert 'BLOG_CARD_AI_LIKENESS_GATE_INVALID' in source
+
+
+def test_live_card_verification_is_no_save_and_workflow_isolated():
+    main = Path('app/main.py').read_text(encoding='utf-8')
+    workflow = Path('.github/workflows/daily.yml').read_text(encoding='utf-8')
+    command = main.split("@app.command('verify-blog-card-style-live')", 1)[1]
+    command = command.split('def print_json', 1)[0]
+    assert 'TemporaryDirectory' in command
+    assert "'notion_written': False" in command
+    assert "'naver_written': False" in command
+    assert "'artifact_saved': False" in command
+    assert 'generate_and_typeset_blog_cards' in command
+    assert "qa_prompt='prompts/qa_photographic_blog_cards.md'" in command
+    assert "inputs.mode == 'verify_blog_card_style_live'" in workflow
+    assert "inputs.mode != 'verify_blog_card_style_live'" in workflow
