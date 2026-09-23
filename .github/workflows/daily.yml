@@ -154,7 +154,7 @@ jobs:
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
         run: python -m app.main doctor
       - name: Generate and QA five blog cards without saving
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'verify_blog_card_style_live' }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'verify_blog_card_style_live') || (github.event_name == 'push' && github.event.head_commit.message == 'Run no-save live card verification') }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ENABLE_WEB_RESEARCH: 'false'
