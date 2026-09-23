@@ -155,6 +155,17 @@ jobs:
           FAL_KEY: ${{ secrets.FAL_KEY }}
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
         run: python -m app.main doctor
+      - name: Preflight production dependencies
+        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'explore_card_design' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'verify_blog_card_style_live') }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          FAL_KEY: ${{ secrets.FAL_KEY }}
+          NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
+          PREFLIGHT_MODE: ${{ github.event_name == 'schedule' && 'schedule' || inputs.mode }}
+          PREFLIGHT_CHANNEL: ${{ inputs.channel }}
+          PREFLIGHT_SCHEDULE: ${{ github.event.schedule }}
+          PREFLIGHT_PAGE_ID: ${{ inputs.page_id }}
+        run: python -m app.preflight
       - name: Generate and QA five blog cards without saving
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'verify_blog_card_style_live') || (github.event_name == 'push' && github.event.head_commit.message == 'Run no-save live card verification') }}
         env:
@@ -224,14 +235,7 @@ jobs:
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'true'
           AUTO_PRIVATE_YOUTUBE_UPLOAD: 'true'
-          MEDIA_PAGE_ID: ${{ inputs.page_id }}
-        run: |
-          if [ -n "$MEDIA_PAGE_ID" ]; then
-            [[ "$MEDIA_PAGE_ID" =~ ^[0-9a-fA-F-]{32,36}$ ]]
-            python -m app.main page "${{ inputs.channel }}" "$MEDIA_PAGE_ID"
-          else
-            python -m app.main channel "${{ inputs.channel }}" --limit 1 --require-item
-          fi
+        run: python -m app.main channel "${{ inputs.channel }}" --limit 1 --require-item
 
       - name: Recover one existing blog without creating new topics
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'recover_blog' }}
