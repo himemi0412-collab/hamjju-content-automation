@@ -120,7 +120,7 @@ def _subject_lock(card: dict[str, Any], index: int | None = None) -> str:
             + {
                 1: 'Show one close crop of the gasket visibly lifting away from the refrigerator frame; keep the problem unmistakable.',
                 2: 'Show an extreme documentary close-up of moisture and small dust trapped inside the folded gasket groove. Do not show a whole appliance.',
-                3: 'Fill the lower scene with a same-scale side-by-side physical comparison: LEFT gasket lies flat and evenly sealed; RIGHT gasket is visibly lifted or split. Both halves must be unmistakably different. Do not leave a blank lower area.',
+                3: 'Show the OPEN RECTANGULAR REFRIGERATOR cabinet and its tall vertical door edge in both halves; visible interior shelves, bottles and food containers must prove this is a refrigerator. Fill the lower scene with a same-scale side-by-side physical comparison: LEFT refrigerator magnetic rubber seal lies flat and evenly sealed; RIGHT refrigerator magnetic rubber seal is visibly lifted or split. Both halves must be unmistakably different. Absolutely no circular door, round gasket, glass porthole, drum or laundry appliance anywhere. Do not leave a blank lower area.',
                 4: 'Show one natural hand gently opening the gasket groove to inspect moisture, discoloration and a small split. The rectangular refrigerator door edge must remain visible.',
                 5: 'Show a dry cloth beside a cleaned gasket that still lifts slightly from the rectangular refrigerator frame, making the need for inspection clear.',
             }.get(index, 'Show the exact gasket condition and action named by the card.')
