@@ -32,9 +32,16 @@ from .ownership import load_operating_contract
 from .photographic_cards import generate_and_typeset_blog_cards, production_design_language
 
 
-def _card_numbers_from_qa_issue(issue: str) -> set[int]:
-    """Extract every explicitly referenced card number from Korean QA feedback."""
+def _card_numbers_from_qa_issue(issue: Any) -> set[int]:
+    """Extract card numbers from either legacy text or the structured visual-QA schema."""
     numbers: set[int] = set()
+    if isinstance(issue, dict):
+        for value in issue.get('cards') or []:
+            if str(value).isdigit() and 1 <= int(value) <= 5:
+                numbers.add(int(value))
+        issue = ' '.join(
+            str(issue.get(key) or '') for key in ('issue', 'evidence') if issue.get(key)
+        )
     for group in re.findall(
         r'카드\s*([1-5](?:\s*(?:번|,|·|와|과|및|/|-)\s*[1-5])*)',
         str(issue),
@@ -42,6 +49,14 @@ def _card_numbers_from_qa_issue(issue: str) -> set[int]:
         numbers.update(int(value) for value in re.findall(r'[1-5]', group))
     numbers.update(int(value) for value in re.findall(r'([1-5])번\s*카드', str(issue)))
     return numbers
+
+
+def _visual_qa_passed(qa: dict[str, Any]) -> bool:
+    try:
+        ai_score = int(qa.get('ai_likeness_score', 100))
+    except (TypeError, ValueError):
+        ai_score = 100
+    return qa.get('pass') is True and ai_score < 5 and not (qa.get('blocking_issues') or [])
 
 
 class Pipeline:
@@ -152,7 +167,7 @@ class Pipeline:
             if not str(issue).startswith('CONTENT_PASS=false')
         ]
         qa['blocking_issues'] = scoped_blockers
-        qa['pass'] = not scoped_blockers
+        qa['pass'] = _visual_qa_passed(qa) and not scoped_blockers
         retry_usages: list[dict[str, Any]] = []
         revision_notes_by_card: dict[int, list[str]] = {}
         for attempt in range(1, 3):
@@ -160,7 +175,7 @@ class Pipeline:
                 break
             notes_by_card: dict[int, list[str]] = {}
             for issue in scoped_blockers:
-                for card_number in _card_numbers_from_qa_issue(str(issue)):
+                for card_number in _card_numbers_from_qa_issue(issue):
                     notes_by_card.setdefault(card_number, []).append(str(issue))
                     prior_notes = revision_notes_by_card.setdefault(card_number, [])
                     if str(issue) not in prior_notes:
@@ -199,7 +214,7 @@ class Pipeline:
                 if not str(issue).startswith('CONTENT_PASS=false')
             ]
             qa['blocking_issues'] = scoped_blockers
-            qa['pass'] = not scoped_blockers
+            qa['pass'] = _visual_qa_passed(qa) and not scoped_blockers
         if retry_usages:
             usage = {'initial': usage, 'selective_retries': retry_usages}
         if qa.get('pass') is not True:
@@ -439,7 +454,7 @@ class Pipeline:
                 qa, qa_usage = {'pass': False, 'status': 'PENDING_RENDER_REVIEW'}, {}
             else:
                 qa, qa_usage = self.ai.qa(generated, {'channel': cfg.name, **context})
-            passed = qa.get('pass') is True and not qa.get('blocking_issues')
+            passed = _visual_qa_passed(qa)
             if cfg.content_kind == 'shorts' and passed:
                 ownership_receipt = self.operating_contract.receipt(
                     cfg.name, document_id=page_id, source_version=content_version, stage='QA_PASS',
@@ -541,7 +556,67 @@ class Pipeline:
                                 'cover/flow/comparison/checklist/decision; Cafe24 title font'
                             )},
                     }, qa_prompt='prompts/qa_photographic_blog_cards.md', image_paths=cards)
-                passed = qa.get('pass') is True and not qa.get('blocking_issues')
+                    retry_usages = []
+                    if not previous:
+                        for attempt in range(1, 3):
+                            if _visual_qa_passed(qa):
+                                break
+                            retry_cards = set()
+                            revision_notes: dict[int, list[str]] = {}
+                            for issue in qa.get('blocking_issues') or []:
+                                message = (
+                                    json.dumps(issue, ensure_ascii=False)
+                                    if isinstance(issue, dict) else str(issue)
+                                )
+                                for card_number in _card_numbers_from_qa_issue(issue):
+                                    retry_cards.add(card_number)
+                                    revision_notes.setdefault(card_number, []).append(message)
+                            for value in qa.get('cards_to_regenerate') or []:
+                                if str(value).isdigit() and 1 <= int(value) <= 5:
+                                    retry_cards.add(int(value))
+                            if not retry_cards:
+                                retry_cards = {1, 2, 3, 4, 5}
+                            cards = generate_and_typeset_blog_cards(
+                                self.ai.client,
+                                card_news,
+                                job_dir / 'cards',
+                                model=self.s.image_model,
+                                quality=self.s.image_quality,
+                                font_path=self.s.card_font_path,
+                                budget=self.budget,
+                                estimated_cost_usd=self.s.openai_image_estimated_cost_usd,
+                                only_indices=retry_cards,
+                                revision_notes={
+                                    number: ' '.join(revision_notes.get(number) or [
+                                        'Remove synthetic polish and repeated template rhythm. '
+                                        'Use an ordinary lived-in documentary scene.'
+                                    ])
+                                    for number in retry_cards
+                                },
+                                design_language=str(generated.get('design_language') or 'Bento Editorial'),
+                                design_blueprint=generated.get('design_blueprint'),
+                            )
+                            qa, retry_usage = self.ai.qa(generated, {
+                                'channel': cfg.name, **context,
+                                'automation_scope': {
+                                    **context['automation_scope'],
+                                    'mode': 'blog_cards',
+                                    'stage': 'targeted_visual_retry',
+                                    'selective_retry_attempt': attempt,
+                                    'preserved_cards': sorted(set(range(1, 6)) - retry_cards),
+                                },
+                            }, qa_prompt='prompts/qa_photographic_blog_cards.md', image_paths=cards)
+                            retry_usages.append({
+                                'attempt': attempt,
+                                'cards': sorted(retry_cards),
+                                'usage': retry_usage,
+                            })
+                    if retry_usages:
+                        image_qa_usage = {
+                            'initial': image_qa_usage,
+                            'selective_retries': retry_usages,
+                        }
+                passed = _visual_qa_passed(qa)
                 if passed:
                     ownership_receipt = self.operating_contract.receipt(
                         cfg.name, document_id=page_id, source_version=content_version, stage='QA_PASS',
