@@ -86,7 +86,7 @@ def make_pipeline(tmp_path, monkeypatch, visual_pass=True):
         ],
     })
     ai.generate.return_value = (generated, {})
-    ai.qa.return_value = ({'pass': visual_pass, 'blocking_issues': [] if visual_pass else ['card 3 overlaps']}, {})
+    ai.qa.return_value = ({'pass': visual_pass, 'ai_likeness_score': 2, 'blocking_issues': [] if visual_pass else ['card 3 overlaps']}, {})
     paths = [tmp_path / f'card_{i:02d}.png' for i in range(1, 6)]
     for i, path in enumerate(paths):
         path.write_bytes(f'image-{i}'.encode())
@@ -139,7 +139,7 @@ def test_naver_handoff_has_one_ready_contract_and_five_ordered_images():
     }
     blocks = naver_handoff_blocks(
         generated,
-        {'pass': True, 'score': 96, 'blocking_issues': []},
+        {'pass': True, 'ai_likeness_score': 2, 'score': 96, 'blocking_issues': []},
         document_id='page-id',
         source_version='sha256-version',
         card_upload_ids=[f'upload-{i}' for i in range(1, 6)],
@@ -188,7 +188,7 @@ def test_last_section_card_stays_before_paragraph_targeted_decision_card():
 
     blocks = naver_handoff_blocks(
         generated,
-        {'pass': True, 'score': 96, 'blocking_issues': []},
+        {'pass': True, 'ai_likeness_score': 2, 'score': 96, 'blocking_issues': []},
         document_id='page-id',
         source_version='sha256-version',
         card_upload_ids=[f'upload-{i}' for i in range(1, 6)],
@@ -220,7 +220,7 @@ def test_legacy_last_section_order_can_be_reconstructed_for_exact_resume_matchin
 
     blocks = naver_handoff_blocks(
         generated,
-        {'pass': True, 'score': 96, 'blocking_issues': []},
+        {'pass': True, 'ai_likeness_score': 2, 'score': 96, 'blocking_issues': []},
         document_id='page-id',
         source_version='sha256-version',
         card_upload_ids=[f'upload-{i}' for i in range(1, 6)],
@@ -334,7 +334,7 @@ def test_resume_reuses_text_and_replaces_only_matching_failed_output(tmp_path, m
 def test_resume_reuses_pass_for_identical_reviewed_manuscript_and_card_bytes(tmp_path, monkeypatch):
     pipeline, cards = make_pipeline(tmp_path, monkeypatch)
     generated = pipeline.ai.generate.return_value[0]
-    prior_qa = {'pass': True, 'score': 94, 'blocking_issues': [], 'recommended_status': 'PASS'}
+    prior_qa = {'pass': True, 'ai_likeness_score': 2, 'score': 94, 'blocking_issues': [], 'recommended_status': 'PASS'}
     prior = {
         'page_id': 'one', 'channel': 'naver_blog', 'generated': generated, 'qa': prior_qa,
         'reference_baseline_id': load_blog_reference()['id'],
@@ -375,7 +375,7 @@ def test_repeated_resume_restores_pass_only_from_identical_original_review(tmp_p
     }
     reviewed = {
         'page_id': 'one', 'channel': 'naver_blog', 'generated': generated,
-        'qa': {'pass': True, 'score': 94, 'blocking_issues': []},
+        'qa': {'pass': True, 'ai_likeness_score': 2, 'score': 94, 'blocking_issues': []},
         'reference_baseline_id': load_blog_reference()['id'],
         'reference_baseline_sha256': load_blog_reference()['sha256'],
         'media': {'cards': [str(p) for p in cards], 'rendered_card_qa_pass': True},
