@@ -1,0 +1,19 @@
+#include 'actions/calendar'
+#include 'actions/shortcuts'
+
+@emptyInput = text("")
+
+menu "이어폰 연결됨 — 뭐 할까?" {
+    item "🇯🇵 일본어 10분":
+        startTimer(qty(10, "min"))
+        showNotification("10분만 일본어 해보자.", "🎧 이어폰 모드")
+
+    item "🎬 영상편집 25분":
+        run("🔥 25분 집중", @emptyInput)
+
+    item "🎵 음악 듣기":
+        openApp("music")
+
+    item "🎯 오늘 딱 하나":
+        run("🎯 오늘 딱 하나", @emptyInput)
+}
