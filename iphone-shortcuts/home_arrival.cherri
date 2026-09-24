@@ -1,0 +1,7 @@
+#include 'actions/device'
+#include 'actions/shortcuts'
+
+setLowPowerMode(false)
+@emptyInput = text("")
+run("🎯 오늘 딱 하나", @emptyInput)
+showNotification("집 도착 모드로 전환했어.", "🏠 집 도착")
