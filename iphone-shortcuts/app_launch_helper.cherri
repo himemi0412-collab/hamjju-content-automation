@@ -1,0 +1,19 @@
+#include 'actions/calendar'
+#include 'actions/shortcuts'
+
+@emptyInput = text("")
+
+menu "지금 뭘 시작할까?" {
+    item "🎬 영상편집":
+        run("🔥 25분 집중", @emptyInput)
+
+    item "🇯🇵 일본어":
+        startTimer(qty(10, "min"))
+        showNotification("10분 일본어 시작.", "📱 앱 실행 보조")
+
+    item "💼 취업":
+        run("🎯 오늘 딱 하나", @emptyInput)
+
+    item "✅ 오늘 할 일":
+        openApp("reminders")
+}
