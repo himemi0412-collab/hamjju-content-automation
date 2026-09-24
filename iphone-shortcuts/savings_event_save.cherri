@@ -1,0 +1,10 @@
+#define inputs text, url
+#define from sharesheet
+#include 'actions/documents'
+
+@shared = ShortcutInput
+@note = prompt("이벤트 이름이나 메모를 적어줘")
+@now = CurrentDate
+@record = text("\n---\n[생활비 방어] {@now}\n{@note}\n{@shared}\n")
+appendToFile("Hamjju Life OS/생활비 방어 수집함.txt", @record)
+showNotification("생활비 방어 수집함에 저장했어.", "💰 이벤트 저장")
