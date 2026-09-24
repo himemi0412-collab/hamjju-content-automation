@@ -1,0 +1,19 @@
+#include 'actions/settings'
+
+menu "오늘 마무리" {
+    item "📅 내일 일정 확인":
+        openApp("calendar")
+        waitToReturn()
+        setFocusMode("Sleep")
+        showNotification("수면 집중 모드를 켰어.", "🌙 오늘 끝")
+
+    item "✅ 미완료 할 일 확인":
+        openApp("reminders")
+        waitToReturn()
+        setFocusMode("Sleep")
+        showNotification("수면 집중 모드를 켰어.", "🌙 오늘 끝")
+
+    item "😴 바로 잘래":
+        setFocusMode("Sleep")
+        showNotification("오늘도 끝. 수면 집중 모드를 켰어.", "🌙 오늘 끝")
+}
