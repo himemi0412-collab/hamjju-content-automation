@@ -1,0 +1,12 @@
+#include 'actions/device'
+
+@connected = connectedToCharger()
+
+if @connected == true {
+    setLowPowerMode(false)
+    @battery = getBatteryLevel()
+    showNotification("충전 중이야. 현재 배터리: {@battery}%", "🔌 충전기 연결")
+} else {
+    @battery = getBatteryLevel()
+    showNotification("충전기에서 분리됐어. 현재 배터리: {@battery}%", "🔌 충전 상태")
+}
