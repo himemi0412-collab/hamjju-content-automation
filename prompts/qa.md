@@ -28,6 +28,8 @@
 - source_context.named_design_language_required=true인 신규 제작물은 generated.design_language가 허용된 20개 이름 중 하나이고 generated.design_direction에 `typography`, `grid`, `visual_motif`, `whitespace`, `color_texture`가 모두 있어야 한다. 이름 또는 다섯 방향 중 하나라도 없으면 `EDITOR_FORMAT_PASS=false`로 차단한다. false인 구형 재개 작업은 원본 바이트 보존을 우선하며 새 디자인 언어를 소급 강제하지 않는다.
 - 신규 제작물은 generated.design_blueprint에 `cover_composition`, `type_system`, `image_strategy`, `material_treatment`, `role_expansion`이 모두 있고, role_expansion이 cover·flow·comparison·checklist·decision의 서로 다른 다섯 구성을 정의해야 한다. 표지 우선 설계가 없거나 다섯 역할이 같은 구성으로 반복되면 `EDITOR_FORMAT_PASS=false`다.
 - rendered_cards 단계에서는 선언한 design_language가 이름표에 그치지 않고 실제 PNG의 타이포 크기·그리드·패널 모양·시각 모티프·여백·색과 질감에 구분 가능하게 반영됐는지 본다. 선언과 실제 결과가 다르거나 화이트 배경+둥근 박스+아이콘 기본형을 이름만 바꿔 반복하면 `EDITOR_FORMAT_PASS=false`다.
+- 건조기 주제의 rendered_cards에서는 표지 사진에 실제 보풀 필터 장착부가 건조기에 붙은 상태로 선명하게 보이는지 확인한다. 비교 카드 양쪽은 같은 종류의 건조기와 같은 필터 장착부를 같은 카메라 높이·거리·배율·방향으로 보여줘야 하며, 필터가 제대로 끼워진 상태와 같은 장착부에서 필터를 부분적으로 뺀 상태를 비교해야 한다. 한쪽이 건조기 옆면·세탁물 바구니·헐거운 보풀 같은 다른 부위나 사물이면 `EDITOR_FORMAT_PASS=false`로 차단하고 카드 번호와 불일치를 적는다.
+- 사진의 디테일이 매끈한 제품 광고나 스톡 이미지처럼 보이는지, 세트 안에서 같은 쇼룸형 흰 가전·세탁실 구도만 반복되는지 실제 PNG 5장 전체로 확인한다. 생활감이 없거나 구도가 반복되면 추상적인 '현실적으로' 지시만으로 통과시키지 말고 어느 카드의 어떤 구도·광원·표면이 문제인지 기록한다.
 - 먼저 1번 표지에서 `design_blueprint.cover_composition`과 주인공 이미지가 실제로 보이는지 판정하고, 그 다음 2~5번이 같은 type_system·image_strategy·material_treatment를 유지하면서 role_expansion대로 달라졌는지 판정한다. 카드마다 색상만 바뀌고 사진·화면·사물·재질이 같은 템플릿이면 실패다.
 - Screenshot Editorial을 선언했다면 큰 화면 장면이 정보의 중심이어야 한다. 작은 화면 아이콘, 둥근 설명 상자, 체크 행만 반복하거나 실제 화면 장면 없이 UI 라벨만 붙인 경우 `EDITOR_FORMAT_PASS=false`다.
 - 한 글에는 중심 디자인 언어 하나만 사용한다. 카드마다 역할별 레이아웃은 달라도 같은 세트의 타이포·색·선·여백 문법은 일관되어야 하며, 여러 스타일을 콜라주처럼 임의 혼합하면 차단한다.
@@ -46,6 +48,7 @@
 - 사실 확인 필요 항목과 근거가 명시됐는가.
 
 일본 쇼츠:
+- `title`과 `youtube.title`의 사실 주장을 `fact_check_notes` 및 제공된 출처와 대조한다. 제목이 근거에 없는 방송 녹음·TV 녹화·개인 경험·특정 인물의 행동을 사실처럼 추가하면 차단하고, 어느 제목 문구에 근거가 없는지 `blocking_issues`에 적는다. 확인되지 않은 주장을 이야기의 정서나 검증된 일반 주제로 바꾸도록 요청한다.
 - generated.narrator_profile.profile은 young_woman, older_woman, young_man, older_man, multiple 중 하나여야 한다. 여러 등장인물이 말하면 multiple을 사용하고, 모든 scene에 young_woman·young_man·older_woman·older_man 중 정확한 speaker_profile이 있어야 한다. 동일 인물의 연령·성별 프로필이 장면 사이에서 바뀌거나 화자가 바뀌었는데 같은 음색을 쓰면 차단한다.
 - 모든 scene의 time_period는 present_day 또는 showa_past여야 한다. present_day의 현재 노년 인물과 showa_past의 젊은 인물을 같은 장면에 설명 없이 섞거나, 1980년대 공간에 현재 모습의 70대 인물을 과거 당사자처럼 배치하면 차단한다.
 - '일본 쇼츠 영상.mp4' 마스터 가이드대로 전체 화면 일러스트, 첫 장면 상단 일본어 훅, 하단 일본어 자막을 지시했는가.

@@ -9,10 +9,13 @@ import tempfile
 from pathlib import Path
 
 import httpx
+from google.auth.exceptions import GoogleAuthError
+from googleapiclient.errors import HttpError
 
 from .budget import BudgetGuard
 from .config import load_channels
 from .settings import Settings
+from .youtube import YouTubePrivateUploader
 
 
 class PrecheckFailure(RuntimeError):
@@ -59,6 +62,36 @@ def check(mode: str, channel: str, schedule: str, page_id: str, settings: Settin
                          settings.youtube_ppojjugi_token_file, settings.youtube_japan_token_file):
                 if not path.is_file():
                     raise PrecheckFailure('CONFIG_ERROR', 'YouTube OAuth file is missing')
+        # These modes can make a private YouTube upload after generation. Check
+        # token refresh and account identity before any paid production starts.
+        upload_channels = (
+            ('ppojjugi_shorts', 'japan_shorts')
+            if mode == 'schedule' or mode == 'produce_daily_shorts'
+            else (channel,)
+        ) if ((mode == 'schedule' and schedule == '0 12 * * *') or mode in {
+            'execute_media', 'produce_daily_shorts', 'retry_revision',
+        }) else ()
+        expected_ids = {
+            'ppojjugi_shorts': settings.youtube_ppojjugi_channel_id,
+            'japan_shorts': settings.youtube_japan_channel_id,
+        }
+        token_files = {
+            'ppojjugi_shorts': settings.youtube_ppojjugi_token_file,
+            'japan_shorts': settings.youtube_japan_token_file,
+        }
+        for name in upload_channels:
+            try:
+                identity = YouTubePrivateUploader(
+                    settings.youtube_client_secrets_file, token_files[name],
+                ).current_channel()
+            except (GoogleAuthError, HttpError, RuntimeError, OSError, ValueError) as exc:
+                raise PrecheckFailure(
+                    'AUTH_ERROR', 'YouTube authorization could not be refreshed or verified',
+                ) from exc
+            if identity.get('id') != expected_ids[name]:
+                raise PrecheckFailure(
+                    'AUTH_ERROR', 'Authorized YouTube channel does not match configured channel',
+                )
     for name in channels_needed:
         if not Path(channels[name].prompt_file).is_file():
             raise PrecheckFailure('CONFIG_ERROR', f'Prompt file missing for {name}')

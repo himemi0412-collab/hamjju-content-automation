@@ -109,6 +109,26 @@ def _subject_lock(card: dict[str, Any], index: int | None = None) -> str:
                 'reservoir being filled; for direct supply, show the dishwasher '
                 'connected to a kitchen faucet. Never show an air conditioner, '
                 'outdoor condenser, dehumidifier, purifier or laundry washer.')
+    if '건조기' in source and index == 1:
+        return (
+            'Show one recognizable front-loading tumble clothes dryer with its circular door. '
+            'Make the actual lint-filter seat or lower filter opening clearly visible in the frame, '
+            'with the removable filter visibly fitted into that opening or pulled partway out from it. '
+            'Keep the filter seat attached to the dryer and large enough to identify at a glance; '
+            'do not substitute loose lint, a filter lying on a counter, or a generic grille. '
+            'Never show an air purifier, dehumidifier or unrelated appliance.'
+        )
+    if '건조기' in source and index == 3:
+        return (
+            'Create a like-for-like comparison using the same front-loading tumble clothes dryer '
+            'in both halves, at the same camera height, distance, lens, scale, orientation and ordinary light. '
+            'Keep the same circular door and lower lint-filter opening in the same position in both halves. '
+            'LEFT: the removable lint filter is correctly seated in its opening. '
+            'RIGHT: that same filter is pulled partway out of the same opening so its lint surface is visible. '
+            'The dryer and filter seat must remain equally clear and large on both sides. '
+            'Do not compare a filter with the dryer side, a laundry basket, loose lint, or a different appliance. '
+            'Never show an air purifier or dehumidifier.'
+        )
     locks = (
         (('노트북', 'RAM', '램', '발열'), 'Show a real open laptop on a clean desk with its ventilation path, cooling fan area, bottom intake grille, memory module or system monitoring context as required by the card. When RAM is mentioned, show a realistic laptop memory module and slot only if the action calls for it. Never show source code, terminal windows, Codex, ChatGPT, AI logos, abstract app UI, floating icons or generic technology cubes.'),
         (('고무패킹', '문틈', '곰팡이'), (

@@ -101,7 +101,7 @@ jobs:
           restore-keys: |
             hamjju-openai-budget-${{ runner.os }}-
       - name: Restore processing checkpoints
-        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design' && inputs.mode != 'verify_blog_card_style_live' && inputs.mode != 'verify_blog_card_style_live') }}
+        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design' && inputs.mode != 'verify_blog_card_style_live') }}
         uses: actions/cache/restore@v6
         with:
           path: output/state.db
@@ -446,14 +446,14 @@ jobs:
           key: hamjju-openai-budget-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Save processing checkpoints even when one item fails
-        if: ${{ always() && hashFiles('output/state.db') != '' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design' && inputs.mode != 'verify_blog_card_style_live' && inputs.mode != 'verify_blog_card_style_live')) }}
+        if: ${{ always() && hashFiles('output/state.db') != '' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design' && inputs.mode != 'verify_blog_card_style_live')) }}
         uses: actions/cache/save@v6
         with:
           path: output/state.db
           key: hamjju-processing-state-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Summarize actual production evidence
-        if: ${{ always() && ((github.event_name == 'schedule' && github.event.schedule != '45 0 * * *') || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design' && inputs.mode != 'verify_blog_card_style_live' && inputs.mode != 'verify_blog_card_style_live')) }}
+        if: ${{ always() && ((github.event_name == 'schedule' && github.event.schedule != '45 0 * * *') || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design' && inputs.mode != 'verify_blog_card_style_live')) }}
         env:
           RUN_STATUS: ${{ job.status }}
           EVENT_NAME: ${{ github.event_name }}
@@ -473,7 +473,7 @@ jobs:
           retention-days: 14
 
       - name: Update production status board
-        if: ${{ always() && ((github.event_name == 'schedule' && github.event.schedule != '45 0 * * *') || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design' && inputs.mode != 'verify_blog_card_style_live' && inputs.mode != 'verify_blog_card_style_live')) }}
+        if: ${{ always() && ((github.event_name == 'schedule' && github.event.schedule != '45 0 * * *') || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design' && inputs.mode != 'verify_blog_card_style_live')) }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}

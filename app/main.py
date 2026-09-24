@@ -7,6 +7,8 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import typer
 from rich import print
+from google.auth.exceptions import GoogleAuthError
+from googleapiclient.errors import HttpError
 
 from .ai import AIClient
 from .budget import BudgetGuard
@@ -579,7 +581,14 @@ def verify_youtube_auth():
     results = []
     for channel_key, (token_file, expected_channel_id) in channels.items():
         uploader = YouTubePrivateUploader(s.youtube_client_secrets_file, token_file)
-        info = uploader.current_channel()
+        try:
+            info = uploader.current_channel()
+        except (GoogleAuthError, HttpError, RuntimeError, OSError, ValueError) as exc:
+            typer.echo(
+                f'AUTH_ERROR: {channel_key} YouTube token could not be verified. Reauthorize this channel.',
+                err=True,
+            )
+            raise typer.Exit(code=1) from exc
         channel_match = info.get('id') == expected_channel_id
         results.append({
             'channel_key': channel_key,
@@ -589,7 +598,11 @@ def verify_youtube_auth():
             'upload_performed': False,
         })
         if not channel_match:
-            raise RuntimeError(f'Authorized YouTube channel does not match {channel_key}')
+            typer.echo(
+                f'AUTH_ERROR: {channel_key} is authorized as an unexpected YouTube channel. Verify its token.',
+                err=True,
+            )
+            raise typer.Exit(code=1)
     print_json(results)
 
 
