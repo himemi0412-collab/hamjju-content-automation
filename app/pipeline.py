@@ -650,7 +650,8 @@ class Pipeline:
                                 'automation_scope': {
                                     **context['automation_scope'],
                                     'mode': 'blog_cards',
-                                    'stage': 'failed_source_visual_retry' if regenerate_failed_blog_cards else 'targeted_visual_retry',
+                                    'stage': 'targeted_visual_retry',
+                                    'recovery_retry': regenerate_failed_blog_cards,
                                     'selective_retry_attempt': attempt,
                                     'preserved_cards': sorted(set(range(1, 6)) - retry_cards),
                                 },
