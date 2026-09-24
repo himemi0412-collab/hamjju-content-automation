@@ -100,7 +100,7 @@ DRYER_SUBJECT_LOCK = (
     'Use only an ordinary, safe, non-invasive inspection of visible areas. '
     'never depict disassembly, detached trays or tanks on the floor; do not show detached appliance parts. '
     'Never show a detached tray, tank or filter placed on the floor, detached machine parts, disassembly, a removed appliance panel, washing components, '
-    'water droplets or wet parts unless the card explicitly instructs that exact safe action. '
+    'wet parts or water droplets unless the card explicitly instructs that exact safe action. '
     'Never substitute an air purifier, dehumidifier, humidifier, dishwasher, washer, generic white appliance or storage container. '
     'If the full dryer face and circular glass door cannot fit the requested crop, widen the camera framing rather than cropping away the identifying features.'
 )
