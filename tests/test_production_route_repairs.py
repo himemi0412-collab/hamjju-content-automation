@@ -4,7 +4,7 @@ from app.blog_reference import VISUAL_FAMILIES, validate_generated_reference_con
 from app.card_design import apply_named_design_contract, validate_named_design_contract
 from app.pipeline import _card_numbers_from_qa_issue
 from app.photographic_cards import (
-    _scene_prompt, _subject_lock, load_production_style_bundle, production_design_language,
+    _scene_prompt, _subject_lock, _wrap_to_width, load_production_style_bundle, production_design_language,
 )
 
 
@@ -208,6 +208,24 @@ def test_visual_qa_retry_parser_accepts_singular_and_plural_card_fields():
     assert _card_numbers_from_qa_issue({'cards': 4, 'issue': '점검 장면 오류'}) == {4}
 
 
+def test_dryer_subject_lock_and_visual_qa_require_recognizable_dryer():
+    card = {
+        'headline': '건조기 먼지 냄새',
+        'copy': '필터보다 먼저 확인해요',
+        'items': [{'label': '필터 장착부', 'detail': '필터 홈을 확인'}],
+    }
+    for index in range(1, 6):
+        prompt = _scene_prompt(card, index)
+        assert 'FRONT-LOADING CLOTHES DRYER' in prompt
+        assert 'recognizable by its real dryer controls, lint-filter location, drum opening or unmistakable laundry-room context' in prompt
+        assert 'do not repeat the same centered straight-on full-front composition across cards' in prompt
+        assert 'Never show an exterior exhaust hose, rear vent duct' in prompt
+        assert 'Never substitute an air purifier' in prompt
+    qa = Path('prompts/qa_photographic_blog_cards.md').read_text(encoding='utf-8')
+    assert '글 제목과 일치' in qa
+    assert '식별할 수 없으면 해당 카드를 blocking issue로 실패 처리' in qa
+
+
 def test_refrigerator_card_roles_are_subject_locked_without_conflicting_blank_band():
     flow = _scene_prompt(
         {'headline': '냉장고 문틈', 'copy': '고무패킹 홈 오염', 'items': []}, 2
@@ -260,3 +278,31 @@ def test_flow_panel_preserves_more_than_half_the_frame_for_the_photograph():
     renderer = Path('app/photographic_cards.py').read_text(encoding='utf-8')
     assert "2: {'panel': (36, 82, 462, 998)" in renderer
     assert "2: {'panel': (36, 82, 550, 998)" not in renderer
+
+
+def test_dryer_prompts_preserve_topic_identity_without_repeating_front_view_or_duct():
+    card = {
+        'headline': '건조기에서 먼지 냄새가 날 때',
+        'copy': '필터보다 먼저 배기와 주변 공간을 확인해요',
+        'items': [{'label': '측면 공간', 'detail': '주변 먼지와 통풍 여유 확인'}],
+    }
+    prompts = [_scene_prompt(card, index, subject_hint='건조기') for index in range(1, 6)]
+    assert all('intact front-loading tumble clothes dryer' in prompt for prompt in prompts)
+    assert all('do not repeat the same centered straight-on full-front composition across cards' in prompt for prompt in prompts)
+    assert all('Never show an exterior exhaust hose, rear vent duct' in prompt for prompt in prompts)
+    assert all('DRYER SCENE LOCK:' in prompt for prompt in prompts)
+    assert len({prompt.split('DRYER SCENE LOCK: ', 1)[1].split('. ', 1)[0] for prompt in prompts}) == 5
+    assert len({prompt.split('Production card role: ', 1)[1].split('. ', 1)[1].split(' Generate a plain', 1)[0]
+                for prompt in prompts}) == 5
+    qa = Path('prompts/qa_photographic_blog_cards.md').read_text(encoding='utf-8')
+    assert '같은 제품을 반복하는 장면은 카드 역할별 크롭·각도·거리·행동·배경이 의미 있게 달라야 한다' in qa
+    assert '외부 배기 호스·후면 덕트·분리된 환기 연결부' in qa
+
+
+def test_photographic_card_text_wrap_uses_real_line_breaks():
+    from PIL import Image, ImageDraw, ImageFont
+
+    draw = ImageDraw.Draw(Image.new('RGB', (100, 100)))
+    wrapped = _wrap_to_width(draw, 'abcdefgh', ImageFont.load_default(), 5)
+    assert '\n' in wrapped
+    assert '\\n' not in wrapped

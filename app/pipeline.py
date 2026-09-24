@@ -605,7 +605,7 @@ class Pipeline:
                             )},
                     }, qa_prompt='prompts/qa_photographic_blog_cards.md', image_paths=cards)
                     retry_usages = []
-                    if not previous:
+                    if not previous or regenerate_failed_blog_cards:
                         for attempt in range(1, 3):
                             if _visual_qa_passed(qa):
                                 break
@@ -651,6 +651,7 @@ class Pipeline:
                                     **context['automation_scope'],
                                     'mode': 'blog_cards',
                                     'stage': 'targeted_visual_retry',
+                                    'recovery_retry': regenerate_failed_blog_cards,
                                     'selective_retry_attempt': attempt,
                                     'preserved_cards': sorted(set(range(1, 6)) - retry_cards),
                                 },

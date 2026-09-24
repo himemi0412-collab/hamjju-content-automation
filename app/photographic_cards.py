@@ -93,11 +93,15 @@ def _wrap_to_width(draw: ImageDraw.ImageDraw, value: str,
 
 
 DRYER_SUBJECT_LOCK = (
-    'Show a recognizable, intact front-loading tumble clothes dryer with a circular door and its lint filter at the door or lower opening. '
-    'Keep the dryer itself visible when showing the filter, drum or ventilation space. '
-    'Show only non-invasive inspection of visible areas: never depict disassembly, detached trays or tanks on the floor, '
-    'washing components, wet parts or water droplets unless the card explicitly instructs that exact safe action. '
-    'Never show an air purifier, dehumidifier or water tank appliance.'
+    'The exact subject is an intact front-loading tumble clothes dryer (FRONT-LOADING CLOTHES DRYER), recognizable by its real dryer controls, lint-filter location, drum opening or unmistakable laundry-room context. '
+    'Make the dryer the clear subject, but vary camera distance, angle, visible side, and how much of its front is shown to suit this card; do not repeat the same centered straight-on full-front composition across cards. '
+    'Use only an ordinary, safe, non-invasive inspection of visible areas. '
+    'never depict disassembly, detached trays or tanks on the floor; do not show detached appliance parts. '
+    'Never show a detached tray, tank or filter placed on the floor, detached machine parts, disassembly, a removed appliance panel, washing components, '
+    'wet parts or water droplets unless the card explicitly instructs that exact safe action. '
+    'Never show an exterior exhaust hose, rear vent duct, or detached vent connection: the article does not establish that this dryer uses one. Show ordinary side clearance, nearby lint or clutter, and visible front/side surfaces instead. '
+    'Never substitute an air purifier, dehumidifier, humidifier, dishwasher, washer, generic white appliance or storage container. '
+    'If a card requires a close crop, retain at least one unmistakable dryer-specific identifying feature in frame without forcing the entire front face or circular door into every composition.'
 )
 
 
@@ -153,6 +157,15 @@ def _subject_lock(card: dict[str, Any], index: int | None = None, subject_hint: 
     return 'Keep the exact appliance category and action named by the topic; do not substitute a visually similar appliance.'
 
 
+DRYER_CARD_SCENE_DIRECTIONS = {
+    1: 'DRYER SCENE LOCK: Show a close, three-quarter view of the intact dryer with its circular door and manufacturer-neutral dryer control area both visible; a person points toward the lint-filter opening while it remains installed. Make this an observational home snapshot, not a catalog hero shot.',
+    2: 'DRYER SCENE LOCK: Show the dryer door open at eye level, with the installed lint-filter slot and drum opening visibly belonging to the same intact dryer. Include one ordinary laundry item nearby; do not show a detached filter, tray, or tank.',
+    3: 'DRYER SCENE LOCK: Show one coherent, natural split-view photograph with the same intact dryer context on both sides: one side close to the visible lint-filter seating area, the other side showing ordinary side clearance with a wall and nearby laundry clutter. Both conditions must be actual visible objects at comparable scale, not panels or a graphic collage.',
+    4: 'DRYER SCENE LOCK: Use a hand-level documentary close-up of a hand checking the still-installed filter seating groove at the open dryer door. Keep the circular door rim and part of the dryer body in frame so it cannot be mistaken for a washer or another appliance.',
+    5: 'DRYER SCENE LOCK: Show a wider lived-in laundry corner with the same intact dryer identifiable by its open circular door and dryer controls, plus a person standing beside it deciding whether to call service; ordinary dust or one laundry basket may appear, with no detached components.',
+}
+
+
 def _scene_prompt(
     card: dict[str, Any], index: int, revision_note: str = '', *,
     design_language: str = 'Bento Editorial', design_blueprint: dict[str, Any] | None = None,
@@ -198,6 +211,8 @@ def _scene_prompt(
         'Where it discusses typography, reserve space only; never draw text inside the generated scene:\n'
         + canonical_prompt,
     ]
+    if '건조기' in subject_hint or '건조기' in ' '.join([str(card.get('headline') or ''), str(card.get('copy') or ''), item_text]):
+        parts.append(DRYER_CARD_SCENE_DIRECTIONS[index])
     if revision_note:
         parts.append(
             'Mandatory correction for this retry. Do not repeat the rejected visual action or implication. '
