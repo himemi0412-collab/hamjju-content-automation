@@ -98,6 +98,7 @@ DRYER_SUBJECT_LOCK = (
     'When the card mentions a lint filter, show the filter seated in or being gently lifted from its actual dryer slot while the circular dryer door remains visible in the same frame. '
     'When describing the drum or surrounding space, keep the dryer front and circular door visible as the visual anchor. '
     'Use only an ordinary, safe, non-invasive inspection of visible areas. '
+    'never depict disassembly, detached trays or tanks on the floor; do not show detached appliance parts. '
     'Never show a detached tray, tank or filter placed on the floor, detached machine parts, disassembly, a removed appliance panel, washing components, '
     'water droplets or wet parts unless the card explicitly instructs that exact safe action. '
     'Never substitute an air purifier, dehumidifier, humidifier, dishwasher, washer, generic white appliance or storage container. '
