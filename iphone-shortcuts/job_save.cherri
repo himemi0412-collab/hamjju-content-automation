@@ -1,0 +1,10 @@
+#define inputs text, url
+#define from sharesheet
+#include 'actions/documents'
+
+@shared = ShortcutInput
+@note = prompt("회사명/공고명을 짧게 적어줘")
+@now = CurrentDate
+@record = text("\n---\n[취업공고] {@now}\n{@note}\n{@shared}\n")
+appendToFile("Hamjju Life OS/취업공고 수집함.txt", @record)
+showNotification("Life OS 수집함에 저장했어.", "💼 취업공고 저장")
