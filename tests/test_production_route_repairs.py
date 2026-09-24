@@ -208,6 +208,22 @@ def test_visual_qa_retry_parser_accepts_singular_and_plural_card_fields():
     assert _card_numbers_from_qa_issue({'cards': 4, 'issue': '점검 장면 오류'}) == {4}
 
 
+def test_dryer_subject_lock_and_visual_qa_require_recognizable_dryer():
+    card = {
+        'headline': '건조기 먼지 냄새',
+        'copy': '필터보다 먼저 확인해요',
+        'items': [{'label': '필터 장착부', 'detail': '필터 홈을 확인'}],
+    }
+    for index in range(1, 6):
+        prompt = _scene_prompt(card, index)
+        assert 'FRONT-LOADING CLOTHES DRYER' in prompt
+        assert 'large circular glass drum door' in prompt
+        assert 'Never substitute an air purifier' in prompt
+    qa = Path('prompts/qa_photographic_blog_cards.md').read_text(encoding='utf-8')
+    assert '글 제목과 일치' in qa
+    assert '식별할 수 없으면 해당 카드를 blocking issue로 실패 처리' in qa
+
+
 def test_refrigerator_card_roles_are_subject_locked_without_conflicting_blank_band():
     flow = _scene_prompt(
         {'headline': '냉장고 문틈', 'copy': '고무패킹 홈 오염', 'items': []}, 2

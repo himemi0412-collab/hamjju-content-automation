@@ -93,11 +93,15 @@ def _wrap_to_width(draw: ImageDraw.ImageDraw, value: str,
 
 
 DRYER_SUBJECT_LOCK = (
-    'Show a recognizable, intact front-loading tumble clothes dryer with a circular door and its lint filter at the door or lower opening. '
-    'Keep the dryer itself visible when showing the filter, drum or ventilation space. '
-    'Show only non-invasive inspection of visible areas: never depict disassembly, detached trays or tanks on the floor, '
-    'washing components, wet parts or water droplets unless the card explicitly instructs that exact safe action. '
-    'Never show an air purifier, dehumidifier or water tank appliance.'
+    'The exact subject is a FRONT-LOADING CLOTHES DRYER, unmistakable at first glance. '
+    'In every image show its intact front face and large circular glass drum door; the dryer must occupy most of the photograph. '
+    'When the card mentions a lint filter, show the filter seated in or being gently lifted from its actual dryer slot while the circular dryer door remains visible in the same frame. '
+    'When describing the drum or surrounding space, keep the dryer front and circular door visible as the visual anchor. '
+    'Use only an ordinary, safe, non-invasive inspection of visible areas. '
+    'Never show a detached tray, tank or filter placed on the floor, detached machine parts, disassembly, a removed appliance panel, washing components, '
+    'water droplets or wet parts unless the card explicitly instructs that exact safe action. '
+    'Never substitute an air purifier, dehumidifier, humidifier, dishwasher, washer, generic white appliance or storage container. '
+    'If the full dryer face and circular glass door cannot fit the requested crop, widen the camera framing rather than cropping away the identifying features.'
 )
 
 
