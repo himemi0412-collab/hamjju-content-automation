@@ -22,6 +22,7 @@ ROLE_SCENE_DIRECTIONS = (
 )
 EXPLORATION_ONLY_DESIGN_LANGUAGES = frozenset({
     'Retro Tech UI', 'Screenshot Editorial', 'Prompt Playground', 'Terminal Noir',
+    'Technical Manual',
 })
 
 
