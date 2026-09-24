@@ -88,6 +88,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     permissions:
       contents: read
       actions: read
