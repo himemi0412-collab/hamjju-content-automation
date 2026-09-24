@@ -217,7 +217,9 @@ def test_dryer_subject_lock_and_visual_qa_require_recognizable_dryer():
     for index in range(1, 6):
         prompt = _scene_prompt(card, index)
         assert 'FRONT-LOADING CLOTHES DRYER' in prompt
-        assert 'large circular glass drum door' in prompt
+        assert 'recognizable by its real dryer controls, lint-filter location, drum opening or unmistakable laundry-room context' in prompt
+        assert 'Never repeat the same centered straight-on full-front composition' in prompt
+        assert 'Never show an exterior exhaust hose, rear vent duct' in prompt
         assert 'Never substitute an air purifier' in prompt
     qa = Path('prompts/qa_photographic_blog_cards.md').read_text(encoding='utf-8')
     assert '글 제목과 일치' in qa
@@ -276,3 +278,20 @@ def test_flow_panel_preserves_more_than_half_the_frame_for_the_photograph():
     renderer = Path('app/photographic_cards.py').read_text(encoding='utf-8')
     assert "2: {'panel': (36, 82, 462, 998)" in renderer
     assert "2: {'panel': (36, 82, 550, 998)" not in renderer
+
+
+def test_dryer_prompts_preserve_topic_identity_without_repeating_front_view_or_duct():
+    card = {
+        'headline': '건조기에서 먼지 냄새가 날 때',
+        'copy': '필터보다 먼저 배기와 주변 공간을 확인해요',
+        'items': [{'label': '측면 공간', 'detail': '주변 먼지와 통풍 여유 확인'}],
+    }
+    prompts = [_scene_prompt(card, index, subject_hint='건조기') for index in range(1, 6)]
+    assert all('intact front-loading tumble clothes dryer' in prompt for prompt in prompts)
+    assert all('Never repeat the same centered straight-on full-front composition' in prompt for prompt in prompts)
+    assert all('Never show an exterior exhaust hose, rear vent duct' in prompt for prompt in prompts)
+    assert len({prompt.split('Production card role: ', 1)[1].split('. ', 1)[1].split(' Generate a plain', 1)[0]
+                for prompt in prompts}) == 5
+    qa = Path('prompts/qa_photographic_blog_cards.md').read_text(encoding='utf-8')
+    assert '같은 제품을 반복하는 장면은 카드 역할별 크롭·각도·거리·행동·배경이 의미 있게 달라야 한다' in qa
+    assert '외부 배기 호스·후면 덕트·분리된 환기 연결부' in qa

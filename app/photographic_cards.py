@@ -89,20 +89,19 @@ def _wrap_to_width(draw: ImageDraw.ImageDraw, value: str,
             line = candidate
     if line:
         lines.append(line)
-    return '\n'.join(lines)
+    return '\\n'.join(lines)
 
 
 DRYER_SUBJECT_LOCK = (
-    'The exact subject is an intact front-loading tumble clothes dryer (FRONT-LOADING CLOTHES DRYER), unmistakable at first glance. '
-    'In every image show its intact front face and large circular glass drum door; the dryer must occupy most of the photograph. '
-    'When the card mentions a lint filter, show the filter seated in or being gently lifted from its actual dryer slot while the circular dryer door remains visible in the same frame. '
-    'When describing the drum or surrounding space, keep the dryer front and circular door visible as the visual anchor. '
+    'The exact subject is an intact front-loading tumble clothes dryer (FRONT-LOADING CLOTHES DRYER), recognizable by its real dryer controls, lint-filter location, drum opening or unmistakable laundry-room context. '
+    'Make the dryer the clear subject, but vary camera distance, angle, visible side, and how much of its front is shown to suit this card; do not repeat the same centered straight-on full-front composition across cards. '
     'Use only an ordinary, safe, non-invasive inspection of visible areas. '
     'never depict disassembly, detached trays or tanks on the floor; do not show detached appliance parts. '
     'Never show a detached tray, tank or filter placed on the floor, detached machine parts, disassembly, a removed appliance panel, washing components, '
     'wet parts or water droplets unless the card explicitly instructs that exact safe action. '
+    'Never show an exterior exhaust hose, rear vent duct, or detached vent connection: the article does not establish that this dryer uses one. Show ordinary side clearance, nearby lint or clutter, and visible front/side surfaces instead. '
     'Never substitute an air purifier, dehumidifier, humidifier, dishwasher, washer, generic white appliance or storage container. '
-    'If the full dryer face and circular glass door cannot fit the requested crop, widen the camera framing rather than cropping away the identifying features.'
+    'If a card requires a close crop, retain at least one unmistakable dryer-specific identifying feature in frame without forcing the entire front face or circular door into every composition.'
 )
 
 
@@ -200,7 +199,7 @@ def _scene_prompt(
         'FINAL CHECK: output only the requested real photograph, with zero text, zero printed material and zero graphic-design layers.',
         f'This scene must be capable of passing the strict AI-likeness gate below {ai_gate}/100 after local Korean typesetting.',
         'Apply the following canonical production prompt as binding art direction. '
-        'Where it discusses typography, reserve space only; never draw text inside the generated scene:\n'
+        'Where it discusses typography, reserve space only; never draw text inside the generated scene:\\n'
         + canonical_prompt,
     ]
     if revision_note:
