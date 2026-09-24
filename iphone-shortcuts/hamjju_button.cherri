@@ -1,0 +1,26 @@
+#include 'actions/shortcuts'
+
+@emptyInput = text("")
+
+menu "🐹 햄찌 버튼" {
+    item "🧠 생각났어!":
+        run("🧠 생각났어!", @emptyInput)
+
+    item "📅 일정 넣기":
+        run("📅 일정 넣기", @emptyInput)
+
+    item "🎯 오늘 딱 하나":
+        run("🎯 오늘 딱 하나", @emptyInput)
+
+    item "🔥 25분 집중":
+        run("🔥 25분 집중", @emptyInput)
+
+    item "🎧 이어폰 모드":
+        run("🎧 이어폰 모드", @emptyInput)
+
+    item "🌙 오늘 끝":
+        run("🌙 오늘 끝", @emptyInput)
+
+    item "📱 앱 실행 보조":
+        run("📱 앱 실행 보조", @emptyInput)
+}
