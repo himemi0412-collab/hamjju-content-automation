@@ -52,7 +52,7 @@ def test_shorts_prompts_supply_pre_media_voice_and_timeline_contracts():
 
 
 def test_cover_exploration_technology_styles_are_blocked_from_production():
-    for name in ('Retro Tech UI', 'Screenshot Editorial', 'Prompt Playground', 'Terminal Noir'):
+    for name in ('Retro Tech UI', 'Screenshot Editorial', 'Prompt Playground', 'Terminal Noir', 'Technical Manual'):
         assert production_design_language(name) == 'Bento Editorial'
     assert production_design_language('Japanese Editorial') == 'Japanese Editorial'
 
