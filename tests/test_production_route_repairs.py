@@ -4,7 +4,7 @@ from app.blog_reference import VISUAL_FAMILIES, validate_generated_reference_con
 from app.card_design import apply_named_design_contract, validate_named_design_contract
 from app.pipeline import _card_numbers_from_qa_issue
 from app.photographic_cards import (
-    _scene_prompt, _subject_lock, load_production_style_bundle, production_design_language,
+    _scene_prompt, _subject_lock, _wrap_to_width, load_production_style_bundle, production_design_language,
 )
 
 
@@ -295,3 +295,12 @@ def test_dryer_prompts_preserve_topic_identity_without_repeating_front_view_or_d
     qa = Path('prompts/qa_photographic_blog_cards.md').read_text(encoding='utf-8')
     assert '같은 제품을 반복하는 장면은 카드 역할별 크롭·각도·거리·행동·배경이 의미 있게 달라야 한다' in qa
     assert '외부 배기 호스·후면 덕트·분리된 환기 연결부' in qa
+
+
+def test_photographic_card_text_wrap_uses_real_line_breaks():
+    from PIL import Image, ImageDraw, ImageFont
+
+    draw = ImageDraw.Draw(Image.new('RGB', (100, 100)))
+    wrapped = _wrap_to_width(draw, 'abcdefgh', ImageFont.load_default(), 5)
+    assert '\n' in wrapped
+    assert '\\n' not in wrapped

@@ -89,7 +89,7 @@ def _wrap_to_width(draw: ImageDraw.ImageDraw, value: str,
             line = candidate
     if line:
         lines.append(line)
-    return '\\n'.join(lines)
+    return '\n'.join(lines)
 
 
 DRYER_SUBJECT_LOCK = (
@@ -199,7 +199,7 @@ def _scene_prompt(
         'FINAL CHECK: output only the requested real photograph, with zero text, zero printed material and zero graphic-design layers.',
         f'This scene must be capable of passing the strict AI-likeness gate below {ai_gate}/100 after local Korean typesetting.',
         'Apply the following canonical production prompt as binding art direction. '
-        'Where it discusses typography, reserve space only; never draw text inside the generated scene:\\n'
+        'Where it discusses typography, reserve space only; never draw text inside the generated scene:\n'
         + canonical_prompt,
     ]
     if revision_note:
