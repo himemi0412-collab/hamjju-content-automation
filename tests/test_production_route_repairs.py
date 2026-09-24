@@ -218,7 +218,7 @@ def test_dryer_subject_lock_and_visual_qa_require_recognizable_dryer():
         prompt = _scene_prompt(card, index)
         assert 'FRONT-LOADING CLOTHES DRYER' in prompt
         assert 'recognizable by its real dryer controls, lint-filter location, drum opening or unmistakable laundry-room context' in prompt
-        assert 'Never repeat the same centered straight-on full-front composition' in prompt
+        assert 'do not repeat the same centered straight-on full-front composition across cards' in prompt
         assert 'Never show an exterior exhaust hose, rear vent duct' in prompt
         assert 'Never substitute an air purifier' in prompt
     qa = Path('prompts/qa_photographic_blog_cards.md').read_text(encoding='utf-8')
