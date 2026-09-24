@@ -47,6 +47,7 @@ on:
           - execute_text
           - recover_blog
           - resume_blog
+          - recover_failed_blog_cards
           - execute_media
           - produce_daily_shorts
           - retry_revision
@@ -287,6 +288,24 @@ jobs:
             reviewed_args=()
           fi
           python -m app.main resume-blog "$RESUME_PAGE_ID" "recovered/$page_folder/manifest.json" "${reviewed_args[@]}"
+
+      - name: Regenerate rejected cards from one exact failed blog artifact
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'recover_failed_blog_cards' && inputs.channel == 'naver_blog' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
+          ENABLE_WEB_RESEARCH: 'false'
+          ENABLE_MEDIA_GENERATION: 'false'
+          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          RECOVERY_PAGE_ID: ${{ inputs.page_id }}
+        run: |
+          [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$RECOVERY_PAGE_ID" =~ ^[0-9a-fA-F-]{32,36}$ ]]
+          page_folder="$(printf '%s' "$RECOVERY_PAGE_ID" | tr -d '-' | cut -c1-16)"
+          gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "hamjju-output-$SOURCE_RUN_ID" --dir recovered
+          python -m app.main recover-failed-blog-cards "$RECOVERY_PAGE_ID" "recovered/$page_folder/manifest.json"
 
       - name: Produce today's two reviewed Shorts
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'produce_daily_shorts' }}

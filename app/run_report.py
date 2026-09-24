@@ -75,7 +75,7 @@ def expected_channels(event: str, schedule: str, mode: str, channel: str) -> dic
         return {'ppojjugi_shorts': 1, 'japan_shorts': 1}
     if mode in {'plan_month', 'prepare_topic', 'explore_card_design'}:
         return {}
-    return {'naver_blog' if mode in {'recover_blog', 'resume_blog'} else channel: 1}
+    return {'naver_blog' if mode in {'recover_blog', 'resume_blog', 'recover_failed_blog_cards'} else channel: 1}
 
 
 def _blog_rows(data: dict) -> tuple[list[dict], int]:

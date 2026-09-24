@@ -509,6 +509,29 @@ def resume_blog(
     validate_results(result, require_item=True, dry_run=False)
 
 
+@app.command('recover-failed-blog-cards')
+def recover_failed_blog_cards(page_id: str, manifest: Path):
+    """Keep a failed artifact's manuscript and regenerate its five rejected cards."""
+    source = json.loads(manifest.read_text(encoding='utf-8'))
+    if source.get('page_id') != page_id or source.get('channel') != 'naver_blog':
+        raise typer.BadParameter('Recovery manifest does not match the exact blog page')
+    s, notion, _, _, pipeline = build()
+    cfg = load_channels()['naver_blog']
+    try:
+        page = notion.retrieve_page(page_id)
+        cfg = replace(cfg, ready_status=cfg.revision_status)
+        result = [pipeline.process_page(
+            cfg, page, resume_manifest=manifest, regenerate_failed_blog_cards=True,
+        )]
+    except Exception as exc:
+        result = [{'page_id': page_id, 'channel': 'naver_blog', 'status': 'failed', 'error': repr(exc)}]
+    finally:
+        notion.close()
+    print_json(result)
+    record_results(s.output_dir, 'naver_blog', result, 1)
+    validate_results(result, require_item=True, dry_run=False)
+
+
 def validate_results(
     results: list[dict], require_item: bool = False, dry_run: bool = False,
     expected_count: int | None = None,

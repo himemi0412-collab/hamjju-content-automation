@@ -24,7 +24,7 @@ class PrecheckFailure(RuntimeError):
 def check(mode: str, channel: str, schedule: str, page_id: str, settings: Settings) -> dict:
     channels = load_channels()
     allowed_modes = {'schedule', 'plan_month', 'prepare_topic', 'dry_run', 'execute_text',
-                     'recover_blog', 'resume_blog', 'execute_media', 'produce_daily_shorts',
+                     'recover_blog', 'resume_blog', 'recover_failed_blog_cards', 'execute_media', 'produce_daily_shorts',
                      'retry_revision', 'regenerate_review', 'rerender_blog_cards',
                      'repair_video', 'repair_av_sync'}
     if mode not in allowed_modes:
@@ -44,7 +44,7 @@ def check(mode: str, channel: str, schedule: str, page_id: str, settings: Settin
                 r'(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})', item)
                 for item in page_ids)):
             raise PrecheckFailure('CONFIG_ERROR', 'Invalid Notion page ID')
-        if mode in {'recover_blog', 'resume_blog', 'regenerate_review', 'rerender_blog_cards', 'repair_video', 'repair_av_sync'} and not page_id:
+        if mode in {'recover_blog', 'resume_blog', 'recover_failed_blog_cards', 'regenerate_review', 'rerender_blog_cards', 'repair_video', 'repair_av_sync'} and not page_id:
             raise PrecheckFailure('CONFIG_ERROR', 'This workflow mode needs an exact page ID')
     if not settings.openai_api_key or not settings.notion_access_token:
         raise PrecheckFailure('CONFIG_ERROR', 'OpenAI or Notion credential is missing')

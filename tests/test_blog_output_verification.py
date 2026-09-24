@@ -331,6 +331,78 @@ def test_resume_reuses_text_and_replaces_only_matching_failed_output(tmp_path, m
     assert sum(x['type'] == 'divider' for x in pipeline.notion.blocks) == 1
 
 
+def test_failed_artifact_recovers_blank_page_with_fresh_cards_and_frozen_article(tmp_path, monkeypatch):
+    pipeline, cards = make_pipeline(tmp_path, monkeypatch)
+    generated = pipeline.ai.generate.return_value[0]
+    prior = {
+        'page_id': 'one', 'channel': 'naver_blog', 'generated': generated,
+        'manuscript_sha256': manuscript_hash(generated),
+        'qa': {'pass': False, 'blocking_issues': [{'cards': [2, 3, 4], 'issue': 'unsafe parts'}]},
+        'media': {'cards': [str(p) for p in cards], 'rendered_card_qa_pass': False,
+                  'notion_cards_attached': False}, 'output_verified': False,
+    }
+    saved = tmp_path / 'cards'
+    saved.mkdir()
+    for card in cards:
+        (saved / card.name).write_bytes(b'old-rejected-image')
+    manifest = tmp_path / 'manifest.json'
+    manifest.write_text(json.dumps(prior), encoding='utf-8')
+    pipeline.notion.status = '수정 필요'
+    called = []
+    def render(*args, **kwargs):
+        called.append(kwargs)
+        for card in cards:
+            card.write_bytes(b'new-reviewed-image-' + card.name.encode())
+        return cards
+    monkeypatch.setattr('app.pipeline.generate_and_typeset_blog_cards', render)
+    cfg = replace(load_channels()['naver_blog'], ready_status='수정 필요')
+    result = pipeline.process_page(cfg, {'id': 'one'}, resume_manifest=manifest,
+                                   regenerate_failed_blog_cards=True)
+    assert result['qa_pass'] is True and result['output_verified'] is True
+    assert called and pipeline.ai.qa.called
+    pipeline.ai.generate.assert_not_called()
+    written = json.loads((tmp_path / 'output/one/manifest.json').read_text(encoding='utf-8'))
+    assert written['generated']['body_markdown'] == generated['body_markdown']
+    assert written['resume_source_manuscript_sha256'] == prior['manuscript_sha256']
+
+
+@pytest.mark.parametrize('edit', ['block', 'file', 'title', 'bad_hash'])
+def test_failed_artifact_recovery_rejects_manual_or_source_changes_before_generation(tmp_path, monkeypatch, edit):
+    pipeline, cards = make_pipeline(tmp_path, monkeypatch)
+    generated = pipeline.ai.generate.return_value[0]
+    prior = {
+        'page_id': 'one', 'channel': 'naver_blog', 'generated': generated,
+        'manuscript_sha256': manuscript_hash(generated), 'qa': {'pass': False},
+        'media': {'cards': [str(p) for p in cards], 'rendered_card_qa_pass': False,
+                  'notion_cards_attached': False}, 'output_verified': False,
+    }
+    saved = tmp_path / 'cards'
+    saved.mkdir()
+    for card in cards:
+        (saved / card.name).write_bytes(card.read_bytes())
+    manifest = tmp_path / 'manifest.json'
+    if edit == 'bad_hash':
+        prior['manuscript_sha256'] = 'incorrect'
+    manifest.write_text(json.dumps(prior), encoding='utf-8')
+    pipeline.notion.status = '수정 필요'
+    if edit == 'block':
+        pipeline.notion.blocks.append({'id': 'manual', 'type': 'paragraph'})
+    elif edit == 'file':
+        pipeline.notion.files.append({'name': 'manual.png'})
+    elif edit == 'title':
+        prior['generated']['title'] = 'different title'
+        prior['manuscript_sha256'] = manuscript_hash(prior['generated'])
+        manifest.write_text(json.dumps(prior), encoding='utf-8')
+    render = Mock()
+    monkeypatch.setattr('app.pipeline.generate_and_typeset_blog_cards', render)
+    cfg = replace(load_channels()['naver_blog'], ready_status='수정 필요')
+    result = pipeline.process_page(cfg, {'id': 'one'}, resume_manifest=manifest,
+                                   regenerate_failed_blog_cards=True)
+    assert result['status'] == 'failed'
+    render.assert_not_called()
+    pipeline.ai.qa.assert_not_called()
+
+
 def test_resume_reuses_pass_for_identical_reviewed_manuscript_and_card_bytes(tmp_path, monkeypatch):
     pipeline, cards = make_pipeline(tmp_path, monkeypatch)
     generated = pipeline.ai.generate.return_value[0]
