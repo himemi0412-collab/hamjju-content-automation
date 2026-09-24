@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from app.blog_reference import VISUAL_FAMILIES, validate_generated_reference_contract
+from app.card_design import apply_named_design_contract, validate_named_design_contract
 from app.pipeline import _card_numbers_from_qa_issue
 from app.photographic_cards import (
     _scene_prompt, _subject_lock, load_production_style_bundle, production_design_language,
@@ -55,6 +56,18 @@ def test_cover_exploration_technology_styles_are_blocked_from_production():
     for name in ('Retro Tech UI', 'Screenshot Editorial', 'Prompt Playground', 'Terminal Noir', 'Technical Manual'):
         assert production_design_language(name) == 'Bento Editorial'
     assert production_design_language('Japanese Editorial') == 'Japanese Editorial'
+
+
+def test_technical_manual_model_choice_binds_to_photographic_production_contract():
+    # Run #404: a diagram blueprint reached a renderer that makes photographs,
+    # so the independent card reviewer rejected the same images for missing diagrams.
+    generated = apply_named_design_contract({
+        'design_language': production_design_language('Technical Manual'),
+        'visual_family': 'photographic_lifestyle',
+    })
+    validate_named_design_contract(generated, required=True)
+    assert generated['design_language'] == 'Bento Editorial'
+    assert '도면' not in str(generated['design_direction'])
 
 
 def test_production_scene_prompt_uses_real_laptop_and_rejects_ai_ui_motifs():
