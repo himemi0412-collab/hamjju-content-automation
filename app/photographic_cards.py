@@ -93,7 +93,7 @@ def _wrap_to_width(draw: ImageDraw.ImageDraw, value: str,
 
 
 DRYER_SUBJECT_LOCK = (
-    'The exact subject is a FRONT-LOADING CLOTHES DRYER, unmistakable at first glance. '
+    'The exact subject is an intact front-loading tumble clothes dryer (FRONT-LOADING CLOTHES DRYER), unmistakable at first glance. '
     'In every image show its intact front face and large circular glass drum door; the dryer must occupy most of the photograph. '
     'When the card mentions a lint filter, show the filter seated in or being gently lifted from its actual dryer slot while the circular dryer door remains visible in the same frame. '
     'When describing the drum or surrounding space, keep the dryer front and circular door visible as the visual anchor. '
