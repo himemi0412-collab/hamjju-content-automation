@@ -15,7 +15,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -45,14 +45,23 @@ jobs:
           "$CHERRI" iphone-shortcuts/today_one.cherri --hubsign --output="out/🎯 오늘 딱 하나.shortcut"
           "$CHERRI" iphone-shortcuts/focus_25.cherri --hubsign --output="out/🔥 25분 집중.shortcut"
           "$CHERRI" iphone-shortcuts/battery_manage.cherri --hubsign --output="out/🔋 배터리 관리.shortcut"
+          "$CHERRI" iphone-shortcuts/home_arrival.cherri --hubsign --output="out/🏠 집 도착.shortcut"
+          "$CHERRI" iphone-shortcuts/earbuds_mode.cherri --hubsign --output="out/🎧 이어폰 모드.shortcut"
+          "$CHERRI" iphone-shortcuts/job_save.cherri --hubsign --output="out/💼 취업공고 저장.shortcut"
+          "$CHERRI" iphone-shortcuts/savings_event_save.cherri --hubsign --output="out/💰 이벤트 저장.shortcut"
+          "$CHERRI" iphone-shortcuts/day_end.cherri --hubsign --output="out/🌙 오늘 끝.shortcut"
+          "$CHERRI" iphone-shortcuts/charger_connected.cherri --hubsign --output="out/🔌 충전기 연결.shortcut"
+          "$CHERRI" iphone-shortcuts/app_launch_helper.cherri --hubsign --output="out/📱 앱 실행 보조.shortcut"
+          "$CHERRI" iphone-shortcuts/hamjju_button.cherri --hubsign --output="out/🐹 햄찌 버튼.shortcut"
 
-          test "$(find out -type f -name '*.shortcut' | wc -l)" -eq 5
+          test "$(find out -type f -name '*.shortcut' | wc -l)" -eq 13
           find out -type f -name '*.shortcut' -size +0c -print
+          test "$(find out -type f -name '*.shortcut' -size +0c | wc -l)" -eq 13
 
       - name: Upload signed shortcut pack
         uses: actions/upload-artifact@v4
         with:
-          name: hamjju-iphone-shortcuts-pack
+          name: hamjju-iphone-shortcuts-pack-v2
           path: out/*.shortcut
           if-no-files-found: error
           retention-days: 7
