@@ -70,6 +70,21 @@ def test_technical_manual_model_choice_binds_to_photographic_production_contract
     assert '도면' not in str(generated['design_direction'])
 
 
+def test_dryer_inspection_scene_does_not_suggest_disassembly_or_wet_parts():
+    # Run #406: rejected cards 2-4 showed detached wet components despite
+    # the manuscript explicitly requiring visible, non-invasive inspection.
+    for index in (2, 3, 4):
+        scene = _scene_prompt({
+            'headline': '건조기 냄새 점검',
+            'copy': '분해하지 말고 보이는 범위부터 확인',
+            'items': [{'label': '필터 장착부', 'detail': '잔여 먼지 확인'}],
+        }, index)
+        assert 'intact front-loading tumble clothes dryer' in scene
+        assert 'non-invasive inspection' in scene
+        assert 'never depict disassembly, detached trays or tanks on the floor' in scene
+        assert 'wet parts or water droplets' in scene
+
+
 def test_production_scene_prompt_uses_real_laptop_and_rejects_ai_ui_motifs():
     card = {
         'layout': 'cover',
