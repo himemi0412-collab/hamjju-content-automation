@@ -288,7 +288,7 @@ def test_dryer_prompts_preserve_topic_identity_without_repeating_front_view_or_d
     }
     prompts = [_scene_prompt(card, index, subject_hint='건조기') for index in range(1, 6)]
     assert all('intact front-loading tumble clothes dryer' in prompt for prompt in prompts)
-    assert all('Never repeat the same centered straight-on full-front composition' in prompt for prompt in prompts)
+    assert all('do not repeat the same centered straight-on full-front composition across cards' in prompt for prompt in prompts)
     assert all('Never show an exterior exhaust hose, rear vent duct' in prompt for prompt in prompts)
     assert len({prompt.split('Production card role: ', 1)[1].split('. ', 1)[1].split(' Generate a plain', 1)[0]
                 for prompt in prompts}) == 5
