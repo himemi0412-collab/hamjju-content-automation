@@ -177,6 +177,7 @@ class Pipeline:
             estimated_cost_usd=self.s.openai_image_estimated_cost_usd,
             design_language=str(generated.get('design_language') or 'Bento Editorial'),
             design_blueprint=generated.get('design_blueprint'),
+            subject_hint=str(generated.get('title') or ''),
         )
         qa, usage = self.ai.qa(generated, {
             'channel': 'naver_blog',
@@ -227,6 +228,7 @@ class Pipeline:
                 },
                 design_language=str(generated.get('design_language') or 'Bento Editorial'),
                 design_blueprint=generated.get('design_blueprint'),
+                subject_hint=str(generated.get('title') or ''),
             )
             qa, retry_usage = self.ai.qa(generated, {
                 'channel': 'naver_blog',
@@ -556,6 +558,7 @@ class Pipeline:
                         estimated_cost_usd=self.s.openai_image_estimated_cost_usd,
                         design_language=str(generated.get('design_language') or 'Bento Editorial'),
                         design_blueprint=generated.get('design_blueprint'),
+                        subject_hint=str(generated.get('title') or ''),
                     )
                 if len(cards) != 5:
                     raise RuntimeError('Blog card-news render did not produce exactly five images')
@@ -640,6 +643,7 @@ class Pipeline:
                                 },
                                 design_language=str(generated.get('design_language') or 'Bento Editorial'),
                                 design_blueprint=generated.get('design_blueprint'),
+                                subject_hint=str(generated.get('title') or ''),
                             )
                             qa, retry_usage = self.ai.qa(generated, {
                                 'channel': cfg.name, **context,
