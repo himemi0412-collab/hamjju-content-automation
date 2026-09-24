@@ -166,13 +166,6 @@ DRYER_CARD_SCENE_DIRECTIONS = {
 }
 
 
-def _is_stock_photo_rejection(revision_note: str) -> bool:
-    note = revision_note.casefold()
-    return any(term in note for term in (
-        '스톡 광고', '광고 사진', '광고용 제품컷', '과도하게 매끈한', 'stock photo', 'stock-ad',
-    ))
-
-
 def _scene_prompt(
     card: dict[str, Any], index: int, revision_note: str = '', *,
     design_language: str = 'Bento Editorial', design_blueprint: dict[str, Any] | None = None,
@@ -191,36 +184,18 @@ def _scene_prompt(
     # The cover explorer owns technology/UI motifs. Production backgrounds use
     # only the factual card role and real-life subject; typography is added later.
     role_key = ROLE_KEYS[index - 1]
-    illustration_retry = _is_stock_photo_rejection(revision_note)
-    scene_medium = (
-        'Create one square, full-bleed, hand-inked editorial illustration with matte colored-pencil fills for a Korean home-appliance help article. Use confident but slightly irregular human-drawn contours and restrained cool pastel shading; depict real objects accurately without photographic rendering, glossy 3D, stock-photo staging, or a finished card design.'
-        if illustration_retry else
-        'Create one square full-bleed documentary photograph for a Korean home-appliance help article. This generation is the photograph layer only, never a finished card design.'
-    )
-    lived_in_direction = (
-        'Depict a modest Korean laundry corner as a human-drawn editorial scene: small asymmetries, natural object placement, a softly imperfect folded cloth, restrained line variation, and one or two relevant everyday objects. Keep it clean and believable, not a showroom and not a cute mascot scene.'
-        if illustration_retry else
-        'Show a believable, modest, actually used Korean home interior and concrete relevant appliances and actions. Preserve tiny signs of ordinary life: slight surface wear, faint fingerprints, an imperfectly folded cloth, small natural dust, mildly uneven spacing and one or two relevant background objects. Keep them subtle and physically plausible, never dirty for effect. Use ordinary window light or ceiling light with realistic falloff, not studio lighting. Do not use documents, packaging, certificates, reports, phone screens, control-panel text or labels as visual evidence; all readable information will be typeset locally later.'
-    )
     parts = [
-        scene_medium,
+        'Create one square full-bleed documentary photograph for a Korean home-appliance help article. This generation is the photograph layer only, never a finished card design.',
         f'Card role: {ROLES[index - 1]}. Topic: {card.get("headline", "")}.',
         f'Explanation: {card.get("copy", "")}. Visible situation and objects: {item_text}.',
         _subject_lock(card, index, subject_hint),
-        lived_in_direction,
+        'Show a believable, modest, actually used Korean home interior and concrete relevant appliances and actions. Preserve tiny signs of ordinary life: slight surface wear, faint fingerprints, an imperfectly folded cloth, small natural dust, mildly uneven spacing and one or two relevant background objects. Keep them subtle and physically plausible, never dirty for effect. Use ordinary window light or ceiling light with realistic falloff, not studio lighting. Do not use documents, packaging, certificates, reports, phone screens, control-panel text or labels as visual evidence; all readable information will be typeset locally later.',
         'The image must explain the situation visually, with a clear subject and natural scale.',
         f'Production card role: {role_key}. {ROLE_SCENE_DIRECTIONS[index - 1]}',
-        (
-            'Generate only the requested hand-drawn editorial illustration, with no photographic surface rendering. Do not design a card, layout, poster, checklist, comparison board or infographic inside the illustration. '
-            'Do not place paper notes, printed cards, colored panels, frames, captions or readable marks anywhere in the scene. '
-            'The set typography and editorial layout are added later by deterministic local code. '
-            'Use a restrained human-edited magazine illustration style, never generic clip-art, glossy vector icons, toy-like 3D or AI stock art.'
-            if illustration_retry else
-            'Generate a plain real-life photograph only. Do not design a card, layout, poster, checklist, comparison board or infographic inside the photograph. '
-            'Do not place paper notes, printed cards, colored panels, frames, captions or readable marks anywhere in the scene. '
-            'All pastel surfaces, typography and editorial layout are added later by deterministic local code. '
-            'Do not copy cover-exploration motifs, software screens, code, terminals, chat windows or AI branding.'
-        ),
+        'Generate a plain real-life photograph only. Do not design a card, layout, poster, checklist, comparison board or infographic inside the photograph. '
+        'Do not place paper notes, printed cards, colored panels, frames, captions or readable marks anywhere in the scene. '
+        'All pastel surfaces, typography and editorial layout are added later by deterministic local code. '
+        'Do not copy cover-exploration motifs, software screens, code, terminals, chat windows or AI branding.',
         'Use neutral daylight with accurate whites and cool natural shadows. No beige, yellow cream, amber light or warm sepia cast.',
         'The concrete scene and objects must occupy roughly 70 to 82 percent of the frame and remain the first thing seen. '
         'Reserve low-detail space only where this card role explicitly requests it; keep every other area visually complete. '
@@ -232,8 +207,6 @@ def _scene_prompt(
         _subject_lock(card, index, subject_hint),
         'FINAL CHECK: output only the requested real photograph, with zero text, zero printed material and zero graphic-design layers.',
         f'This scene must be capable of passing the strict AI-likeness gate below {ai_gate}/100 after local Korean typesetting.',
-        *(['MEDIUM CHANGE REQUIRED: the previous photo attempts were rejected as stock advertising. Keep this entire five-card retry set in the specified hand-drawn editorial illustration medium; do not fall back to product photography. Preserve factual dryer details and make the exact card action unmistakable.']
-          if illustration_retry else []),
         'Apply the following canonical production prompt as binding art direction. '
         'Where it discusses typography, reserve space only; never draw text inside the generated scene:\n'
         + canonical_prompt,
