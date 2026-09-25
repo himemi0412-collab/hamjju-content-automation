@@ -372,9 +372,9 @@ jobs:
           test -n "${{ inputs.page_id }}"
           python -m app.main page "${{ inputs.channel }}" "${{ inputs.page_id }}" --retry-revision
 
-      - name: Verify both YouTube OAuth channel identities without uploading
+      - name: Verify selected YouTube OAuth channel identity without uploading
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'verify_youtube_auth' }}
-        run: python -m app.main verify-youtube-auth
+        run: python -m app.main verify-youtube-auth "${{ inputs.channel }}"
 
       - name: Repair and reattach one existing review video
         if: ${{ inputs.mode == 'repair_video' && inputs.channel != 'naver_blog' }}

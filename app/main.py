@@ -565,8 +565,8 @@ def setup_youtube_auth(channel: str):
 
 
 @app.command('verify-youtube-auth')
-def verify_youtube_auth():
-    """Verify both OAuth tokens against their fixed channel IDs without uploading."""
+def verify_youtube_auth(channel: str | None = typer.Argument(None)):
+    """Verify one selected channel, or both OAuth tokens, without uploading."""
     s = Settings()
     channels = {
         'ppojjugi_shorts': (
@@ -578,6 +578,10 @@ def verify_youtube_auth():
             s.youtube_japan_channel_id,
         ),
     }
+    if channel is not None:
+        if channel not in channels:
+            raise typer.BadParameter('channel must be ppojjugi_shorts or japan_shorts')
+        channels = {channel: channels[channel]}
     results = []
     for channel_key, (token_file, expected_channel_id) in channels.items():
         uploader = YouTubePrivateUploader(s.youtube_client_secrets_file, token_file)
