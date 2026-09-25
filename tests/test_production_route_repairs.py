@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from app.blog_reference import VISUAL_FAMILIES, validate_generated_reference_contract
+from app.card_design import apply_named_design_contract, validate_named_design_contract
 from app.pipeline import _card_numbers_from_qa_issue
 from app.photographic_cards import (
     _scene_prompt, _subject_lock, load_production_style_bundle, production_design_language,
@@ -52,9 +53,56 @@ def test_shorts_prompts_supply_pre_media_voice_and_timeline_contracts():
 
 
 def test_cover_exploration_technology_styles_are_blocked_from_production():
-    for name in ('Retro Tech UI', 'Screenshot Editorial', 'Prompt Playground', 'Terminal Noir'):
+    for name in ('Retro Tech UI', 'Screenshot Editorial', 'Prompt Playground', 'Terminal Noir', 'Technical Manual'):
         assert production_design_language(name) == 'Bento Editorial'
     assert production_design_language('Japanese Editorial') == 'Japanese Editorial'
+
+
+def test_technical_manual_model_choice_binds_to_photographic_production_contract():
+    # Run #404: a diagram blueprint reached a renderer that makes photographs,
+    # so the independent card reviewer rejected the same images for missing diagrams.
+    generated = apply_named_design_contract({
+        'design_language': production_design_language('Technical Manual'),
+        'visual_family': 'photographic_lifestyle',
+    })
+    validate_named_design_contract(generated, required=True)
+    assert generated['design_language'] == 'Bento Editorial'
+    assert '도면' not in str(generated['design_direction'])
+
+
+def test_dryer_inspection_scene_does_not_suggest_disassembly_or_wet_parts():
+    # Run #406: rejected cards 2-4 showed detached wet components despite
+    # the manuscript explicitly requiring visible, non-invasive inspection.
+    for index in (2, 3, 4):
+        scene = _scene_prompt({
+            'headline': '건조기 냄새 점검',
+            'copy': '분해하지 말고 보이는 범위부터 확인',
+            'items': [{'label': '필터 장착부', 'detail': '잔여 먼지 확인'}],
+        }, index)
+        assert 'intact front-loading tumble clothes dryer' in scene
+        assert 'non-invasive inspection' in scene
+        assert 'never depict disassembly, detached trays or tanks on the floor' in scene
+        assert 'wet parts or water droplets' in scene
+
+
+def test_dryer_article_title_controls_all_five_card_subjects_even_when_tank_is_named():
+    # Run #409: cards 2-4 said "물통" but omitted "건조기"; the old keyword
+    # order selected the dehumidifier prompt and cards 1/5 had no subject lock.
+    cards = [
+        {'headline': '필터 청소해도 냄새?', 'copy': '필터보다 먼저 볼 곳이 있어요', 'items': []},
+        {'headline': '냄새 확인 순서', 'copy': '필터 표면에서 내부와 주변으로',
+         'items': [{'label': '물통·통 내부', 'detail': '물통과 드럼 안쪽 확인'}]},
+        {'headline': '필터 문제일까, 공간 문제일까', 'copy': '같은 냄새라도 확인할 곳은 달라요',
+         'items': [{'label': '주변·내부 공간', 'detail': '물통·드럼·뒤쪽 통풍'}]},
+        {'headline': '오늘 바로 확인할 것', 'copy': '분해하지 말고 보이는 범위부터',
+         'items': [{'label': '물통과 드럼 확인', 'detail': '보이는 범위 확인'}]},
+        {'headline': '계속 나면 이렇게 판단해요', 'copy': '증상을 봐요', 'items': []},
+    ]
+    for index, card in enumerate(cards, 1):
+        scene = _scene_prompt(card, index, subject_hint='건조기에서 먼지 냄새가 날 때?')
+        assert 'intact front-loading tumble clothes dryer' in scene
+        assert 'removable transparent water tank pulled out' not in scene
+        assert 'small natural dust or water traces' not in scene
 
 
 def test_production_scene_prompt_uses_real_laptop_and_rejects_ai_ui_motifs():

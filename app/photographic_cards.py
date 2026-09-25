@@ -22,6 +22,7 @@ ROLE_SCENE_DIRECTIONS = (
 )
 EXPLORATION_ONLY_DESIGN_LANGUAGES = frozenset({
     'Retro Tech UI', 'Screenshot Editorial', 'Prompt Playground', 'Terminal Noir',
+    'Technical Manual',
 })
 
 
@@ -91,7 +92,16 @@ def _wrap_to_width(draw: ImageDraw.ImageDraw, value: str,
     return '\n'.join(lines)
 
 
-def _subject_lock(card: dict[str, Any], index: int | None = None) -> str:
+DRYER_SUBJECT_LOCK = (
+    'Show a recognizable, intact front-loading tumble clothes dryer with a circular door and its lint filter at the door or lower opening. '
+    'Keep the dryer itself visible when showing the filter, drum or ventilation space. '
+    'Show only non-invasive inspection of visible areas: never depict disassembly, detached trays or tanks on the floor, '
+    'washing components, wet parts or water droplets unless the card explicitly instructs that exact safe action. '
+    'Never show an air purifier, dehumidifier or water tank appliance.'
+)
+
+
+def _subject_lock(card: dict[str, Any], index: int | None = None, subject_hint: str = '') -> str:
     items = card.get('items') or []
     source = ' '.join([
         str(card.get('headline') or ''), str(card.get('copy') or ''),
@@ -103,6 +113,8 @@ def _subject_lock(card: dict[str, Any], index: int | None = None) -> str:
     # The article topic wins over incidental words in individual card items.
     # In particular, a dishwasher water-tank comparison must not become a
     # dehumidifier or an air-conditioner drain-hose photograph.
+    if '건조기' in subject_hint or '건조기' in source:
+        return DRYER_SUBJECT_LOCK
     if '식기세척기' in source:
         return ('Show an unmistakable compact kitchen dishwasher with its open '
                 'dish rack and plates. For water-tank supply, show the dishwasher '
@@ -148,7 +160,6 @@ def _subject_lock(card: dict[str, Any], index: int | None = None) -> str:
         (('배수호스', '실외기'), 'Show the exact home air-conditioner inspection subject named in the card: a wall-mounted indoor air conditioner connected to a real flexible drain hose, or an outdoor condenser unit with open airflow and no cover. When the card is about the drain hose, make the hose, bend, outlet and water path the main subject. Never replace them with a ruler, document, generic appliance or abstract icon.'),
         (('제습기', '물통'), 'Show a recognizable floor-standing home dehumidifier with its removable transparent water tank pulled out, remaining water droplets, the tank lid and a clean cloth or drying rack. Make emptying and fully air-drying the tank visually obvious. Never substitute an air purifier, humidifier, refrigerator, document or generic white appliance.'),
         (('세탁기',), 'Show a front-loading laundry washing machine with a circular drum door and the pull-out detergent drawer at the upper front. Never show dishwasher racks, spray arms or a kitchen dishwasher.'),
-        (('건조기',), 'Show a front-loading tumble clothes dryer with a circular door and a removable lint filter at the door or lower opening. Never show an air purifier, dehumidifier or water tank appliance.'),
         (('와이파이', '2.4GHz'), 'Show only a recognizable wireless router with antennas, a smartphone or laptop, walls and signal-distance context. Never add household cleaning appliances, filters, brushes or vacuum parts.'),
         (('로봇청소기',), 'Show a low round robot vacuum and its dock, dust bin or clean-water tank. Never substitute an air purifier or dehumidifier.'),
         (('공기청정기',), 'Show a floor-standing air purifier with a large removable air filter and intake grille. Explain every point only through the physical purifier, filter condition, airflow, placement, and an inspecting hand. Never show a dehumidifier water tank, product packaging, printed report, test certificate, safety document, smartphone screen, control-panel text, label, model number, badge, seal, or any object that could contain writing.'),
@@ -165,6 +176,7 @@ def _subject_lock(card: dict[str, Any], index: int | None = None) -> str:
 def _scene_prompt(
     card: dict[str, Any], index: int, revision_note: str = '', *,
     design_language: str = 'Bento Editorial', design_blueprint: dict[str, Any] | None = None,
+    subject_hint: str = '',
 ) -> str:
     items = card.get('items') or []
     item_text = '; '.join(
@@ -183,8 +195,8 @@ def _scene_prompt(
         'Create one square full-bleed documentary photograph for a Korean home-appliance help article. This generation is the photograph layer only, never a finished card design.',
         f'Card role: {ROLES[index - 1]}. Topic: {card.get("headline", "")}.',
         f'Explanation: {card.get("copy", "")}. Visible situation and objects: {item_text}.',
-        _subject_lock(card, index),
-        'Show a believable, modest, actually used Korean home interior and concrete relevant appliances and actions. Preserve tiny signs of ordinary life: slight surface wear, faint fingerprints, an imperfectly folded cloth, small natural dust or water traces, mildly uneven spacing and one or two relevant background objects. Keep them subtle and physically plausible, never dirty for effect. Use ordinary window light or ceiling light with realistic falloff, not studio lighting. Do not use documents, packaging, certificates, reports, phone screens, control-panel text or labels as visual evidence; all readable information will be typeset locally later.',
+        _subject_lock(card, index, subject_hint),
+        'Show a believable, modest, actually used Korean home interior and concrete relevant appliances and actions. Preserve tiny signs of ordinary life: slight surface wear, faint fingerprints, an imperfectly folded cloth, small natural dust, mildly uneven spacing and one or two relevant background objects. Keep them subtle and physically plausible, never dirty for effect. Use ordinary window light or ceiling light with realistic falloff, not studio lighting. Do not use documents, packaging, certificates, reports, phone screens, control-panel text or labels as visual evidence; all readable information will be typeset locally later.',
         'The image must explain the situation visually, with a clear subject and natural scale.',
         f'Production card role: {role_key}. {ROLE_SCENE_DIRECTIONS[index - 1]}',
         'Generate a plain real-life photograph only. Do not design a card, layout, poster, checklist, comparison board or infographic inside the photograph. '
@@ -199,7 +211,7 @@ def _scene_prompt(
         'ABSOLUTELY NO text, letters, numbers, logos, labels, UI glyphs, watermark, yellow cast, beige cream, sepia, collage, source code, terminal, Codex, ChatGPT, AI branding, floating icons, generic infographic nodes, repeated template boxes, circles, arrows, badges, check marks, crosses, decorative labels, decorative waves, curved swooshes, ornamental underlines, glossy product-ad lighting, perfect showroom cleanliness, cinematic bokeh or synthetic depth of field.',
         f'Canonical v3 human-edit signals: {human_signals}.',
         f'Canonical v3 forbidden signals: {forbidden}.',
-        _subject_lock(card, index),
+        _subject_lock(card, index, subject_hint),
         'FINAL CHECK: output only the requested real photograph, with zero text, zero printed material and zero graphic-design layers.',
         f'This scene must be capable of passing the strict AI-likeness gate below {ai_gate}/100 after local Korean typesetting.',
         'Apply the following canonical production prompt as binding art direction. '
@@ -228,6 +240,7 @@ def generate_and_typeset_blog_cards(
     revision_notes: dict[int, str] | None = None,
     design_language: str = 'Bento Editorial',
     design_blueprint: dict[str, Any] | None = None,
+    subject_hint: str = '',
 ) -> list[Path]:
     if len(cards) != 5:
         raise ValueError('Blog card set must contain exactly five cards')
@@ -264,6 +277,7 @@ def generate_and_typeset_blog_cards(
             prompt=_scene_prompt(
                 card, index, revision_notes.get(index, ''),
                 design_language=design_language, design_blueprint=blueprint,
+                subject_hint=subject_hint,
             ),
             size='1024x1024',
             quality=quality,

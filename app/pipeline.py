@@ -177,6 +177,7 @@ class Pipeline:
             estimated_cost_usd=self.s.openai_image_estimated_cost_usd,
             design_language=str(generated.get('design_language') or 'Bento Editorial'),
             design_blueprint=generated.get('design_blueprint'),
+            subject_hint=str(generated.get('title') or ''),
         )
         qa, usage = self.ai.qa(generated, {
             'channel': 'naver_blog',
@@ -227,6 +228,7 @@ class Pipeline:
                 },
                 design_language=str(generated.get('design_language') or 'Bento Editorial'),
                 design_blueprint=generated.get('design_blueprint'),
+                subject_hint=str(generated.get('title') or ''),
             )
             qa, retry_usage = self.ai.qa(generated, {
                 'channel': 'naver_blog',
@@ -309,12 +311,14 @@ class Pipeline:
     def process_page(
         self, cfg: ChannelConfig, page_stub: dict[str, Any], dry_run: bool = False,
         resume_manifest: Path | None = None, reviewed_manifest: Path | None = None,
+        regenerate_failed_blog_cards: bool = False,
     ) -> dict[str, Any]:
         # Read/claim failures belong to this item, not to every remaining item.
         try:
             result = self._process_page(
                 cfg, page_stub, dry_run=dry_run,
                 resume_manifest=resume_manifest, reviewed_manifest=reviewed_manifest,
+                regenerate_failed_blog_cards=regenerate_failed_blog_cards,
             )
         except Exception as exc:
             result = {'page_id': page_stub.get('id'), 'status': 'failed', 'error': repr(exc)}
@@ -323,6 +327,7 @@ class Pipeline:
     def _process_page(
         self, cfg: ChannelConfig, page_stub: dict[str, Any], dry_run: bool = False,
         resume_manifest: Path | None = None, reviewed_manifest: Path | None = None,
+        regenerate_failed_blog_cards: bool = False,
     ) -> dict[str, Any]:
         page_id = page_stub['id']
         page = self.notion.retrieve_page(page_id)
@@ -359,12 +364,18 @@ class Pipeline:
         prior_card_receipt = None
         prior_reviewed_cards: list[Path] = []
         prior_files = page.get('properties', {}).get('생성 이미지', {}).get('files', [])
+        if regenerate_failed_blog_cards and (resume_manifest is None or reviewed_manifest is not None or dry_run):
+            raise ValueError('Failed-card recovery requires exactly one source manifest and a production run')
         if resume_manifest is not None:
             previous = json.loads(resume_manifest.read_text(encoding='utf-8'))
             if previous.get('page_id') != page_id or previous.get('channel') != 'naver_blog' or cfg.name != 'naver_blog':
                 raise ValueError('Resume manifest does not match the exact blog page')
             if not previous.get('generated') or not previous.get('qa'):
                 raise ValueError('Resume manifest is missing the original manuscript or review')
+            if regenerate_failed_blog_cards:
+                if previous.get('manuscript_sha256') != manuscript_hash(previous['generated']):
+                    raise RuntimeError('SOURCE_MANUSCRIPT_HASH_MISMATCH')
+                self._check_unattached_failed_blog(page_id, previous, cfg.revision_status)
             reviewed_previous = previous
             reviewed_root = resume_manifest.parent
             if reviewed_manifest is not None:
@@ -375,7 +386,8 @@ class Pipeline:
                 if manuscript_hash(reviewed_previous.get('generated') or {}) != manuscript_hash(previous['generated']):
                     raise RuntimeError('Reviewed manuscript is not the same version as the current recovery source')
                 reviewed_root = reviewed_manifest.parent
-            self._match_prior_blog_blocks(page_id, previous)
+            if not regenerate_failed_blog_cards:
+                self._match_prior_blog_blocks(page_id, previous)
             expected_names = [Path(p).name for p in previous.get('media', {}).get('cards', [])]
             source_cards = [resume_manifest.parent / 'cards' / name for name in expected_names]
             if any(not path.is_file() for path in source_cards):
@@ -391,7 +403,10 @@ class Pipeline:
                 for source, reviewed in zip(source_cards, prior_reviewed_cards)
             ):
                 raise RuntimeError('Reviewed card bytes differ from the current recovery source')
-            if [f.get('name') for f in prior_files] != expected_names:
+            if regenerate_failed_blog_cards:
+                if len(expected_names) != 5 or prior_files:
+                    raise RuntimeError('MANUAL_EDIT_CONFLICT: failed-card source must have five artifact cards and no attached cards')
+            elif [f.get('name') for f in prior_files] != expected_names:
                 # An upload may have completed before the body replacement failed.
                 # Reconcile only a reviewed receipt bound to this exact manuscript,
                 # checking downloaded bytes, never filenames alone.
@@ -519,7 +534,7 @@ class Pipeline:
                 card_news = generated.get('card_news') or []
                 if len(card_news) != 5:
                     raise RuntimeError('Blog output did not contain exactly five card-news items')
-                if previous and source_cards:
+                if previous and source_cards and not regenerate_failed_blog_cards:
                     # Resume means re-reviewing the exact approved artifact, not
                     # paying for five new stochastic images and then comparing
                     # those new bytes with the old set (which can never match).
@@ -543,6 +558,7 @@ class Pipeline:
                         estimated_cost_usd=self.s.openai_image_estimated_cost_usd,
                         design_language=str(generated.get('design_language') or 'Bento Editorial'),
                         design_blueprint=generated.get('design_blueprint'),
+                        subject_hint=str(generated.get('title') or ''),
                     )
                 if len(cards) != 5:
                     raise RuntimeError('Blog card-news render did not produce exactly five images')
@@ -627,6 +643,7 @@ class Pipeline:
                                 },
                                 design_language=str(generated.get('design_language') or 'Bento Editorial'),
                                 design_blueprint=generated.get('design_blueprint'),
+                                subject_hint=str(generated.get('title') or ''),
                             )
                             qa, retry_usage = self.ai.qa(generated, {
                                 'channel': cfg.name, **context,
@@ -665,7 +682,11 @@ class Pipeline:
                 if passed:
                     try:
                         if previous:
-                            self._match_prior_blog_blocks(page_id, previous)
+                            if regenerate_failed_blog_cards:
+                                self._check_unattached_failed_blog(page_id, previous, cfg.revision_status,
+                                                                   processing_status=cfg.processing_status)
+                            else:
+                                self._match_prior_blog_blocks(page_id, previous)
                             latest_files = self.notion.retrieve_page(page_id).get('properties', {}).get('생성 이미지', {}).get('files', [])
                             if prior_card_receipt is not None:
                                 match_attached_cards(latest_files, prior_card_receipt)
@@ -749,10 +770,12 @@ class Pipeline:
             blocks = result_blocks(cfg.name, generated, qa, naver_handoff=naver_handoff) if passed else []
             if passed:
                 if previous:
-                    prior_blocks = self._match_prior_blog_blocks(page_id, previous)
+                    prior_blocks = ([] if regenerate_failed_blog_cards else
+                                    self._match_prior_blog_blocks(page_id, previous))
                     # Only replace a byte-equivalent previous automation section.
                     # If a person edited the page, stop instead of overwriting it.
-                    self.notion.archive_blocks([block['id'] for block in prior_blocks])
+                    if prior_blocks:
+                        self.notion.archive_blocks([block['id'] for block in prior_blocks])
                 self.notion.append_blocks(page_id, blocks)
             manifest.pop('resume_previous_output', None)
             save_manifest(job_dir / 'manifest.json', manifest)
@@ -878,6 +901,30 @@ class Pipeline:
                 'youtube_url_verified': bool(media.get('youtube_url')),
                 'youtube_video_verified': bool(require_youtube and media.get('youtube_url')),
                 'verified_at': datetime.now(timezone.utc).isoformat()}
+
+    def _check_unattached_failed_blog(
+        self, page_id: str, previous: dict[str, Any], revision_status: str,
+        *, processing_status: str | None = None,
+    ) -> None:
+        """Fail closed unless the rejected artifact has left this exact page untouched."""
+        media = previous.get('media') or {}
+        if (previous.get('qa', {}).get('pass') is not False
+                or media.get('rendered_card_qa_pass') is not False
+                or media.get('notion_cards_attached') is not False
+                or previous.get('output_verified') is not False):
+            raise RuntimeError('FAILED_BLOG_ARTIFACT_NOT_UNATTACHED')
+        page = self.notion.retrieve_page(page_id)
+        props = page.get('properties') or {}
+        status = property_value(props.get('상태') or {})
+        allowed_statuses = {revision_status}
+        if processing_status:
+            allowed_statuses.add(processing_status)
+        if (status not in allowed_statuses
+                or extract_page_title(page) != previous['generated'].get('title')
+                or property_value(props.get('네이버 임시저장 주소') or {})
+                or (props.get('생성 이미지') or {}).get('files')
+                or self.notion.read_page_blocks(page_id)):
+            raise RuntimeError('MANUAL_EDIT_CONFLICT: failed blog page changed or contains existing output')
 
     def _match_prior_blog_blocks(self, page_id: str, previous: dict[str, Any]) -> list[dict[str, Any]]:
         observed = self.notion.read_page_blocks(page_id)
