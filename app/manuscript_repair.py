@@ -1,13 +1,15 @@
 """Apply reviewed, source-hash-bound text corrections before a fresh QA."""
 from __future__ import annotations
-import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
+from .content_fingerprint import canonical_content_hash
+
 
 def manuscript_hash(generated: dict) -> str:
-    return hashlib.sha256(json.dumps(generated, ensure_ascii=False, sort_keys=True).encode('utf-8')).hexdigest()
+    """Compatibility name for the shared canonical content identity."""
+    return canonical_content_hash(generated)
 
 
 def apply_reviewed_corrections(generated: dict, page_id: str, path: Path) -> dict:

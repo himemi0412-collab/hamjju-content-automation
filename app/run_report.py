@@ -10,10 +10,12 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from .manuscript_repair import manuscript_hash
+from .naver_completion import confirm_naver_results
 
 
 def compact_result(channel: str, result: dict) -> dict:
     media = result.get('media') or {}
+    video_path = Path(str(media.get('video') or ''))
     return {
         'channel': result.get('channel') or channel,
         'page_id': result.get('page_id'),
@@ -27,6 +29,10 @@ def compact_result(channel: str, result: dict) -> dict:
         'cards_attached': media.get('notion_cards_attached') is True,
         'video_attached': media.get('notion_video_attached') is True,
         'naver_draft_verified': result.get('naver_draft_verified') is True,
+        'naver_draft_state': result.get('naver_draft_state') or 'unconfirmed',
+        'naver_draft_reason': result.get('naver_draft_reason') or '',
+        'video_file_exists': bool(media.get('video')) and video_path.is_file(),
+        'video_qa_pass': (media.get('verification') or {}).get('pass') is True,
     }
 
 
@@ -37,6 +43,42 @@ def reviewed_output(result: dict) -> bool:
         and not result['budget_blocked']
         and result['status'] not in {'failed', 'skipped', '수정 필요', 'unknown'}
     )
+
+
+def business_complete(channel: str, result: dict) -> bool:
+    """Count only the channel's actual deliverable, never the Actions conclusion."""
+    if not reviewed_output(result):
+        return False
+    if channel == 'naver_blog':
+        return result.get('card_count') == 5 and result.get('naver_draft_verified') is True
+    if channel in {'ppojjugi_shorts', 'japan_shorts'}:
+        return result.get('video_file_exists') is True and result.get('video_qa_pass') is True
+    return False
+
+
+def business_failed(channel: str, result: dict) -> bool:
+    if result.get('status') in {'failed', '수정 필요'} or result.get('qa_pass') is False:
+        return True
+    if channel == 'naver_blog':
+        return result.get('naver_draft_verified') is not True
+    return channel in {'ppojjugi_shorts', 'japan_shorts'} and (
+        result.get('video_file_exists') is not True or result.get('video_qa_pass') is not True
+    )
+
+
+def failure_reason(channel: str, result: dict) -> str:
+    if result.get('qa_pass') is False:
+        return '콘텐츠 QA 실패'
+    if result.get('status') in {'failed', '수정 필요'}:
+        return '네이버 임시저장 확인 실패' if channel == 'naver_blog' else '제작 단계 실패'
+    if channel == 'naver_blog' and result.get('naver_draft_verified') is not True:
+        return result.get('naver_draft_reason') or '네이버 임시저장 확인 미완료'
+    if channel in {'ppojjugi_shorts', 'japan_shorts'}:
+        if result.get('video_file_exists') is not True:
+            return 'MP4 파일 없음'
+        if result.get('video_qa_pass') is not True:
+            return 'MP4 QA 실패'
+    return ''
 
 
 def record_results(output_dir: Path, channel: str, results: list[dict], expected: int) -> Path:
@@ -272,7 +314,7 @@ def merge_resumed_blog_batch(
         'recovery': {'source_run_id': original_run_id, 'previous_run_id': source_run_id,
                      'run_id': run_id, 'page_id': page_id, 'manuscript_chain': chain,
                      'batch_date_kst': source_time.astimezone(timezone(timedelta(hours=9))).date().isoformat(),
-                     'current_reviewed_outputs': int(reviewed_output(resumed)), 'current_expected': 1},
+                     'current_reviewed_outputs': int(business_complete('naver_blog', resumed)), 'current_expected': 1},
     }
 
 
@@ -281,19 +323,22 @@ def markdown_report(data: dict, expected: dict[str, int], run_status: str, run_u
     rows = [x for batch in batches for x in batch.get('results', [])]
     by_channel = {name: [x for x in rows if x['channel'] == name] for name in expected}
     wanted = sum(expected.values())
-    reviewed = sum(reviewed_output(x) for x in rows)
-    complete = run_status == 'success' and all(
-        sum(reviewed_output(x) for x in by_channel[name]) >= count for name, count in expected.items()
+    completed = sum(business_complete(x['channel'], x) for x in rows)
+    failures = sum(business_failed(x['channel'], x) for x in rows)
+    failures += sum(max(count - len(by_channel[name]), 0) for name, count in expected.items())
+    complete = bool(expected) and all(
+        sum(business_complete(name, row) for row in by_channel[name]) >= count
+        for name, count in expected.items()
     )
-    state = '✅ 검수한 Notion 결과 준비' if complete else '⚠️ 제작 미완료 · 확인 필요'
+    state = '✅ 실제 결과 확인 완료' if complete else '⚠️ 완료 조건 미충족 · 확인 필요'
     lines = [
-        '## 햄쮸 자동화 운영 상태', '', f'- 현재 상태: **{state}**',
-        f'- 검수 통과·Notion 반영: **{reviewed}/{wanted}편**',
-        f'- 실제 처리 기록: **{len(rows)}편**',
-        f'- 실행 상태: **{run_status}**', f'- 실행 상세: {run_url}',
+        '## 오늘 자동화 상태', '', f'- 전체: **{state}**',
+        f'- 워크플로 실행: **{run_status}** (업무 완료와 별도)',
+        f'- 실패: **{failures}건**',
+        f'- 상세 로그: {run_url}',
         f'- 확인 시각: {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}', '',
-        '| 채널 | 목표 | 처리 | 검수 통과·Notion 반영 |',
-        '| --- | ---: | ---: | ---: |',
+        '| 채널 | 완료 | 목표 | 결과 기준 |',
+        '| --- | ---: | ---: | --- |',
     ]
     recovery = data.get('recovery')
     if recovery:
@@ -301,7 +346,7 @@ def markdown_report(data: dict, expected: dict[str, int], run_status: str, run_u
         today_kst = datetime.now(timezone(timedelta(hours=9))).date().isoformat()
         batch_label = '오늘' if recovery['batch_date_kst'] == today_kst else recovery['batch_date_kst']
         lines[3:3] = [
-            f"- {batch_label} 블로그 합계: **{reviewed}/{wanted}편** · 이번 재개: **{recovery['current_reviewed_outputs']}/1편**",
+            f"- {batch_label} 블로그 최종 확인: **{completed}/{wanted}편** · 이번 재개: **{recovery['current_reviewed_outputs']}/1편**",
             f'- 원본 예약 실행: {source_url}',
             '- 원본 실행의 실패 기록은 유지하며, 동일 원고의 재검수 결과만 반영했습니다.',
         ]
@@ -310,21 +355,26 @@ def markdown_report(data: dict, expected: dict[str, int], run_status: str, run_u
             lines.insert(6, f'- 직전 재개 실행: {previous_url}')
     for name, count in expected.items():
         items = by_channel[name]
-        lines.append(f'| {name} | {count} | {len(items)} | {sum(reviewed_output(x) for x in items)} |')
-    lines += ['', '| 제목 | 검수 | Notion 반영 | 이미지·영상 | 재열람 검증 |', '| --- | --- | --- | --- | --- |']
+        done = sum(business_complete(name, x) for x in items)
+        criterion = '네이버 임시저장 목록 재확인' if name == 'naver_blog' else 'MP4 파일 + QA 통과'
+        lines.append(f'| {name} | {done} | {count} | {criterion} |')
+    lines += ['', '| 항목 | QA | 결과 확인 | 상태 |', '| --- | --- | --- | --- |']
     for row in rows:
         title = str(row['title']).replace('|', '\\|').replace('\n', ' ')
         qa = '통과' if row['qa_pass'] else '미통과·미확인'
-        saved = '확인' if row['notion_page_updated'] else '미확인'
-        media = f"카드 {row['card_count']}장 첨부 확인" if row['cards_attached'] else ('영상 첨부 확인' if row['video_attached'] else '미확인')
-        lines.append(f"| {title} | {qa} | {saved} ({row['status']}) | {media} | {'확인' if row['output_verified'] else '미확인'} |")
+        if row['channel'] == 'naver_blog':
+            result_check = '임시저장 확인' if row['naver_draft_verified'] else '임시저장 확인 대기'
+        else:
+            result_check = 'MP4·QA 확인' if business_complete(row['channel'], row) else 'MP4 또는 QA 확인 실패'
+        row_status = ('완료' if business_complete(row['channel'], row) else
+                      '실패' if business_failed(row['channel'], row) else '대기')
+        lines.append(f'| {title} | {qa} | {result_check} | {row_status} |')
+        if row_status == '실패':
+            lines.append(f"| 실패 원인 |  | {failure_reason(row['channel'], row)} |  |")
     if not rows:
         lines += ['', '**제작 결과가 없습니다. 실행 성공 표시만으로 원고 제작 완료를 판단하지 않습니다.**']
-    naver_verified = sum(x['naver_draft_verified'] for x in rows)
     lines += [
-        '', f'- 네이버 임시저장·재열람 확인: **{naver_verified}편**. Notion 준비와 네이버 저장은 별도입니다.',
-        '- 자동 실행: 매일 10:00 KST 블로그 / 21:00 KST 쇼츠',
-        '- 네이버 공개·예약 발행: 안 함', '- YouTube 자동 업로드: 채널 확인 후 비공개(private)만 켜짐',
+        '', '- 네이버 공개·예약 발행: 안 함', '- YouTube 자동 업로드: 안 함',
         f'- OpenAI 내부 월 한도: ${os.getenv("OPENAI_MONTHLY_BUDGET_USD", "미설정")}',
         '- 코드 변경 검사와 읽기 전용 점검은 이 제작 상태판을 덮어쓰지 않습니다.', '',
     ]
@@ -353,11 +403,31 @@ def main() -> None:
         except (ValueError, OSError, KeyError, TypeError, AttributeError):
             # Keep the current run truthful without guessing at prior completions.
             aggregate_warning = True
+    confirmation = {'checked': False, 'results': []}
+    if expected.get('naver_blog') and data.get('batches'):
+        data = confirm_naver_results(data, os.getenv('NOTION_ACCESS_TOKEN', ''))
+        confirmation = {
+            'checked': True,
+            'results': [
+                {
+                    'page_id': row.get('page_id'),
+                    'verified': row.get('naver_draft_verified') is True,
+                    'state': row.get('naver_draft_state') or 'unconfirmed',
+                    'reason': row.get('naver_draft_reason') or '',
+                }
+                for batch in data.get('batches', []) if batch.get('channel') == 'naver_blog'
+                for row in batch.get('results', [])
+            ],
+        }
     text = markdown_report(data, expected, os.getenv('RUN_STATUS', 'unknown'), url)
     if aggregate_warning:
         text += '\n- 원본 배치의 합산 증거가 불완전하여 **오늘 전체 완료 수는 미확인**입니다. 위 수량은 이번 실행만 표시합니다.\n'
     Path('output').mkdir(exist_ok=True)
     Path('output/production-summary.md').write_text(text, encoding='utf-8')
+    if confirmation['checked']:
+        Path('output/naver-verification.json').write_text(
+            json.dumps(confirmation, ensure_ascii=False, indent=2), encoding='utf-8',
+        )
     if os.getenv('GITHUB_STEP_SUMMARY'):
         with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a', encoding='utf-8') as summary:
             summary.write(text)

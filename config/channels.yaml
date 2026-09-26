@@ -29,7 +29,6 @@ channels:
     content_kind: "shorts"
     prompt_file: "prompts/ppojjugi.md"
     media_generation: true
-    youtube_privacy: "private"
 
   japan_shorts:
     source: shorts
@@ -41,4 +40,3 @@ channels:
     content_kind: "shorts"
     prompt_file: "prompts/japan_shorts.md"
     media_generation: true
-    youtube_privacy: "private"

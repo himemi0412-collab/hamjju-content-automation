@@ -12,9 +12,9 @@ environments:
       - shorts_video
       - independent_qa
       - notion_handoff
-      - youtube_private_upload
     never:
       - naver_editor
+      - youtube_upload
       - naver_publication
       - youtube_publication
   notion:
@@ -24,9 +24,9 @@ environments:
     never:
       - content_generation
       - platform_publication
-  codex_automation_3:
+  local_browser_worker:
     owns:
-      - naver_private_draft_save
+      - naver_temporary_draft_save
       - naver_draft_reopen_verification
     never:
       - manuscript_rewrite
@@ -41,7 +41,7 @@ environments:
 channels:
   naver_blog:
     producer_owner: github_actions
-    delivery_owner: codex_automation_3
+    delivery_owner: local_browser_worker
     publication_owner: user
     handoff_status: "네이버 저장 요청"
     handoff_marker: READY_FOR_NAVER_DRAFT
@@ -60,31 +60,27 @@ channels:
     producer_owner: github_actions
     delivery_owner: github_actions
     publication_owner: user
-    handoff_status: "비공개 업로드 완료"
-    youtube_privacy: private
+    handoff_status: "검토 대기"
     required_voice: Aoede
     allowed_stages:
       - CLAIMED
       - CONTENT_READY
       - QA_PASS
       - MEDIA_READY
-      - PRIVATE_UPLOAD_VERIFIED
-      - USER_REVIEW
+      - OUTPUT_VERIFIED
       - FAILED
   japan_shorts:
     producer_owner: github_actions
     delivery_owner: github_actions
     publication_owner: user
-    handoff_status: "비공개 업로드 완료"
-    youtube_privacy: private
+    handoff_status: "검토 대기"
     required_voice: Gacrux
     allowed_stages:
       - CLAIMED
       - CONTENT_READY
       - QA_PASS
       - MEDIA_READY
-      - PRIVATE_UPLOAD_VERIFIED
-      - USER_REVIEW
+      - OUTPUT_VERIFIED
       - FAILED
 
 schedules:
@@ -97,10 +93,8 @@ schedules:
       owns: naver_blog_production
     - cron: "0 12 * * *"
       timezone_display: Asia/Seoul 21:00
-      owns: shorts_production_and_private_upload
+      owns: shorts_production
   codex:
-    - id: automation-3
-      owns: naver_private_draft_save_and_reopen_only
     - id: automation
       owns: weekly_keyword_selection_only
     - id: start
@@ -108,4 +102,5 @@ schedules:
 
 release_policy:
   naver_public_or_scheduled: user_explicit_approval_only
+  youtube_upload: disabled
   youtube_public: user_explicit_approval_only

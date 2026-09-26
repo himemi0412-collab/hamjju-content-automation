@@ -13,17 +13,18 @@
 - 중복 문장, AI 상투 표현, 광고성 과장이 심한가.
 - 다른 채널의 설정이 섞였는가.
 - 채널 식별자는 내부 키와 Notion 표시 이름을 함께 사용한다. `ppojjugi_shorts`와 `햄찌 창작 쇼츠`는 같은 채널이고, `japan_shorts`와 `일본 유튜브 쇼츠`도 같은 채널이다. 이 정상 매핑만으로 채널 충돌 또는 다른 채널 설정 혼입으로 판정하지 않는다. 실제 대본·등장인물·화면 구성·언어가 다른 채널 규칙을 사용했을 때만 차단한다.
-- 공개·예약 발행을 승인 없이 암시하거나 지시하는가. automation_scope.youtube_upload_expected=true인 경우 QA 통과 후 `private` 업로드는 정상 경로이므로 차단하지 않는다.
+- 공개·예약 발행이나 YouTube 업로드를 암시하거나 지시하는가. 업로드는 현재 제작 범위가 아니므로 차단한다.
 - 최종 미디어 QA에서는 ffprobe로 1080×1920, 전체 길이, H.264 영상 스트림과 AAC 오디오 스트림을 확인했는가.
 - 실제 미디어가 생성된 최종 미디어 QA에서는 장면 지속시간이 실제 음성 길이를 기준으로 계산되고 자막 시작·끝이 일치하는지 확인한다. 사전 대본 QA에서는 아직 음성 파일이나 실제 타임스탬프가 없는 것이 정상이며, scene narration이 분리되어 후속 계산이 가능하면 차단하지 않는다.
 - 전체 프레임을 시각 검사해 검은 화면, 잘린 자막, 장면 반복, 노란색·세피아 색조가 없는가.
 - 전체 음성을 청취해 발음·감정·음질·목소리 일관성을 확인했고, 과도한 압축이나 음성 누락이 없는가.
-- 공개 업로드는 source_context.automation_scope.public_approval=true와 public_upload_enabled=true가 동시에 확인될 때만 허용한다. 둘 중 하나라도 false이면 공개 업로드만 차단한다. youtube_upload_expected=true인 비공개 업로드는 허용하며 이를 blocking_issues에 넣지 않는다. 이 사전 QA 시점에 아직 이미지·음성·MP4 또는 YouTube 전송이 없는 것은 정상이다.
+- YouTube 업로드는 공개·비공개 모두 제작 범위 밖이다. 이를 하겠다는 대본 문구는 차단한다. 사전 대본 QA 시점에 이미지·음성·MP4가 아직 없는 것은 정상이다.
 
 블로그:
 - source_context.reference_baseline의 ID·SHA-256·네 개 source_urls가 있어야 한다. generated.reference_profile_id가 같은 ID가 아니면 `REFERENCE_PASS=false`로 차단한다. 블로그는 body_markdown 끝의 `공식 확인 출처`에 실제 원문 URL과 확인일이 있어야 한다.
 - 네 레퍼런스에서 확인된 `질문 상황 → 앞부분 답 → 조건 구분 → 확인 순서/비교 → 오늘 할 행동`의 흐름과 햄쮸의 자연스러운 연결말이 새 주제에 맞게 반영됐는지 본다. 문구·그림·구도를 복제해서는 안 된다.
 - 검수 결과는 내부적으로 `REFERENCE_PASS`, `CONTENT_PASS`, `EDITOR_FORMAT_PASS` 세 관문을 모두 확인한다. 하나라도 실패하면 pass=false이고 blocking_issues에 관문명과 구체적 이유를 남긴다.
+- 블로그 본문 실패는 다음 안정적인 rule_id 중 해당 항목을 사용한다: `REFERENCE_PASS`, `CONTENT_PASS`, `EDITOR_FORMAT_PASS`, `FACTUAL_SUPPORT`, `TITLE_ACCURACY`, `SOURCE_PRESERVATION`. 다른 기준이면 해당 기준을 식별하는 짧은 대문자 rule_id를 만든다. 실패마다 failure_details에 rule_id, 구체적 reason, target="manuscript", 수정 후 재QA 필요 여부 retryable, 국소 권장 수정 recommended_fix를 쓴다. 근거 없이 실패를 만들지 않는다.
 - source_context.automation_scope.stage가 rendered_cards이면 입력에 붙은 실제 PNG 5장을 순서대로 시각 검수한다. 원고/카드 기획 검수만으로 PASS하지 않는다.
 - source_context.named_design_language_required=true인 신규 제작물은 generated.design_language가 허용된 20개 이름 중 하나이고 generated.design_direction에 `typography`, `grid`, `visual_motif`, `whitespace`, `color_texture`가 모두 있어야 한다. 이름 또는 다섯 방향 중 하나라도 없으면 `EDITOR_FORMAT_PASS=false`로 차단한다. false인 구형 재개 작업은 원본 바이트 보존을 우선하며 새 디자인 언어를 소급 강제하지 않는다.
 - 신규 제작물은 generated.design_blueprint에 `cover_composition`, `type_system`, `image_strategy`, `material_treatment`, `role_expansion`이 모두 있고, role_expansion이 cover·flow·comparison·checklist·decision의 서로 다른 다섯 구성을 정의해야 한다. 표지 우선 설계가 없거나 다섯 역할이 같은 구성으로 반복되면 `EDITOR_FORMAT_PASS=false`다.
@@ -76,6 +77,7 @@
   "pass": true,
   "score": 0,
   "blocking_issues": [],
+  "failure_details": [],
   "non_blocking_notes": [],
   "recommended_status": "PASS 또는 REVISION"
 }

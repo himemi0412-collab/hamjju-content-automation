@@ -9,6 +9,7 @@ from copy import deepcopy
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 import httpx
 
 from .ai import AIClient, parse_json
@@ -24,8 +25,8 @@ from .notion_client import (
 )
 from .settings import Settings
 from .state import StateStore
-from .youtube import YouTubePrivateUploader
 from .manuscript_repair import apply_reviewed_corrections, manuscript_hash
+from .content_fingerprint import file_sha256
 from .blog_reference import load_blog_reference, validate_generated_reference_contract
 from .card_design import apply_named_design_contract
 from .ownership import load_operating_contract
@@ -173,6 +174,7 @@ class Pipeline:
             model=self.s.image_model,
             quality=self.s.image_quality,
             font_path=self.s.card_font_path,
+            body_font_path=self.s.card_body_font_path,
             budget=self.budget,
             estimated_cost_usd=self.s.openai_image_estimated_cost_usd,
             design_language=str(generated.get('design_language') or 'Bento Editorial'),
@@ -218,6 +220,7 @@ class Pipeline:
                 model=self.s.image_model,
                 quality=self.s.image_quality,
                 font_path=self.s.card_font_path,
+                body_font_path=self.s.card_body_font_path,
                 budget=self.budget,
                 estimated_cost_usd=self.s.openai_image_estimated_cost_usd,
                 only_indices=set(notes_by_card),
@@ -330,7 +333,7 @@ class Pipeline:
         context = compact_page_context(page, page_text)
         page_title = extract_page_title(page)
         source_version = str(page.get('last_edited_time') or 'unknown-source-version')
-        run_id = os.getenv('GITHUB_RUN_ID') or 'local'
+        run_id = os.getenv('GITHUB_RUN_ID') or f'local-{uuid4().hex}'
         ownership_cfg = self.operating_contract.channel(cfg.name)
         if cfg.name == 'naver_blog' and cfg.success_status != ownership_cfg.handoff_status:
             raise RuntimeError('Channel config and operating contract handoff status differ')
@@ -343,9 +346,7 @@ class Pipeline:
             'current_date_kst': datetime.now(timezone(timedelta(hours=9))).date().isoformat(),
             'mode': 'media' if media_expected else 'text_only',
             'media_expected': media_expected,
-            'youtube_upload_expected': bool(media_expected and self.s.auto_private_youtube_upload),
-            'public_approval': context.get('properties', {}).get('공개 승인') is True,
-            'public_upload_enabled': self.s.allow_public_youtube_upload,
+            'youtube_upload_expected': False,
         }
         if cfg.content_kind == 'blog':
             # GitHub-hosted runs do not inherit local Codex memories or user
@@ -499,6 +500,7 @@ class Pipeline:
             manifest = {
                 'page_id': page_id,
                 'channel': cfg.name,
+                'run_id': run_id,
                 'generated': generated,
                 'qa': qa,
                 'usage': {'generation': gen_usage, 'qa': qa_usage},
@@ -539,6 +541,7 @@ class Pipeline:
                         model=self.s.image_model,
                         quality=self.s.image_quality,
                         font_path=self.s.card_font_path,
+                        body_font_path=self.s.card_body_font_path,
                         budget=self.budget,
                         estimated_cost_usd=self.s.openai_image_estimated_cost_usd,
                         design_language=str(generated.get('design_language') or 'Bento Editorial'),
@@ -549,12 +552,17 @@ class Pipeline:
                 media['cards'] = [str(x) for x in cards]
                 self.state.record_stage(page_id, cfg.name, content_version, 'github_actions', 'MEDIA_READY', run_id)
                 prior_qa = reviewed_previous.get('qa', {}) if reviewed_previous else {}
+                current_card_hashes = [file_sha256(path) for path in cards]
                 unchanged_reviewed_resume = bool(
                     previous
                     and reviewed_previous
                     and manuscript_hash(generated) == manuscript_hash(reviewed_previous['generated'])
                     and prior_qa.get('pass') is True
                     and not prior_qa.get('blocking_issues')
+                    and prior_qa.get('source_page_id') == page_id
+                    and prior_qa.get('source_content_sha256') == manuscript_hash(generated)
+                    and prior_qa.get('source_run_id')
+                    and prior_qa.get('source_card_sha256s') == current_card_hashes
                     and reviewed_previous.get('reference_baseline_id') == context['reference_baseline']['id']
                     and reviewed_previous.get('reference_baseline_sha256') == context['reference_baseline']['sha256']
                     and reviewed_previous.get('media', {}).get('rendered_card_qa_pass') is True
@@ -575,6 +583,7 @@ class Pipeline:
                         'source_manuscript_sha256': manuscript_hash(reviewed_previous['generated']),
                     }
                 else:
+                    qa_input_version = manuscript_hash(generated)
                     qa, image_qa_usage = self.ai.qa(generated, {
                         'channel': cfg.name, **context,
                         'automation_scope': {**context['automation_scope'], 'mode': 'blog_cards', 'stage': 'rendered_cards', 'media_expected': True,
@@ -588,6 +597,8 @@ class Pipeline:
                                 'cover/flow/comparison/checklist/decision; Cafe24 title font'
                             )},
                     }, qa_prompt='prompts/qa_photographic_blog_cards.md', image_paths=cards)
+                    if manuscript_hash(generated) != qa_input_version:
+                        raise RuntimeError('STALE_QA: blog manuscript changed during rendered-card QA')
                     retry_usages = []
                     if not previous:
                         for attempt in range(1, 3):
@@ -615,6 +626,7 @@ class Pipeline:
                                 model=self.s.image_model,
                                 quality=self.s.image_quality,
                                 font_path=self.s.card_font_path,
+                                body_font_path=self.s.card_body_font_path,
                                 budget=self.budget,
                                 estimated_cost_usd=self.s.openai_image_estimated_cost_usd,
                                 only_indices=retry_cards,
@@ -628,6 +640,7 @@ class Pipeline:
                                 design_language=str(generated.get('design_language') or 'Bento Editorial'),
                                 design_blueprint=generated.get('design_blueprint'),
                             )
+                            qa_input_version = manuscript_hash(generated)
                             qa, retry_usage = self.ai.qa(generated, {
                                 'channel': cfg.name, **context,
                                 'automation_scope': {
@@ -638,6 +651,8 @@ class Pipeline:
                                     'preserved_cards': sorted(set(range(1, 6)) - retry_cards),
                                 },
                             }, qa_prompt='prompts/qa_photographic_blog_cards.md', image_paths=cards)
+                            if manuscript_hash(generated) != qa_input_version:
+                                raise RuntimeError('STALE_QA: blog manuscript changed during rendered-card QA')
                             retry_usages.append({
                                 'attempt': attempt,
                                 'cards': sorted(retry_cards),
@@ -650,6 +665,13 @@ class Pipeline:
                         }
                 passed = _visual_qa_passed(qa)
                 if passed:
+                    content_version = manuscript_hash(generated)
+                    qa['source_page_id'] = page_id
+                    qa['source_run_id'] = qa.get('source_run_id') or run_id
+                    qa['source_content_sha256'] = content_version
+                    qa['source_card_sha256s'] = [file_sha256(path) for path in cards]
+                    manifest['manuscript_sha256'] = content_version
+                    manifest['run_id'] = run_id
                     ownership_receipt = self.operating_contract.receipt(
                         cfg.name, document_id=page_id, source_version=content_version, stage='QA_PASS',
                     )
@@ -717,33 +739,33 @@ class Pipeline:
                             except Exception as exc:
                                 media['notion_video_attached'] = False
                                 media['notion_video_error'] = repr(exc)
-                    if self.s.auto_private_youtube_upload and media.get('video'):
-                        public_approved = context.get('properties', {}).get('공개 승인') is True
-                        privacy_status = (
-                            'public'
-                            if public_approved and self.s.allow_public_youtube_upload
-                            else 'private'
-                        )
-                        media['youtube_url'] = self._upload_private(
-                            cfg.name, generated, Path(media['video']),
-                            privacy_status=privacy_status,
-                        )
-                        media['youtube_privacy'] = privacy_status
-                        media['public_approval_confirmed'] = public_approved
-                        self.notion.update_properties(page_id, {
-                            'YouTube 비공개 주소': {'url': media['youtube_url']},
-                        })
 
             naver_handoff = None
             if cfg.content_kind == 'blog' and passed:
+                final_handoff_hash = manuscript_hash(generated)
+                if (
+                    final_handoff_hash != qa.get('source_content_sha256')
+                    or qa.get('source_page_id') != page_id
+                    or not qa.get('source_run_id')
+                    or qa.get('source_card_sha256s') != [
+                        file_sha256(Path(path)) for path in media.get('cards') or []
+                    ]
+                ):
+                    raise RuntimeError('STALE_QA: final manuscript or cards no longer match their QA receipt')
+                card_sha256s = [file_sha256(Path(path)) for path in media.get('cards') or []]
+                if len(card_sha256s) != 5:
+                    raise RuntimeError('Naver handoff requires five final QA card files')
                 ownership_receipt = self.operating_contract.receipt(
                     cfg.name, document_id=page_id, source_version=content_version, stage='HANDOFF_READY',
                 )
                 naver_handoff = {
                     'document_id': page_id,
-                    'source_version': manifest['manuscript_sha256'],
+                    'source_version': final_handoff_hash,
+                    'run_id': run_id,
+                    'qa_run_id': qa['source_run_id'],
                     'card_upload_ids': list(media.get('notion_card_upload_ids') or []),
                     'card_names': [Path(x).name for x in media.get('cards', [])],
+                    'card_sha256s': card_sha256s,
                     'ownership_receipt': ownership_receipt,
                 }
             blocks = result_blocks(cfg.name, generated, qa, naver_handoff=naver_handoff) if passed else []
@@ -759,22 +781,6 @@ class Pipeline:
             final_status = cfg.success_status if passed else cfg.revision_status
             if media.get('budget_blocked'):
                 final_status = cfg.revision_status
-            if passed and media.get('youtube_url'):
-                final_status = (
-                    '공개 업로드 완료'
-                    if media.get('youtube_privacy') == 'public'
-                    else '비공개 업로드 완료'
-                )
-                ownership_receipt = self.operating_contract.receipt(
-                    cfg.name,
-                    document_id=page_id,
-                    source_version=content_version,
-                    stage='PRIVATE_UPLOAD_VERIFIED',
-                )
-                self.state.record_stage(
-                    page_id, cfg.name, content_version, 'github_actions', 'PRIVATE_UPLOAD_VERIFIED', run_id,
-                    media['youtube_url'],
-                )
             self.notion.update_status(page_id, final_status)
             output_verified = False
             if cfg.content_kind == 'blog' and passed:
@@ -784,8 +790,7 @@ class Pipeline:
             elif cfg.content_kind == 'shorts' and passed:
                 observation = self._verify_shorts_output(
                     page_id, page_title, final_status, blocks, media,
-                    require_media=media_expected, require_youtube=bool(media_expected and self.s.auto_private_youtube_upload),
-                    channel_name=cfg.name,
+                    require_media=media_expected,
                 )
                 save_manifest(job_dir / 'notion-readback.json', observation)
                 output_verified = True
@@ -816,10 +821,7 @@ class Pipeline:
             }
         except Exception as exc:
             try:
-                # A private upload cannot safely be undone or regenerated. Keep
-                # its current Notion state for explicit reconciliation.
-                if not (cfg.content_kind == 'shorts' and media.get('youtube_url')):
-                    self.notion.update_status(page_id, cfg.revision_status)
+                self.notion.update_status(page_id, cfg.revision_status)
             except Exception:
                 pass
             self.state.finish(key, 'failed', repr(exc))
@@ -834,7 +836,7 @@ class Pipeline:
     def _verify_shorts_output(
         self, page_id: str, page_title: str, status: str,
         expected_blocks: list[dict[str, Any]], media: dict[str, Any],
-        require_media: bool = False, require_youtube: bool = False, channel_name: str = '',
+        require_media: bool = False,
     ) -> dict[str, Any]:
         page = self.notion.retrieve_page(page_id)
         observed_blocks = self.notion.read_page_blocks(page_id)
@@ -849,8 +851,6 @@ class Pipeline:
             raise RuntimeError('Shorts read-back script blocks did not match generated result')
         if require_media and not media.get('video'):
             raise RuntimeError('Shorts video required but missing')
-        if require_youtube and (not media.get('youtube_url') or media.get('youtube_privacy') not in {'private', 'public'}):
-            raise RuntimeError('Shorts reviewed YouTube upload required but missing')
         if media.get('video'):
             if (media.get('verification') or {}).get('pass') is not True:
                 raise RuntimeError('Shorts media verification did not pass')
@@ -858,25 +858,10 @@ class Pipeline:
                 files = (props.get('최종 영상') or {}).get('files') or []
                 if not any(f.get('name') == Path(media['video']).name for f in files):
                     raise RuntimeError('Shorts read-back video attachment was not found')
-            if media.get('youtube_url'):
-                saved_url = (props.get('YouTube 비공개 주소') or {}).get('url')
-                if saved_url != media['youtube_url']:
-                    raise RuntimeError('Shorts read-back YouTube URL did not match')
-                if require_youtube:
-                    token_file = {
-                        'ppojjugi_shorts': self.s.youtube_ppojjugi_token_file,
-                        'japan_shorts': self.s.youtube_japan_token_file,
-                    }.get(channel_name)
-                    if token_file is None:
-                        raise RuntimeError('Shorts YouTube channel is not configured for read-back')
-                    uploader = YouTubePrivateUploader(self.s.youtube_client_secrets_file, token_file)
-                    if not uploader.verify_uploaded(media['youtube_url'], media['youtube_privacy']):
-                        raise RuntimeError('Shorts YouTube video/privacy read-back did not match')
         return {'page_id': page_id, 'title': page_title, 'status': status,
                 'body_blocks_verified': len(expected),
                 'video_attachment_verified': media.get('notion_video_attached') is True,
-                'youtube_url_verified': bool(media.get('youtube_url')),
-                'youtube_video_verified': bool(require_youtube and media.get('youtube_url')),
+                'youtube_upload_performed': False,
                 'verified_at': datetime.now(timezone.utc).isoformat()}
 
     def _match_prior_blog_blocks(self, page_id: str, previous: dict[str, Any]) -> list[dict[str, Any]]:
@@ -892,6 +877,17 @@ class Pipeline:
                 'card_upload_ids': list(prior_media['notion_card_upload_ids']),
                 'card_names': [Path(x).name for x in prior_media.get('cards', [])],
             }
+            if (
+                prior_output.get('run_id') and prior_qa.get('source_run_id')
+                and prior_qa.get('source_page_id') == page_id
+                and prior_qa.get('source_content_sha256') == prior_handoff['source_version']
+                and len(prior_qa.get('source_card_sha256s') or []) == 5
+            ):
+                prior_handoff.update({
+                    'run_id': prior_output['run_id'],
+                    'qa_run_id': prior_qa['source_run_id'],
+                    'card_sha256s': list(prior_qa['source_card_sha256s']),
+                })
             prior_ownership = prior_output.get('ownership')
             if prior_ownership and prior_ownership.get('stage') == 'HANDOFF_READY':
                 prior_handoff['ownership_receipt'] = prior_ownership
@@ -1089,43 +1085,6 @@ class Pipeline:
             'tts_provider': 'fal' if production_tts_model.startswith('fal-ai/') else 'openai',
             'verification': verification,
         }
-
-    def _upload_private(
-        self, channel_name: str, generated: dict[str, Any], video: Path,
-        privacy_status: str = 'private',
-    ) -> str:
-        if self.budget:
-            self.budget.require_below_limit('youtube_private_upload')
-        if privacy_status == 'public' and not self.s.allow_public_youtube_upload:
-            raise RuntimeError('Public YouTube upload is disabled by repository configuration')
-        channel_auth = {
-            'ppojjugi_shorts': (
-                self.s.youtube_ppojjugi_token_file,
-                self.s.youtube_ppojjugi_channel_id,
-            ),
-            'japan_shorts': (
-                self.s.youtube_japan_token_file,
-                self.s.youtube_japan_channel_id,
-            ),
-        }
-        if channel_name not in channel_auth:
-            raise RuntimeError(f'YouTube upload is not configured for channel: {channel_name}')
-        token_file, expected_channel_id = channel_auth[channel_name]
-        uploader = YouTubePrivateUploader(self.s.youtube_client_secrets_file, token_file)
-        authorized_channel = uploader.current_channel()
-        if authorized_channel.get('id') != expected_channel_id:
-            raise RuntimeError(
-                f'YouTube channel mismatch for {channel_name}; upload stopped before transfer'
-            )
-        meta = generated.get('youtube') or {}
-        return uploader.upload_reviewed(
-            video,
-            title=str(meta.get('title') or generated.get('title') or 'Shorts draft'),
-            description=str(meta.get('description') or ''),
-            tags=list(meta.get('tags') or []),
-            privacy_status=privacy_status,
-        )
-
 
 def match_attached_cards(files: list[dict], receipt: list[dict]) -> None:
     if not receipt or len(receipt) != 5 or [f.get('name') for f in files] != [r.get('name') for r in receipt]:

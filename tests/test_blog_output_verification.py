@@ -137,20 +137,30 @@ def test_naver_handoff_has_one_ready_contract_and_five_ordered_images():
             *[{'card': i, 'after_heading': '첫 구간'} for i in range(2, 6)],
         ],
     }
+    version = manuscript_hash(generated)
+    card_hashes = [f'{i:064x}' for i in range(1, 6)]
+    qa = {
+        'pass': True, 'ai_likeness_score': 2, 'score': 96, 'blocking_issues': [],
+        'source_page_id': 'page-id', 'source_run_id': 'qa-run-1',
+        'source_content_sha256': version, 'source_card_sha256s': card_hashes,
+    }
     blocks = naver_handoff_blocks(
         generated,
-        {'pass': True, 'ai_likeness_score': 2, 'score': 96, 'blocking_issues': []},
+        qa,
         document_id='page-id',
-        source_version='sha256-version',
+        source_version=version,
+        run_id='delivery-run-1',
+        qa_run_id='qa-run-1',
         card_upload_ids=[f'upload-{i}' for i in range(1, 6)],
         card_names=[f'card_{i:02d}.png' for i in range(1, 6)],
+        card_sha256s=card_hashes,
         ownership_receipt={
             'contract_id': 'HAMZZU_OPERATING_CONTRACT_V1',
             'producer_owner': 'github_actions',
-            'delivery_owner': 'codex_automation_3',
+            'delivery_owner': 'local_browser_worker',
             'publication_owner': 'user',
             'stage': 'HANDOFF_READY',
-            'source_version': 'sha256-version',
+            'source_version': version,
         },
     )
     texts = [
@@ -166,8 +176,18 @@ def test_naver_handoff_has_one_ready_contract_and_five_ordered_images():
     assert all('발행 금지' in text for text in texts if text.startswith('네이버 임시저장만 허용'))
     assert '운영 계약: HAMZZU_OPERATING_CONTRACT_V1' in texts
     assert '제작 소유자: github_actions' in texts
-    assert '임시저장 소유자: codex_automation_3' in texts
+    assert '임시저장 소유자: local_browser_worker' in texts
     assert '공개 결정 소유자: user' in texts
+    assert '실행 ID: delivery-run-1' in texts
+    assert 'QA 실행 ID: qa-run-1' in texts
+    snapshot_text = ''.join(
+        item.get('text', {}).get('content', '')
+        for block in blocks if block['type'] == 'code'
+        for item in block['code']['rich_text']
+    )
+    snapshot = json.loads(snapshot_text)
+    assert snapshot['handoff']['content_sha256'] == version
+    assert snapshot['handoff']['card_sha256s'] == card_hashes
 
 
 def test_last_section_card_stays_before_paragraph_targeted_decision_card():
@@ -334,9 +354,15 @@ def test_resume_reuses_text_and_replaces_only_matching_failed_output(tmp_path, m
 def test_resume_reuses_pass_for_identical_reviewed_manuscript_and_card_bytes(tmp_path, monkeypatch):
     pipeline, cards = make_pipeline(tmp_path, monkeypatch)
     generated = pipeline.ai.generate.return_value[0]
-    prior_qa = {'pass': True, 'ai_likeness_score': 2, 'score': 94, 'blocking_issues': [], 'recommended_status': 'PASS'}
+    card_hashes = [hashlib.sha256(p.read_bytes()).hexdigest() for p in cards]
+    prior_qa = {
+        'pass': True, 'ai_likeness_score': 2, 'score': 94, 'blocking_issues': [],
+        'recommended_status': 'PASS', 'source_page_id': 'one', 'source_run_id': 'qa-run-1',
+        'source_content_sha256': manuscript_hash(generated), 'source_card_sha256s': card_hashes,
+    }
     prior = {
         'page_id': 'one', 'channel': 'naver_blog', 'generated': generated, 'qa': prior_qa,
+        'run_id': 'pipeline-run-1',
         'reference_baseline_id': load_blog_reference()['id'],
         'reference_baseline_sha256': load_blog_reference()['sha256'],
         'media': {
@@ -373,9 +399,16 @@ def test_repeated_resume_restores_pass_only_from_identical_original_review(tmp_p
         'qa': {'pass': False, 'blocking_issues': ['stochastic second review']},
         'media': {'cards': [str(p) for p in cards], 'rendered_card_qa_pass': False},
     }
+    card_hashes = [hashlib.sha256(p.read_bytes()).hexdigest() for p in cards]
     reviewed = {
         'page_id': 'one', 'channel': 'naver_blog', 'generated': generated,
-        'qa': {'pass': True, 'ai_likeness_score': 2, 'score': 94, 'blocking_issues': []},
+        'run_id': 'pipeline-run-1',
+        'qa': {
+            'pass': True, 'ai_likeness_score': 2, 'score': 94, 'blocking_issues': [],
+            'source_page_id': 'one', 'source_run_id': 'qa-run-1',
+            'source_content_sha256': manuscript_hash(generated),
+            'source_card_sha256s': card_hashes,
+        },
         'reference_baseline_id': load_blog_reference()['id'],
         'reference_baseline_sha256': load_blog_reference()['sha256'],
         'media': {'cards': [str(p) for p in cards], 'rendered_card_qa_pass': True},

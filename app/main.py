@@ -17,7 +17,7 @@ from .notion_client import NotionClient, extract_page_title
 from .pipeline import Pipeline, _card_numbers_from_qa_issue
 from .settings import Settings
 from .state import StateStore
-from .youtube import YouTubePrivateUploader
+from .youtube import YouTubeIdentityReader
 from .naver import explain as naver_explain
 from .media import (
     compose_short_video, concat_scene_audio, make_word_timed_srt,
@@ -26,6 +26,7 @@ from .media import (
 from .card_exploration import DEFAULT_SUBTITLE, DEFAULT_TITLE, render_design_exploration
 from .notion_client import property_value
 from .run_report import record_results
+from .naver_revalidation import revalidate_existing_naver_page
 
 app = typer.Typer(help='햄쮸 블로그·쇼츠 자동화')
 KST = timezone(timedelta(hours=9))
@@ -59,6 +60,20 @@ def build() -> tuple[Settings, NotionClient, AIClient, StateStore, Pipeline]:
     )
     state = StateStore(s.state_db)
     return s, notion, ai, state, Pipeline(s, notion, ai, state, budget)
+
+
+def verify_short_notion_result(
+    notion, page_id: str, title: str, status: str, video: Path, video_attached: bool = True,
+) -> None:
+    page = notion.retrieve_page(page_id)
+    if extract_page_title(page) != title:
+        raise RuntimeError('Shorts result title read-back did not match')
+    props = page.get('properties') or {}
+    if property_value(props.get('상태', {})) != status:
+        raise RuntimeError('Shorts result status read-back did not match')
+    files = (props.get('최종 영상') or {}).get('files') or []
+    if video_attached and not any(item.get('name') == video.name for item in files):
+        raise RuntimeError('Shorts MP4 was not found in Notion read-back')
 
 
 @app.command('seed-topics')
@@ -511,6 +526,25 @@ def resume_blog(
     validate_results(result, require_item=True, dry_run=False)
 
 
+@app.command('revalidate-naver-handoff')
+def revalidate_naver_handoff(page_id: str):
+    """Freshly QA one failed final manuscript and hand off its exact version."""
+    s, notion, ai, _, pipeline = build()
+    try:
+        result = revalidate_existing_naver_page(
+            page_id,
+            notion=notion,
+            ai=ai,
+            operating_contract=pipeline.operating_contract,
+            output_dir=s.output_dir,
+        )
+    finally:
+        notion.close()
+    print_json([result])
+    if result.get('qa_pass') is not True or result.get('handoff_written') is not True:
+        raise typer.Exit(code=1)
+
+
 def validate_results(
     results: list[dict], require_item: bool = False, dry_run: bool = False,
     expected_count: int | None = None,
@@ -550,7 +584,7 @@ def setup_youtube_auth(channel: str):
     }
     if channel not in token_files:
         raise typer.BadParameter('channel must be ppojjugi_shorts or japan_shorts')
-    uploader = YouTubePrivateUploader(s.youtube_client_secrets_file, token_files[channel])
+    uploader = YouTubeIdentityReader(s.youtube_client_secrets_file, token_files[channel])
     uploader.authorize_interactively()
     info = uploader.current_channel()
     if info.get('id') != expected_channel_ids[channel]:
@@ -565,8 +599,8 @@ def setup_youtube_auth(channel: str):
 
 
 @app.command('verify-youtube-auth')
-def verify_youtube_auth():
-    """Verify both OAuth tokens against their fixed channel IDs without uploading."""
+def verify_youtube_auth(channel: str | None = typer.Argument(None)):
+    """Verify one selected channel, or both OAuth tokens, without uploading."""
     s = Settings()
     channels = {
         'ppojjugi_shorts': (
@@ -578,9 +612,13 @@ def verify_youtube_auth():
             s.youtube_japan_channel_id,
         ),
     }
+    if channel is not None:
+        if channel not in channels:
+            raise typer.BadParameter('channel must be ppojjugi_shorts or japan_shorts')
+        channels = {channel: channels[channel]}
     results = []
     for channel_key, (token_file, expected_channel_id) in channels.items():
-        uploader = YouTubePrivateUploader(s.youtube_client_secrets_file, token_file)
+        uploader = YouTubeIdentityReader(s.youtube_client_secrets_file, token_file)
         try:
             info = uploader.current_channel()
         except (GoogleAuthError, HttpError, RuntimeError, OSError, ValueError) as exc:
@@ -641,18 +679,37 @@ def repair_short_video(channel: str, page_id: str, source_dir: Path):
             hook=str(manifest.get('generated', {}).get('hook') or ''),
             font_path=s.card_font_path,
         )
+        verification = verify_short_artifacts(images, scenes, audio, srt, video, strict_caption_count=False)
+        if verification.get('pass') is not True:
+            raise RuntimeError('Repaired Shorts MP4 did not pass media QA')
         notion.attach_files(page_id, '최종 영상', [video])
         notion.update_status(page_id, cfg.success_status)
+        title = extract_page_title(page)
+        verify_short_notion_result(notion, page_id, title, cfg.success_status, video)
+    except Exception:
+        try:
+            notion.update_status(page_id, cfg.revision_status)
+        except Exception:
+            pass
+        raise
     finally:
         notion.close()
-    print_json({
+    result = {
         'page_id': page_id,
+        'title': title,
         'channel': channel,
         'status': cfg.success_status,
+        'qa_pass': True,
+        'notion_page_updated': True,
+        'output_verified': True,
         'duration_seconds': sum(max(float(x.get('seconds') or 5), 1.0) for x in scenes),
         'notion_video_attached': True,
+        'media': {'video': str(video), 'verification': verification, 'notion_video_attached': True},
         'youtube_upload_performed': False,
-    })
+    }
+    record_results(s.output_dir, channel, [result], 1)
+    validate_results([result], require_item=True)
+    print_json(result)
 
 
 @app.command('repair-short-av')
@@ -709,6 +766,8 @@ def repair_short_av(channel: str, page_id: str, source_dir: Path):
         verification = verify_short_artifacts(
             images, timed_scenes, audio, srt, video, strict_caption_count=False,
         )
+        if verification.get('pass') is not True:
+            raise RuntimeError('Repaired Shorts MP4 did not pass media QA')
         media = {
             'images': [str(x) for x in images],
             'audio': str(audio),
@@ -724,23 +783,37 @@ def repair_short_av(channel: str, page_id: str, source_dir: Path):
             notion.attach_files(page_id, '최종 영상', [video])
         except Exception:
             # Notion's small-file endpoint rejects some otherwise valid long
-            # MP4 files. The verified video and private YouTube delivery must
-            # not be discarded because the optional review attachment failed.
+            # MP4 files. Keep the verified local MP4 in the Actions artifact.
             notion_video_attached = False
-        youtube_url = pipeline._upload_private(channel, generated, video, privacy_status='private')
         notion.update_status(page_id, cfg.success_status)
+        title = extract_page_title(page)
+        verify_short_notion_result(
+            notion, page_id, title, cfg.success_status, video, video_attached=notion_video_attached,
+        )
+    except Exception:
+        try:
+            notion.update_status(page_id, cfg.revision_status)
+        except Exception:
+            pass
+        raise
     finally:
         notion.close()
-    print_json({
+    result = {
         'page_id': page_id,
+        'title': title,
         'channel': channel,
         'status': cfg.success_status,
+        'qa_pass': True,
+        'notion_page_updated': True,
+        'output_verified': True,
         'images_preserved': len(images),
         'notion_video_attached': notion_video_attached,
         'media': media,
-        'youtube_url': youtube_url,
-        'youtube_privacy': 'private',
-    })
+        'youtube_upload_performed': False,
+    }
+    record_results(s.output_dir, channel, [result], 1)
+    validate_results([result], require_item=True)
+    print_json(result)
 
 
 @app.command('naver-status')
@@ -791,7 +864,6 @@ def doctor():
         'blog_data_source_id': s.blog_data_source_id,
         'shorts_data_source_id': s.shorts_data_source_id,
         'media_generation': s.enable_media_generation,
-        'auto_private_youtube_upload': s.auto_private_youtube_upload,
         'image_quality': s.image_quality,
         'openai_monthly_internal_budget_usd': s.openai_monthly_budget_usd,
         'openai_budget': budget.snapshot(),
@@ -837,6 +909,7 @@ def verify_blog_card_style_live():
             model=s.image_model,
             quality=s.image_quality,
             font_path=s.card_font_path,
+            body_font_path=s.card_body_font_path,
             budget=None,
             design_language='Bento Editorial',
         )
@@ -886,6 +959,7 @@ def verify_blog_card_style_live():
                 model=s.image_model,
                 quality=s.image_quality,
                 font_path=s.card_font_path,
+                body_font_path=s.card_body_font_path,
                 budget=None,
                 only_indices=retry_cards,
                 revision_notes={

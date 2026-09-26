@@ -36,9 +36,10 @@
 
 실행 환경별 소유권은 [`docs/OPERATING_CONTRACT.md`](docs/OPERATING_CONTRACT.md)와
 프로그램 검증용 [`config/operating_contract.yaml`](config/operating_contract.yaml)에 고정합니다.
-GitHub Actions는 원고·카드·쇼츠 이미지·음성·영상·QA·Notion 전달과 YouTube 비공개
-업로드를 담당하고, Codex `automation-3`은 검수된 네이버 원고의 임시저장과 재열기
-확인만 담당합니다. 공개·예약발행 결정은 항상 사용자 소유입니다. 임시 5분 예약은
+GitHub Actions는 원고·카드·쇼츠 이미지·음성·영상·QA·Notion 전달을 담당하고,
+로컬 브라우저 작업자는 검수된 네이버 원고의 임시저장과 임시저장 목록 재열람 확인만
+담당합니다. GitHub Actions는 YouTube에 자동 업로드하지 않습니다.
+공개·예약발행 결정은 항상 사용자 소유입니다. 임시 5분 예약은
 운영 일정에 포함하지 않습니다.
 
 ## 하는 일
@@ -59,7 +60,7 @@ GitHub Actions는 원고·카드·쇼츠 이미지·음성·영상·QA·Notion �
 
 ### 햄찌 창작 쇼츠
 
-`작성 요청` → `Work 제작 중` → 대본/장면표 → 독립 QA → 이미지/TTS/MP4 → Notion 최종 영상 첨부 → 채널 일치 확인 → YouTube `private` 업로드 → `비공개 업로드 완료`
+`작성 요청` → `Work 제작 중` → 대본/장면표 → 독립 QA → 이미지/TTS/MP4 → Notion 결과 확인 → MP4 실파일·QA 통과 확인 → `검토 대기`
 
 대본의 내레이션·대사·발화 자막은 친구에게 말하듯 자연스러운 한국어 반말을 사용합니다. 존댓말, 무례한 명령조, 억지 유행어는 사용하지 않습니다.
 
@@ -70,16 +71,13 @@ GitHub Actions는 원고·카드·쇼츠 이미지·음성·영상·QA·Notion �
 
 ## 안전장치
 
-1. 쇼츠 제작 실행은 YouTube에 `private`로만 업로드합니다. 공개 승인은 항상 NO에서 시작합니다.
-2. YouTube 업로더는 코드상 `privacyStatus=private`만 지원하며, 고정된 채널 ID와 OAuth 채널이 다르면 전송 전에 중단합니다.
-3. 네이버 공개 발행/예약 발행 자동화는 구현하지 않았습니다.
+1. 쇼츠 제작은 MP4 생성과 QA까지 진행하며 YouTube 자동 업로드는 하지 않습니다.
+2. 네이버 공개 발행/예약 발행 자동화는 구현하지 않았습니다.
 4. 로컬/동일 실행 환경에서는 SQLite 기록으로 중복 실행을 막고, GitHub Actions에서는 동시 실행 제한과 Notion의 `작성 요청 → 생성 중` 상태 전환으로 중복 처리를 막습니다.
 5. 오류가 나면 성공으로 기록하지 않고 `수정 필요` 상태로 남깁니다.
-6. 블로그·dry run·텍스트 전용·영상 복구는 YouTube 업로드가 OFF이고, 검수된 쇼츠 제작·재시도에서만 비공개 업로드가 켜집니다.
-7. 블로그 카드뉴스가 정확히 5장이 아니거나 Notion 첨부가 실패하면 성공 상태로 넘기지 않습니다.
-8. OAuth 토큰의 실제 채널 ID가 고정된 삐죽이/일본 채널 ID와 다르면 파일 전송 전에 중단합니다.
-9. GPT Image 2는 `1024x1536` / `medium` 품질로 고정하며, `auto` 품질을 사용하지 않습니다.
-10. 월별 보수적 예상비용 장부가 $22에 도달하기 전에 모든 신규 OpenAI 호출과 YouTube 업로드를 중단합니다. OpenAI 프로젝트의 $25 하드 한도는 최종 방어선입니다.
+6. 블로그 카드뉴스가 정확히 5장이 아니거나 Notion 첨부가 실패하면 성공 상태로 넘기지 않습니다.
+7. GPT Image 2는 `1024x1536` / `medium` 품질로 고정하며, `auto` 품질을 사용하지 않습니다.
+8. 월별 보수적 예상비용 장부가 $22에 도달하기 전에 모든 신규 OpenAI 호출을 중단합니다. OpenAI 프로젝트의 $25 하드 한도는 최종 방어선입니다.
 
 ## 1. 설치
 
@@ -176,9 +174,9 @@ OPENAI_BUDGET_LEDGER=output/openai-cost-ledger.json
 OPENAI_BUDGET_REQUIRE_EXISTING_LEDGER=false
 ```
 
-비용 장부는 텍스트 토큰·웹 검색·이미지·TTS를 보수적으로 합산합니다. GitHub Actions는 매 실행마다 이 파일을 캐시에서 복원하고 실행 후 다시 보존하며, 운영 환경에서는 장부가 손상되거나 예상치 않게 사라지면 유료 호출을 진행하지 않습니다. 예상 누계에 다음 호출의 예약 비용을 더했을 때 22달러 이상이면 콘텐츠 생성과 YouTube 업로드를 그 전에 중단합니다. OpenAI 프로젝트의 25달러 한도는 별도의 최종 안전장치입니다.
+비용 장부는 텍스트 토큰·웹 검색·이미지·TTS를 보수적으로 합산합니다. GitHub Actions는 매 실행마다 이 파일을 캐시에서 복원하고 실행 후 다시 보존하며, 운영 환경에서는 장부가 손상되거나 예상치 않게 사라지면 유료 호출을 진행하지 않습니다. 예상 누계가 내부 한도에 도달하면 새 콘텐츠 생성을 중단합니다. OpenAI 프로젝트의 하드 한도는 별도의 최종 안전장치입니다.
 
-## 7. YouTube 업로드 정책
+## 7. YouTube 인증 확인
 
 Google Cloud에서 YouTube Data API OAuth Client를 만든 뒤 JSON 파일을 아래 위치에 둡니다.
 
@@ -194,13 +192,7 @@ python -m app.main setup-youtube-auth japan_shorts
 python -m app.main verify-youtube-auth
 ```
 
-로컬 기본값은 OFF입니다. GitHub의 검수된 쇼츠 제작 단계만 환경변수로 ON을 명시합니다.
-
-```env
-AUTO_PRIVATE_YOUTUBE_UPLOAD=false
-```
-
-업로드 코드는 `private`만 허용합니다. 공개·일부공개 전환과 삭제 기능은 자동화하지 않습니다.
+YouTube 인증 확인은 선택 사항이며 제작이나 Actions 예약 실행에 필요하지 않습니다. 쇼츠 결과물은 MP4 QA와 Notion 재조회까지만 진행하고 자동 업로드하지 않습니다.
 
 ## 8. GitHub Actions 첫 연결
 
@@ -210,11 +202,7 @@ GitHub 저장소의 Actions secrets에 다음 값을 넣습니다.
 
 - `OPENAI_API_KEY`
 - `NOTION_ACCESS_TOKEN`
-- `YOUTUBE_CLIENT_SECRET_JSON_B64`
-- `YOUTUBE_PPOJJUGI_TOKEN_JSON_B64`
-- `YOUTUBE_JAPAN_TOKEN_JSON_B64`
-
-세 YouTube 값은 JSON 파일 원문을 Base64로 변환한 뒤 GitHub의 암호화된 Actions secret에만 저장합니다. 워크플로 실행 중 권한을 제한한 `secrets/` 파일로 복원하며, 저장소 파일·artifact·로그에는 포함하지 않습니다.
+- `FAL_KEY` (쇼츠 미디어 생성 실행 때만 필요)
 
 현재 블로그·쇼츠 Data Source ID는 코드 기본값에 들어 있으므로 중복 입력하지 않습니다. 대기열을 교체할 때만 Repository Variables로 별도 관리합니다.
 
@@ -222,7 +210,7 @@ GitHub 저장소의 Actions secrets에 다음 값을 넣습니다.
 
 새 블로그와 과거 artifact 재검수 모두 현재 reference baseline을 통과해야 합니다. manifest에는 reference ID·SHA-256·원문 URL 4개를 남깁니다. 이전 QA를 재사용하는 경로도 현재 baseline SHA-256과 정확히 일치할 때만 허용하므로, 기준 변경 전에 만든 카드가 새 기준 검수 없이 통과하지 않습니다. 카드 세트는 주제에 따라 1080×1080 또는 1448×1086을 선택하고, 네 승인 레퍼런스에서 추출한 네 시각 계열 중 하나를 사용합니다. 공개 본문에는 별도 요청이 없는 한 형식적인 `공식 확인 링크` 섹션을 붙이지 않으며 근거는 내부 검수 필드에 보존합니다.
 
-미디어 생성은 쇼츠 실행에서만 켜집니다. 예약 쇼츠 제작, `execute_media`, `produce_daily_shorts`, `retry_revision`은 고정 채널 ID를 검사한 뒤 YouTube에 `private`로 올립니다. `regenerate_review`와 영상 복구는 MP4·Notion 검토 기록에서 멈추고 업로드하지 않습니다. `verify_youtube_auth`는 업로드 없이 두 OAuth 연결의 채널 ID와 이름만 검사합니다.
+미디어 생성은 쇼츠 실행에서만 켜집니다. 예약 쇼츠 제작, `execute_media`, `produce_daily_shorts`, `retry_revision`, `regenerate_review`, 영상 복구는 MP4와 Notion 검토 기록에서 멈추며 YouTube에 업로드하지 않습니다. OAuth 인증 명령은 보존하지만 제작 경로에서 사용하지 않습니다.
 
 생성 파일은 Actions artifact로 14일 보존하도록 설정했습니다. Notion 파일 첨부가 성공하면 카드뉴스/MP4는 Notion에도 남습니다.
 
@@ -232,7 +220,7 @@ GitHub 저장소의 Actions secrets에 다음 값을 넣습니다.
 
 네이버 블로그 공식 글쓰기 Open API는 현재 제공되지 않으므로, 이 프로젝트에서는 브라우저 로그인 세션/비밀번호/쿠키를 GitHub에 저장하는 위험한 방식으로 우회하지 않습니다.
 
-블로그 결과가 실제 카드 PNG를 포함한 독립 QA와 Notion 재조회 검증을 통과하면 본문·카드 5장·캡션·AI 고지·원고 해시를 `READY_FOR_NAVER_DRAFT` 계약으로 만들고 상태를 `네이버 저장 요청`으로 바꿉니다. 기존 로컬 Codex 임시저장 자동화가 이 대기열을 받아 himemi0412의 비공개 임시저장과 재열람 검증을 수행합니다. GitHub 자체는 네이버 로그인 세션을 보유하지 않으므로 PC/Codex가 꺼져 있거나 로그인이 풀리면 대기하며, 공개·예약발행은 하지 않습니다. 상태판도 Notion 전달 준비와 실제 네이버 저장 확인을 별도로 표시합니다.
+블로그 결과가 실제 카드 PNG를 포함한 독립 QA와 Notion 재조회 검증을 통과하면 본문·카드 5장·캡션·AI 고지·원고 해시를 `READY_FOR_NAVER_DRAFT` 계약으로 만들고 상태를 `네이버 저장 요청`으로 바꿉니다. 로컬 브라우저 작업자가 이 대기열을 받아 임시저장하고, 네이버의 임시저장 목록에서 다시 열어 제목·본문·이미지 5장을 확인한 뒤에만 `임시저장 완료`로 바꿉니다. Actions는 같은 Notion 항목의 최종 상태를 최대 15분 확인한 뒤 결과 요약을 생성합니다. 확인이 안 되면 PASS가 아닙니다. PC/브라우저가 꺼져 있거나 로그인이 풀리면 확인 시간 초과로 표시하며, 공개·예약발행은 하지 않습니다.
 
 블로그 제작은 대기 중인 글을 우선 처리하고 부족한 수만 새로 조사합니다. 신규 항목은 Notion 분류에 필요한 `원본 순서`와 `진행 순서`를 함께 기록합니다. 글마다 오류를 격리하며, 0건·목표 미달·QA 실패·저장 재조회 불일치는 성공으로 처리하지 않습니다. 본문 블록 전체와 카드 5장의 파일 순서·SHA-256을 다시 확인하고, 실패해도 비용 원장과 처리 기록을 다음 실행에 보존합니다. 코드 검사 push는 제작 상태판을 덮어쓰지 않습니다.
 

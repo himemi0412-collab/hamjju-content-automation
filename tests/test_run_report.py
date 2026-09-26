@@ -9,13 +9,25 @@ from app.run_report import is_production_run, markdown_report, record_results
 from app.run_report import expected_channels
 from app.run_report import merge_resumed_blog_batch, original_batch_run_id
 from app.manuscript_repair import manuscript_hash
+import app.run_report as report
 
 
 def good_blog():
     return {
         'page_id': 'existing-blog', 'title': '기존 미완성 글', 'status': 'CODEX_HANDOFF_READY',
         'qa_pass': True, 'notion_page_updated': True, 'output_verified': True,
+        'naver_draft_verified': True,
         'media': {'cards': ['1.png', '2.png', '3.png', '4.png', '5.png'], 'notion_cards_attached': True},
+    }
+
+
+def good_short(tmp_path):
+    video = tmp_path / 'short.mp4'
+    video.write_bytes(b'video')
+    return {
+        'page_id': 'short-page', 'title': '완성 쇼츠', 'status': '검토 대기',
+        'qa_pass': True, 'notion_page_updated': True, 'output_verified': True,
+        'media': {'video': str(video), 'verification': {'pass': True}},
     }
 
 
@@ -28,16 +40,57 @@ def test_results_survive_later_channel_failure_without_leaking_raw_details(tmp_p
     assert data['batches'][1]['reviewed_outputs'] == 0
     assert 'secret' not in path.read_text(encoding='utf-8')
     report = markdown_report(data, {'naver_blog': 1, 'japan_shorts': 1}, 'failure', 'https://example.org/run')
-    assert '제작 미완료' in report
-    assert '**1/2편**' in report
-    assert '네이버 임시저장·재열람 확인: **0편**' in report
+    assert '완료 조건 미충족' in report
+    assert '| naver_blog | 1 | 1 | 네이버 임시저장 목록 재확인 |' in report
+    assert '| japan_shorts | 0 | 1 | MP4 파일 + QA 통과 |' in report
+    assert '임시저장 확인' in report
 
 
 def test_empty_green_job_does_not_claim_production_success():
     report = markdown_report({}, {'naver_blog': 3}, 'success', 'https://example.org/run')
     assert '제작 결과가 없습니다' in report
-    assert '제작 미완료' in report
-    assert '**0/3편**' in report
+    assert '완료 조건 미충족' in report
+    assert '| naver_blog | 0 | 3 | 네이버 임시저장 목록 재확인 |' in report
+    assert '실패: **3건**' in report
+
+
+def test_unknown_run_with_no_expected_channel_cannot_claim_business_completion():
+    report = markdown_report({}, {}, 'success', 'https://example.org/run')
+    assert '완료 조건 미충족' in report
+    assert '실패: **0건**' in report
+
+
+def test_green_workflow_does_not_complete_blog_without_naver_draft_list_verification(tmp_path):
+    blog = good_blog()
+    blog['naver_draft_verified'] = False
+    data_path = record_results(tmp_path, 'naver_blog', [blog], 1)
+    data = json.loads(data_path.read_text(encoding='utf-8'))
+    report = markdown_report(data, {'naver_blog': 1}, 'success', 'https://example.org/run')
+    assert '워크플로 실행: **success** (업무 완료와 별도)' in report
+    assert '| naver_blog | 0 | 1 | 네이버 임시저장 목록 재확인 |' in report
+    assert '완료 조건 미충족' in report
+
+
+def test_shorts_complete_only_with_real_mp4_and_media_qa(tmp_path):
+    result = good_short(tmp_path)
+    result['media']['verification']['pass'] = False
+    path = record_results(tmp_path, 'japan_shorts', [result], 1)
+    data = json.loads(path.read_text(encoding='utf-8'))
+    assert data['batches'][0]['results'][0]['video_file_exists'] is True
+    assert data['batches'][0]['results'][0]['video_qa_pass'] is False
+    report = markdown_report(data, {'japan_shorts': 1}, 'success', 'https://example.org/run')
+    assert '| japan_shorts | 0 | 1 | MP4 파일 + QA 통과 |' in report
+    assert '실패: **1건**' in report
+
+
+def test_shorts_missing_mp4_fails_even_when_workflow_and_notion_are_green(tmp_path):
+    result = good_short(tmp_path)
+    result['media']['video'] = str(tmp_path / 'missing.mp4')
+    path = record_results(tmp_path, 'ppojjugi_shorts', [result], 1)
+    data = json.loads(path.read_text(encoding='utf-8'))
+    report = markdown_report(data, {'ppojjugi_shorts': 1}, 'success', 'https://example.org/run')
+    assert '| ppojjugi_shorts | 0 | 1 | MP4 파일 + QA 통과 |' in report
+    assert '실패: **1건**' in report
 
 
 def test_blog_without_readback_does_not_count_as_reviewed_output(tmp_path):
@@ -55,7 +108,7 @@ def test_shorts_without_readback_does_not_count_as_reviewed_output(tmp_path):
     path = record_results(tmp_path, 'japan_shorts', [result], 1)
     data = json.loads(path.read_text(encoding='utf-8'))
     assert data['batches'][0]['reviewed_outputs'] == 0
-    assert '제작 미완료' in markdown_report(data, {'japan_shorts': 1}, 'success', 'https://example.org/run')
+    assert '완료 조건 미충족' in markdown_report(data, {'japan_shorts': 1}, 'success', 'https://example.org/run')
 
 
 @pytest.mark.parametrize(('event', 'mode', 'production'), [
@@ -73,7 +126,7 @@ def test_workflow_recovery_has_no_topic_seeding_and_no_upload():
     recovery = workflow.split('- name: Recover one existing blog', 1)[1].split('\n      - name:', 1)[0]
     assert 'seed-topics' not in recovery
     assert 'python -m app.main page naver_blog "$RECOVERY_PAGE_ID"' in recovery
-    assert "AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'" in recovery
+    assert 'AUTO_PRIVATE_YOUTUBE_UPLOAD' not in recovery
     status = workflow.split('- name: Update production status board', 1)[1]
     assert "github.event_name == 'schedule'" in status
     assert "github.event_name == 'workflow_dispatch'" in status
@@ -133,7 +186,7 @@ def test_resume_workflow_reuses_one_repository_artifact_without_seeding():
     assert 'RESUME_PAGE_ID: ${{ inputs.page_id }}' in resume
     assert '--repo "$GITHUB_REPOSITORY"' in resume
     assert 'resume-blog "$RESUME_PAGE_ID" "recovered/$page_folder/manifest.json"' in resume
-    assert "AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'" in resume
+    assert 'AUTO_PRIVATE_YOUTUBE_UPLOAD' not in resume
     assert expected_channels('workflow_dispatch', '', 'resume_blog', 'japan_shorts') == {'naver_blog': 1}
 
 
@@ -193,9 +246,8 @@ def test_resume_summary_combines_two_old_passes_and_one_recovery_without_double_
     assert current['batches'][0]['expected'] == 1  # The CLI result is untouched.
     assert prior['batches'][0]['results'][2]['qa_pass'] is False
     report = markdown_report(merged, {'naver_blog': 3}, 'success', 'https://github.com/org/repo/actions/runs/35300000000')
-    assert '블로그 합계: **3/3편** · 이번 재개: **1/1편**' in report
+    assert '블로그 최종 확인: **0/3편** · 이번 재개: **0/1편**' in report
     assert 'https://github.com/org/repo/actions/runs/35294118274' in report
-    assert '네이버 임시저장·재열람 확인: **0편**' in report
 
 
 @pytest.mark.parametrize('damage', ['duplicate', 'other_channel', 'manuscript_hash', 'card_hash', 'source_hash', 'already_done'])
@@ -228,8 +280,8 @@ def test_failed_recovery_preserves_two_prior_successes_without_calling_batch_com
     merged = merge_resumed_blog_batch(current, prior_dir, current_dir, ids[2], '35294118274', '35300000000')
     assert merged['batches'][0]['reviewed_outputs'] == 2
     report = markdown_report(merged, {'naver_blog': 3}, 'failure', 'https://example.org/runs/35300000000')
-    assert '블로그 합계: **2/3편** · 이번 재개: **0/1편**' in report
-    assert '제작 미완료' in report
+    assert '블로그 최종 확인: **0/3편** · 이번 재개: **0/1편**' in report
+    assert '완료 조건 미충족' in report
 
 
 def test_invalid_prior_evidence_falls_back_to_current_run_without_daily_completion_claim(monkeypatch, tmp_path):
@@ -247,7 +299,7 @@ def test_invalid_prior_evidence_falls_back_to_current_run_without_daily_completi
     monkeypatch.delenv('GITHUB_STEP_SUMMARY', raising=False)
     module.main()
     report = (current_dir / 'production-summary.md').read_text(encoding='utf-8')
-    assert '**1/1편**' in report
+    assert '| naver_blog | 0 | 1 | 네이버 임시저장 목록 재확인 |' in report
     assert '오늘 전체 완료 수는 미확인' in report
     assert '**3/3편**' not in report
     assert not (current_dir / 'batch-recovery-results.json').exists()
@@ -335,3 +387,44 @@ def test_workflow_restores_original_batch_evidence_before_repeated_resume():
     assert '--dir recovered-original' in resume
     assert '--reviewed-manifest "recovered-original/$page_folder/manifest.json"' in resume
     assert 'original_run_id="$REVIEWED_RUN_ID"' in resume
+
+
+def test_final_summary_waits_for_notion_naver_completion(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    row = {
+        'channel': 'naver_blog', 'page_id': '1' * 32, 'title': '확인된 글',
+        'status': '네이버 저장 요청', 'qa_pass': True, 'notion_page_updated': True,
+        'output_verified': True, 'budget_blocked': False, 'card_count': 5,
+        'cards_attached': True, 'naver_draft_verified': False,
+    }
+    Path('output').mkdir()
+    Path('output/production-results.json').write_text(json.dumps({
+        'batches': [{'channel': 'naver_blog', 'expected': 1, 'results': [row]}],
+    }), encoding='utf-8')
+    summary = tmp_path / 'step-summary.md'
+    monkeypatch.setenv('EVENT_NAME', 'workflow_dispatch')
+    monkeypatch.setenv('DISPATCH_MODE', 'produce')
+    monkeypatch.setenv('DISPATCH_CHANNEL', 'naver_blog')
+    monkeypatch.setenv('RUN_STATUS', 'success')
+    monkeypatch.setenv('GITHUB_REPOSITORY', 'owner/repo')
+    monkeypatch.setenv('GITHUB_RUN_ID', '123')
+    monkeypatch.setenv('GITHUB_STEP_SUMMARY', str(summary))
+    monkeypatch.setenv('NOTION_ACCESS_TOKEN', 'test-token')
+
+    def confirm(data, token):
+        assert token == 'test-token'
+        data['batches'][0]['results'][0].update({
+            'naver_draft_verified': True,
+            'naver_draft_state': 'verified',
+        })
+        return data
+
+    monkeypatch.setattr(report, 'confirm_naver_results', confirm)
+    report.main()
+
+    output = Path('output/production-summary.md').read_text(encoding='utf-8')
+    assert '| naver_blog | 1 | 1 | 네이버 임시저장 목록 재확인 |' in output
+    assert '실제 결과 확인 완료' in output
+    verification = json.loads(Path('output/naver-verification.json').read_text(encoding='utf-8'))
+    assert verification['results'][0]['verified'] is True
+    assert '실제 결과 확인 완료' in summary.read_text(encoding='utf-8')

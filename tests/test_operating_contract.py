@@ -11,7 +11,7 @@ def test_operating_contract_fixes_one_owner_per_delivery_boundary():
 
     blog = contract.channel('naver_blog')
     assert blog.producer_owner == 'github_actions'
-    assert blog.delivery_owner == 'codex_automation_3'
+    assert blog.delivery_owner == 'local_browser_worker'
     assert blog.publication_owner == 'user'
     assert blog.handoff_status == '네이버 저장 요청'
 
@@ -27,9 +27,9 @@ def test_operating_contract_rejects_cross_environment_stage_claims():
 
     receipt = contract.receipt(
         'naver_blog', document_id='page-1', source_version='sha256',
-        stage='DRAFT_VERIFIED', owner='codex_automation_3',
+        stage='DRAFT_VERIFIED', owner='local_browser_worker',
     )
-    assert receipt['owner'] == 'codex_automation_3'
+    assert receipt['owner'] == 'local_browser_worker'
 
     with pytest.raises(RuntimeError, match='expected'):
         contract.receipt(

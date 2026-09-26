@@ -75,7 +75,7 @@ def load_operating_contract(path: str | Path = 'config/operating_contract.yaml')
     if not isinstance(data, dict) or data.get('contract_id') != 'HAMZZU_OPERATING_CONTRACT_V1':
         raise RuntimeError('Operating contract ID is missing or unsupported')
     environments = data.get('environments') or {}
-    required_environments = {'github_actions', 'notion', 'codex_automation_3', 'user'}
+    required_environments = {'github_actions', 'notion', 'local_browser_worker', 'user'}
     if set(environments) != required_environments:
         raise RuntimeError('Operating contract environments are incomplete')
     channels: dict[str, ChannelOwnership] = {}

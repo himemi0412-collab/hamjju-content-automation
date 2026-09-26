@@ -19,7 +19,7 @@ def test_channels_are_separated():
     assert c['ppojjugi_shorts'].required_select_values is None
     assert c['ppojjugi_shorts'].required_number_greater_than is None
     assert c['ppojjugi_shorts'].sort_property is None
-    assert c['japan_shorts'].youtube_privacy == 'private'
+    assert not hasattr(c['japan_shorts'], 'youtube_privacy')
 
 
 def test_run_limit_is_global_across_channels():

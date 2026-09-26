@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from typing import Any
 import httpx
+from .content_fingerprint import canonical_content_hash
 
 NOTION_VERSION = '2026-03-11'
 NOTION_SINGLE_PART_LIMIT = 20 * 1024 * 1024
@@ -379,6 +380,13 @@ def split_text(text: str, limit: int) -> list[str]:
     return chunks
 
 
+def split_snapshot_json(snapshot: str, limit: int = 1800) -> list[str]:
+    """Split machine-readable handoff JSON without trimming boundary characters."""
+    if limit < 1:
+        raise ValueError('snapshot chunk limit must be positive')
+    return [snapshot[index:index + limit] for index in range(0, len(snapshot), limit)] or ['']
+
+
 def _markdown_line_blocks(line: str) -> list[dict[str, Any]]:
     if not line:
         return [{'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': []}}]
@@ -406,6 +414,9 @@ def naver_handoff_blocks(
     source_version: str,
     card_upload_ids: list[str],
     card_names: list[str],
+    run_id: str | None = None,
+    qa_run_id: str | None = None,
+    card_sha256s: list[str] | None = None,
     ownership_receipt: dict[str, str] | None = None,
     _legacy_paragraph_order: bool = False,
 ) -> list[dict[str, Any]]:
@@ -416,8 +427,24 @@ def naver_handoff_blocks(
         raise ValueError('Naver handoff requires an independent QA pass')
     if not document_id or not source_version:
         raise ValueError('Naver handoff identity is incomplete')
+    versioned_handoff = run_id is not None or qa_run_id is not None or card_sha256s is not None
+    if versioned_handoff:
+        if (
+            not run_id or not qa_run_id or qa.get('source_page_id') != document_id
+            or qa.get('source_run_id') != qa_run_id
+        ):
+            raise ValueError('Naver handoff QA identity does not match this page and run')
+        if qa.get('source_content_sha256') != source_version:
+            raise ValueError('Naver handoff QA hash does not match the final content version')
+        if canonical_content_hash(generated) != source_version:
+            raise ValueError('Naver handoff content does not match the final content version')
     if not (len(cards) == len(placements) == len(card_upload_ids) == len(card_names) == 5):
         raise ValueError('Naver handoff requires five ordered reviewed cards')
+    card_sha256s = card_sha256s or []
+    if versioned_handoff and (len(card_sha256s) != 5 or any(not re.fullmatch(r'[0-9a-f]{64}', str(x)) for x in card_sha256s)):
+        raise ValueError('Naver handoff requires five reviewed card hashes')
+    if versioned_handoff and qa.get('source_card_sha256s') != card_sha256s:
+        raise ValueError('Naver handoff card hashes do not match the QA receipt')
 
     body = str(generated.get('body_markdown') or '').strip()
     if not body:
@@ -531,6 +558,8 @@ def naver_handoff_blocks(
         {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich('저장 준비 완료: READY_FOR_NAVER_DRAFT')}},
         {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich(f'원고 ID: {document_id}')}},
         {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich(f'버전: {source_version}')}},
+        *([{'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich(f'실행 ID: {run_id}')}}] if versioned_handoff else []),
+        *([{'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich(f'QA 실행 ID: {qa_run_id}')}}] if versioned_handoff else []),
         {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich('검수: PASS')}},
         {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich('이미지 수: 5')}},
         {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich('네이버 임시저장만 허용 · 공개/예약발행 금지')}},
@@ -555,12 +584,83 @@ def naver_handoff_blocks(
             {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich(f"공개 결정 소유자: {ownership_receipt['publication_owner']}")}},
         ]
         blocks[7:7] = ownership_blocks
-    snapshot = json.dumps(
-        {'generated': generated, 'qa': qa, 'ownership': ownership_receipt},
-        ensure_ascii=False,
-        indent=2,
-    )
-    for chunk in split_text(snapshot, 1800):
+    snapshot_value: dict[str, Any] = {
+        'generated': generated,
+        'qa': qa,
+        'ownership': ownership_receipt,
+    }
+    if versioned_handoff:
+        snapshot_value['handoff'] = {
+                'schema_version': 2,
+                'page_id': document_id,
+                'run_id': run_id,
+                'qa_run_id': qa_run_id,
+                'content_version': source_version,
+                'content_sha256': source_version,
+                'card_sha256s': list(card_sha256s),
+        }
+    snapshot = json.dumps(snapshot_value, ensure_ascii=False, indent=2)
+    for chunk in split_snapshot_json(snapshot):
+        blocks.append({'object': 'block', 'type': 'code', 'code': {'language': 'json', 'rich_text': rich(chunk)}})
+    return blocks
+
+
+def naver_handoff_receipt_blocks(
+    generated: dict[str, Any],
+    qa: dict[str, Any],
+    *,
+    document_id: str,
+    source_version: str,
+    run_id: str,
+    qa_run_id: str,
+    card_sha256s: list[str],
+    ownership_receipt: dict[str, str],
+) -> list[dict[str, Any]]:
+    """Append a compact machine handoff after re-QA without duplicating the post body."""
+    if qa.get('pass') is not True or qa.get('blocking_issues'):
+        raise ValueError('Naver handoff requires an independent QA pass')
+    if qa.get('source_page_id') != document_id or qa.get('source_run_id') != qa_run_id:
+        raise ValueError('Naver handoff QA identity does not match this page and run')
+    if qa.get('source_content_sha256') != source_version:
+        raise ValueError('Naver handoff QA hash does not match the final content version')
+    if not (len(generated.get('card_news') or []) == len(generated.get('image_placements') or []) == 5):
+        raise ValueError('Naver handoff requires five reviewed cards and placements')
+    if len(card_sha256s) != 5 or any(not re.fullmatch(r'[0-9a-f]{64}', str(x)) for x in card_sha256s):
+        raise ValueError('Naver handoff requires five reviewed card hashes')
+    if (
+        ownership_receipt.get('document_id') != document_id
+        or ownership_receipt.get('source_version') != source_version
+        or ownership_receipt.get('stage') != 'HANDOFF_READY'
+        or ownership_receipt.get('channel') != 'naver_blog'
+    ):
+        raise ValueError('Naver handoff ownership receipt does not match the reviewed version')
+    if not run_id or not qa_run_id or not str(generated.get('title') or '').strip() or not str(generated.get('body_markdown') or '').strip():
+        raise ValueError('Naver handoff identity or manuscript is incomplete')
+    snapshot = json.dumps({
+        'generated': generated,
+        'qa': qa,
+        'ownership': ownership_receipt,
+        'handoff': {
+            'schema_version': 2,
+            'page_id': document_id,
+            'run_id': run_id,
+            'qa_run_id': qa_run_id,
+            'content_version': source_version,
+            'content_sha256': source_version,
+            'card_sha256s': list(card_sha256s),
+        },
+    }, ensure_ascii=False, indent=2)
+    blocks: list[dict[str, Any]] = [
+        {'object': 'block', 'type': 'divider', 'divider': {}},
+        {'object': 'block', 'type': 'heading_2', 'heading_2': {'rich_text': rich('네이버 임시저장 검증 전달 자료')}},
+        {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich('저장 준비 완료: READY_FOR_NAVER_DRAFT')}},
+        {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich(f'원고 ID: {document_id}')}},
+        {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich(f'버전: {source_version}')}},
+        {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich(f'실행 ID: {run_id}')}},
+        {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich(f'QA 실행 ID: {qa_run_id}')}},
+        {'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich('검수: PASS · 이미지 수: 5 · 임시저장만 허용 · 공개/예약발행 금지')}},
+    ]
+    for chunk in split_snapshot_json(snapshot):
         blocks.append({'object': 'block', 'type': 'code', 'code': {'language': 'json', 'rich_text': rich(chunk)}})
     return blocks
 
@@ -609,7 +709,7 @@ def result_blocks(
         blocks.append({'object': 'block', 'type': 'paragraph', 'paragraph': {'rich_text': rich(chunk)}})
 
     snapshot = json.dumps({'generated': generated, 'qa': qa}, ensure_ascii=False, indent=2)
-    for chunk in split_text(snapshot, 1800):
+    for chunk in split_snapshot_json(snapshot):
         blocks.append({'object': 'block', 'type': 'code', 'code': {'language': 'json', 'rich_text': rich(chunk)}})
     return blocks
 

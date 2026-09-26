@@ -27,9 +27,15 @@ def test_subject_locks_name_the_exact_failed_appliance_parts():
     gasket = _subject_lock({'headline': '냉장고 고무패킹 곰팡이', 'items': []})
     aircon = _subject_lock({'headline': '에어컨 점검', 'items': [{'label': '배수호스', 'detail': '꺾임 확인'}]})
     tank = _subject_lock({'headline': '제습기 물통 말리기', 'items': []})
+    bidet = _subject_lock({'headline': '비데 설명서 순서 확인', 'items': []})
+    bidet_leak = _subject_lock({'headline': '비데 점검은 설명서대로', 'items': []}, index=4)
+    bidet_move = _subject_lock({'headline': '비데 이사 전 판단 기준', 'items': []}, index=5)
     assert 'door gasket' in gasket and 'washing machine' in gasket
     assert 'drain hose' in aircon and 'ruler' in aircon
     assert 'dehumidifier' in tank and 'water tank' in tank
+    assert 'electronic bidet seat' in bidet and 'Never show a washing machine' in bidet
+    assert 'not opening or turning' in bidet_leak
+    assert 'moving-day bathroom scene' in bidet_move
 
 
 def test_daily_blog_route_uses_generated_scene_then_local_korean_typesetting():

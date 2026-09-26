@@ -17,7 +17,6 @@ class ChannelConfig:
     prompt_file: str
     media_generation: bool = False
     publish_policy: str | None = None
-    youtube_privacy: str | None = None
     excluded_formula_property: str | None = None
     excluded_formula_value: str | None = None
     required_select_values: dict[str, str] | None = None

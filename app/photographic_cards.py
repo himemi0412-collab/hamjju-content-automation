@@ -75,6 +75,23 @@ def _fit(draw: ImageDraw.ImageDraw, text: str, path: str | None, maximum: int,
     raise ValueError('Korean overlay text does not fit its reserved region')
 
 
+def _fit_wrapped(
+    draw: ImageDraw.ImageDraw, text: str, path: str | None, maximum: int,
+    box: tuple[int, int, int, int], *, minimum: int = 18,
+) -> tuple[ImageFont.ImageFont, str]:
+    """Fit supporting copy by wrapping at word/character boundaries, never clipping."""
+    x1, y1, x2, y2 = box
+    for size in range(maximum, minimum - 1, -1):
+        font = _font(path, size)
+        wrapped = _wrap_to_width(draw, text, font, x2 - x1)
+        left, top, right, bottom = draw.multiline_textbbox(
+            (0, 0), wrapped, font=font, spacing=7,
+        )
+        if right - left <= x2 - x1 and bottom - top <= y2 - y1:
+            return font, wrapped
+    raise ValueError('Korean overlay copy does not fit its reserved region')
+
+
 def _wrap_to_width(draw: ImageDraw.ImageDraw, value: str,
                    font: ImageFont.ImageFont, width: int) -> str:
     lines: list[str] = []
@@ -109,6 +126,20 @@ def _subject_lock(card: dict[str, Any], index: int | None = None) -> str:
                 'reservoir being filled; for direct supply, show the dishwasher '
                 'connected to a kitchen faucet. Never show an air conditioner, '
                 'outdoor condenser, dehumidifier, purifier or laundry washer.')
+    if '비데' in source and index == 4:
+        return ('Use a close documentary crop of a bidet supply-hose connection after reinstallation, '
+                'with a hand holding a dry tissue near (not opening or turning) the connection to look for moisture. '
+                'Show ordinary bathroom tile and a small used towel for lived-in context; do not show a full product hero shot. '
+                'Do not imply that users should manipulate a valve unless their model manual explicitly says so.')
+    if '비데' in source and index == 5:
+        return ('Show an ordinary moving-day bathroom scene from a wider doorway view: a partially packed moving box '
+                'with a small bag of bidet mounting parts in the foreground and a toilet with a bidet seat farther back. '
+                'Include modest lived-in details and natural uneven daylight. Keep the bidet secondary, not a glossy product close-up. '
+                'No readable text, labels, logos, staged product advertising, or repeated close-up composition.')
+    if '비데' in source:
+        return ('Show a clearly recognizable non-branded electronic bidet seat attached to a toilet, '
+                'with its bidet water hose and accessible shutoff/diverter valve in a bathroom. '
+                'Never show a washing machine, laundry hose, kitchen appliance, or unrelated water connection.')
     if '건조기' in source and index == 1:
         return (
             'Show one recognizable front-loading tumble clothes dryer with its circular door. '
@@ -222,6 +253,7 @@ def generate_and_typeset_blog_cards(
     model: str,
     quality: str,
     font_path: str | None,
+    body_font_path: str | None = None,
     budget: Any | None = None,
     estimated_cost_usd: float = 0.05,
     only_indices: set[int] | None = None,
@@ -298,7 +330,7 @@ def generate_and_typeset_blog_cards(
                 'items': (562, 464, 1002, 974), 'align': 'left'},
             5: {'panel': (350, 530, 1038, 1038), 'role': (380, 555), 'number': (906, 555),
                 'title': (380, 608, 1000, 702), 'copy': (380, 714, 1000, 775),
-                'items': (380, 800, 1000, 1010), 'align': 'right'},
+                'items': (380, 800, 1000, 1010), 'align': 'left'},
         }
         spec = layouts[index]
         x1, y1, x2, y2 = spec['panel']
@@ -327,12 +359,15 @@ def generate_and_typeset_blog_cards(
         # Omit the redundant role label. It was read as clipped helper copy in visual QA
         # and added a template-like accent without carrying article information.
         title_font = _fit(draw, headline, font_path, 54, spec['title'], minimum=32)
-        copy_font = _fit(draw, copy, font_path, 27, spec['copy'], minimum=20)
+        text_font_path = body_font_path or font_path
+        copy_font, copy_render = _fit_wrapped(
+            draw, copy, text_font_path, 27, spec['copy'], minimum=20,
+        )
         anchor = 'ma' if spec['align'] == 'center' else ('ra' if spec['align'] == 'right' else None)
         title_x = (spec['title'][0] + spec['title'][2]) // 2 if anchor == 'ma' else (spec['title'][2] if anchor == 'ra' else spec['title'][0])
         copy_x = (spec['copy'][0] + spec['copy'][2]) // 2 if anchor == 'ma' else (spec['copy'][2] if anchor == 'ra' else spec['copy'][0])
         draw.multiline_text((title_x, spec['title'][1]), headline, font=title_font, fill='#202329', spacing=8, anchor=anchor)
-        draw.multiline_text((copy_x, spec['copy'][1]), copy, font=copy_font, fill='#343741', spacing=7, anchor=anchor)
+        draw.multiline_text((copy_x, spec['copy'][1]), copy_render, font=copy_font, fill='#343741', spacing=7, anchor=anchor)
 
         # Every item contains distinct information from the approved five-card
         # plan. The former renderer dropped label/detail entirely, leaving an
@@ -363,11 +398,11 @@ def generate_and_typeset_blog_cards(
                          top + min(38, current_slot_height // 2))
             detail_box = (item_left, top + min(38, current_slot_height // 2),
                           item_right, top + current_slot_height - 4)
-            label_font = _fit(draw, label, font_path, 24, label_box, minimum=16)
+            label_font = _fit(draw, label, text_font_path, 24, label_box, minimum=16)
             detail_font = None
             wrapped = ''
             for font_size in range(19, 12, -1):
-                candidate_font = _font(font_path, font_size)
+                candidate_font = _font(text_font_path, font_size)
                 candidate = _wrap_to_width(
                     draw, detail, candidate_font, detail_box[2] - detail_box[0]
                 )

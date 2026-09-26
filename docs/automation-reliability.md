@@ -2,9 +2,9 @@
 
 ## Actual execution path
 
-GitHub `daily.yml` schedule/manual dispatch → checkout and cached budget/state restore → Python/system dependencies → `pytest -q` → OAuth materialization for media modes → `doctor` and `app.preflight` → `app.main` command → Notion fetch and eligibility → AI generation → independent QA → optional media generation and media verification → Notion append/attachments and optional private YouTube upload → Notion status update → readback → `validate_results` → `production-results.json` → status report/artifact/notification.
+GitHub `daily.yml` schedule/manual dispatch → checkout and cached budget/state restore → Python/system dependencies → `pytest -q` → `doctor` and `app.preflight` → `app.main` command → Notion fetch and eligibility → AI generation → independent QA → optional media generation and media verification → Notion append/attachments → Notion status update → readback → `validate_results` → `production-results.json` → for blog runs, wait up to 15 minutes for the local Naver worker's terminal Notion status → verify that exact page and title → status report/artifact/notification. YouTube OAuth files are materialized only for the explicit read-only identity-check mode; Shorts production and recovery do not upload videos.
 
-`dry_run` reads one eligible Notion page and does not run paid generation or change the page. The GitHub run conclusion alone does not prove a content item succeeded. `output_verified` means the page's saved status and produced blocks were read back; Shorts also check any claimed video attachment, media verification, and the saved YouTube URL. When automatic upload is configured, the authorized YouTube account must also return that exact video ID and privacy setting through `videos.list`.
+`dry_run` reads one eligible Notion page and does not run paid generation or change the page. The GitHub run conclusion alone does not prove a content item succeeded. `output_verified` means the page's saved status and produced blocks were read back. Notion is the completion source of truth: the local worker writes `임시저장 완료` only after the draft-list reopen check; the Actions summary reads that status before it is generated. A timeout or Notion readback failure is incomplete/failed, never PASS. Shorts need an existing MP4 and passing media QA.
 
 ## Recovery rules
 
@@ -12,11 +12,11 @@ GitHub `daily.yml` schedule/manual dispatch → checkout and cached budget/state
 2. `PRECHECK_FAILED` blocks production. A missing credential, ledger, resource, or write permission is a configuration error; 401/403 is an authentication error; 429 may represent a rate limit; 5xx and network failures may be transient. Only safe read calls receive bounded backoff.
 3. Before retrying an item after an upload or partial Notion write, inspect the exact page, stored URL, output artifact, and previous run. Never assume another generation or upload is idempotent. Manual repair paths need exact page and artifact identity.
 4. Add a failure reproducer, fix the cause, run related tests and the full suite, then run a read-only dry run. Inspect the workflow summary and independently read saved results after any authorized production run.
-5. Mark an item complete only if QA passes, output readback passes, and the required media/upload evidence exists. Unknown evidence is incomplete. Do not promote private uploads to public without the configured approval.
+5. Mark an item complete only if QA passes, output readback passes, and the channel-specific result exists. Unknown evidence is incomplete.
 
 ## Known limits
 
 - Local SQLite and budget ledgers are restored from GitHub caches. Cache retention or restore failure can interrupt production; the budget ledger fails closed when required. GitHub workflow concurrency serializes runs, but an API response lost after a remote write still needs exact-page reconciliation.
 - The preflight checks credential presence, local paths and budget, and read-only Notion identity/source access. It does not determine remaining OpenAI/Fal/YouTube quota or confirm all provider credentials in advance; provider failures must still be diagnosed from the first failing operation.
-- Media, Notion, and YouTube readback are checked in-process. A transient readback failure after an upload stops success reporting and leaves the uploaded page for exact-page reconciliation; it must not trigger another upload automatically.
+- Media and Notion readback are checked in-process. Shorts production creates local MP4 review artifacts and never uploads them to YouTube.
 - Secrets are referenced by workflow name, never read or reported in diagnostics. GitHub issue/email delivery is separate from successful content production.

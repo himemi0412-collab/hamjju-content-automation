@@ -42,7 +42,7 @@
 - 각 scene에 `speaker_profile`을 반드시 기록한다. 같은 인물은 모든 장면에서 같은 프로필과 음색을 유지한다. 모든 프로필은 자연스러운 표준 일본어, 사람다운 숨·머뭇거림·감정 고조·문장 끝의 여운으로 말한다. 애니메이션 연기·방송·광고 내레이션·기계식 TTS 억양을 금지한다.
 - `narrator_profile.profile`은 실제 scene의 `speaker_profile` 종류가 하나이면 그 단일 프로필을 쓰고, 서로 다른 화자가 둘 이상일 때만 `multiple`을 쓴다. 여러 인물의 모습만 등장하고 한 명이 내레이션하면 단일 프로필이다.
 - 각 scene에 그 화면에서 실제로 들릴 narration 구간을 넣는다. scene narration을 순서대로 이어 붙이면 전체 narration과 의미·문장 순서가 정확히 같아야 하며, caption은 그 구간의 핵심과 일치해야 한다.
-- 결과는 검토용 이미지·음성·자막·1080×1920 MP4다. automation_scope.youtube_upload_expected=true이면 QA 통과 뒤 비공개 YouTube 업로드는 허용한다. 공개·예약 발행은 public_approval=true와 public_upload_enabled=true가 모두 확인된 경우에만 허용한다.
+- 결과는 검토용 이미지·등장인물별 음성·자막·1080×1920 MP4다. YouTube 업로드는 하지 않는다.
 - 사전 대본의 scene seconds는 50~70초 목표를 확인하기 위한 예상치이며 합계가 반드시 50~70초여야 한다. 렌더링 단계에서는 이 예상치를 버리고, 장면별 실제 생성 음성 길이에 0.2~0.3초의 최소 여백만 더해 최종 지속시간을 다시 계산한다. 전체 음성 뒤의 긴 apad로 길이를 맞추지 않는다.
 - 음성은 `fal-ai/gemini-3.1-flash-tts`, 일본어, temperature 1.1을 사용한다. 고정 음색은 young_woman=Aoede, young_man=Puck, older_woman=Gacrux, older_man=Charon이다. 한 영상 안에서 제공자를 바꾸거나 일반 OpenAI 음성으로 대체하지 않는다.
 - 이미 성공한 장면은 재생성하지 않고 누락되거나 명백히 부자연스러운 장면만 순차 생성한다.

@@ -4,10 +4,11 @@ import pytest
 from app.naver import save_draft, NaverDraftAutomationUnavailable
 
 
-def test_youtube_code_hardcodes_private():
+def test_youtube_identity_check_is_read_only():
     src = Path('app/youtube.py').read_text(encoding='utf-8')
-    assert "privacy_status: str = 'private'" in src
-    assert "privacy_status not in {'private', 'public'}" in src
+    assert 'youtube.readonly' in src
+    assert 'youtube.upload' not in src
+    assert 'videos().insert' not in src
 
 
 def test_naver_browser_automation_is_disabled():
@@ -19,7 +20,7 @@ def test_naver_browser_automation_is_disabled():
         raise AssertionError('Naver automation should be disabled by design')
 
 
-def test_github_action_keeps_blog_local_and_uploads_review_shorts_privately():
+def test_github_action_keeps_blog_local_and_never_uploads_shorts():
     workflow = Path('.github/workflows/daily.yml').read_text(encoding='utf-8')
     assert 'actions/checkout@v7' in workflow
     assert 'actions/setup-python@v7' in workflow
@@ -35,8 +36,8 @@ def test_github_action_keeps_blog_local_and_uploads_review_shorts_privately():
     assert "cron: '0 1 * * *'" in workflow
     assert "cron: '0 12 * * *'" in workflow
     assert 'ENABLE_MEDIA_GENERATION=false python -m app.main channel naver_blog --limit 3' in workflow
-    assert 'ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=true python -m app.main channel ppojjugi_shorts --limit 1' in workflow
-    assert 'ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=true python -m app.main channel japan_shorts --limit 1' in workflow
+    assert 'ENABLE_MEDIA_GENERATION=true python -m app.main channel ppojjugi_shorts --limit 1 --auto-retry' in workflow
+    assert 'ENABLE_MEDIA_GENERATION=true python -m app.main channel japan_shorts --limit 1 --auto-retry' in workflow
     assert 'execute_media' in workflow
     assert 'prepare_topic' in workflow
     assert 'plan_month' in workflow
@@ -47,75 +48,14 @@ def test_github_action_keeps_blog_local_and_uploads_review_shorts_privately():
     assert 'seed-topics --blog-count 0 --ppojjugi-count 0 --japan-count 1' in workflow
     assert 'default: dry_run' in workflow
     assert '--dry-run --limit 1' in workflow
-    assert "AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'" in workflow
-    assert "AUTO_PRIVATE_YOUTUBE_UPLOAD: 'true'" in workflow
+    assert 'AUTO_PRIVATE_YOUTUBE_UPLOAD' not in workflow
+    assert 'upload_private' not in Path('app/pipeline.py').read_text(encoding='utf-8')
     assert 'verify_youtube_auth' in workflow
     assert 'explore_card_design' in workflow
     assert 'explore-card-design' in workflow
     assert 'YOUTUBE_CLIENT_SECRET_JSON_B64' in workflow
     assert 'secrets.BLOG_DATA_SOURCE_ID' not in workflow
     assert 'secrets.SHORTS_DATA_SOURCE_ID' not in workflow
-
-
-def test_channel_mismatch_stops_before_youtube_upload(monkeypatch, tmp_path):
-    from app.pipeline import Pipeline
-    from app.settings import Settings
-
-    called = {'upload': False}
-
-    class FakeUploader:
-        def __init__(self, *_args, **_kwargs):
-            pass
-
-        def current_channel(self):
-            return {'id': 'wrong-channel', 'title': 'Wrong account'}
-
-        def upload_private(self, *_args, **_kwargs):
-            called['upload'] = True
-            return 'https://www.youtube.com/watch?v=should-not-exist'
-
-    monkeypatch.setattr('app.pipeline.YouTubePrivateUploader', FakeUploader)
-    pipeline = Pipeline(Settings(), None, None, None)
-
-    try:
-        pipeline._upload_private('ppojjugi_shorts', {'title': 'test'}, tmp_path / 'video.mp4')
-    except RuntimeError as exc:
-        assert 'channel mismatch' in str(exc)
-    else:
-        raise AssertionError('A mismatched YouTube channel must stop the upload')
-    assert called['upload'] is False
-
-
-def test_public_upload_requires_repository_gate(tmp_path):
-    from app.pipeline import Pipeline
-    from app.settings import Settings
-
-    pipeline = Pipeline(Settings(_env_file=None, allow_public_youtube_upload=False), None, None, None)
-    with pytest.raises(RuntimeError, match='Public YouTube upload is disabled'):
-        pipeline._upload_private('ppojjugi_shorts', {}, tmp_path / 'video.mp4', privacy_status='public')
-
-
-def test_internal_budget_stops_before_youtube_upload(monkeypatch, tmp_path):
-    from datetime import datetime, timezone
-
-    from app.budget import BudgetGuard, BudgetLimitReached
-    from app.pipeline import Pipeline
-    from app.settings import Settings
-
-    called = {'uploader_created': False}
-
-    class FakeUploader:
-        def __init__(self, *_args, **_kwargs):
-            called['uploader_created'] = True
-
-    monkeypatch.setattr('app.pipeline.YouTubePrivateUploader', FakeUploader)
-    month = datetime.now(timezone.utc).strftime('%Y-%m')
-    budget = BudgetGuard(tmp_path / 'ledger.json', 0.5, month, 0.5)
-    pipeline = Pipeline(Settings(), None, None, None, budget)
-
-    with pytest.raises(BudgetLimitReached):
-        pipeline._upload_private('ppojjugi_shorts', {'title': 'test'}, tmp_path / 'video.mp4')
-    assert called['uploader_created'] is False
 
 
 def test_budget_blocked_result_fails_workflow_validation():

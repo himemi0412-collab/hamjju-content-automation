@@ -46,8 +46,6 @@ class Settings(BaseSettings):
     auto_retry_blog_enabled: bool = False
     enable_web_research: bool = True
     enable_media_generation: bool = False
-    auto_private_youtube_upload: bool = False
-    allow_public_youtube_upload: bool = False
 
     youtube_client_secrets_file: Path = Path('secrets/youtube_client_secret.json')
     youtube_token_file: Path = Path('secrets/youtube_token.json')
@@ -59,7 +57,8 @@ class Settings(BaseSettings):
     state_db: Path = Path('output/state.db')
     output_dir: Path = Path('output')
     operating_contract_path: Path = Path('config/operating_contract.yaml')
-    card_font_path: str | None = None
+    card_font_path: str | None = r'C:\Users\mynfo\.agents\assets\fonts\Cafe24Ssurround-v2.0\Cafe24Ssurround-v2.0.ttf'
+    card_body_font_path: str | None = r'C:\Windows\Fonts\malgun.ttf'
     log_level: str = 'INFO'
 
     @property

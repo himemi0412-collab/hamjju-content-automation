@@ -5,19 +5,26 @@ and can only click the exact '임시저장' action. Public/reserved publishing i
 """
 from __future__ import annotations
 import argparse, ctypes, json, os, time
+import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 import httpx
+from .naver_browser import DraftSaveAdapter, DraftVerificationFailed, PlaywrightNaverAdapter
+from .manuscript_repair import manuscript_hash
+from .content_fingerprint import file_sha256
 
 NOTION_VERSION = "2025-09-03"
 READY = "네이버 저장 요청"
 DONE = "임시저장 완료"
 MARKER = "READY_FOR_NAVER_DRAFT"
-CHALLENGES = ("캡차", "captcha", "보안 확인", "본인 확인", "재로그인", "로그인")
-FORBIDDEN = ("발행", "예약발행", "공개")
 
 
-class AttentionRequired(RuntimeError):
+class HandoffValidationFailed(RuntimeError):
+    pass
+
+
+class WorkerStepFailed(RuntimeError):
     pass
 
 
@@ -62,6 +69,11 @@ class NotionQueue:
                 return results
             cursor = data.get("next_cursor")
 
+    def page(self, page_id: str) -> dict[str, Any]:
+        response = self.client.get(f"/pages/{page_id}")
+        response.raise_for_status()
+        return response.json()
+
     def card_urls(self, page_id: str) -> list[str]:
         response = self.client.get(f"/pages/{page_id}")
         response.raise_for_status()
@@ -96,97 +108,208 @@ class NotionQueue:
         response = self.client.patch(f"/pages/{page_id}", json={"properties": update})
         response.raise_for_status()
 
+    def update_failed(self, page_id: str) -> None:
+        response = self.client.patch(f"/pages/{page_id}", json={
+            "properties": {"상태": {"select": {"name": "수정 필요"}}},
+        })
+        response.raise_for_status()
+
+    def update_failed_if_unchanged(self, page_id: str, expected_last_edited_time: str | None) -> bool:
+        if not expected_last_edited_time:
+            return False
+        page = self.page(page_id)
+        status = (page.get('properties') or {}).get('상태', {}).get('select', {}).get('name')
+        if page.get('last_edited_time') != expected_last_edited_time or status != READY:
+            return False
+        self.update_failed(page_id)
+        return True
+
+    def close(self) -> None:
+        self.client.close()
+
 
 def rich_text(block: dict[str, Any]) -> str:
     kind = block.get("type", "")
     return "".join(x.get("plain_text", "") for x in block.get(kind, {}).get("rich_text", []))
 
 
-def payload_from_blocks(blocks: list[dict[str, Any]]) -> tuple[str, str]:
+@dataclass(frozen=True)
+class VerifiedNaverPayload:
+    title: str
+    body: str
+    page_id: str
+    run_id: str
+    qa_run_id: str
+    content_hash: str
+    card_sha256s: tuple[str, ...]
+
+
+def payload_from_blocks(blocks: list[dict[str, Any]], expected_page_id: str) -> VerifiedNaverPayload:
     texts = [rich_text(b) for b in blocks]
-    if not any(MARKER in text for text in texts):
-        raise RuntimeError("READY_FOR_NAVER_DRAFT marker missing")
-    for block in reversed(blocks):
+    code_groups: list[tuple[int, int, str]] = []
+    current_group: list[str] = []
+    group_start = 0
+    for index, block in enumerate(blocks):
         if block.get("type") == "code":
-            raw = rich_text(block)
-            try:
-                data = json.loads(raw)
-            except json.JSONDecodeError:
-                continue
-            generated = data.get("generated", data)
-            title = str(generated.get("title") or data.get("title") or "").strip()
-            body = str(generated.get("body_markdown") or generated.get("body") or "").strip()
-            if title and body:
-                return title, body
-    raise RuntimeError("verified title/body snapshot missing")
+            if not current_group:
+                group_start = index
+            current_group.append(rich_text(block))
+        elif current_group:
+            code_groups.append((group_start, index - 1, "".join(current_group)))
+            current_group = []
+    if current_group:
+        code_groups.append((group_start, len(blocks) - 1, "".join(current_group)))
 
-
-def challenge_visible(page) -> bool:
-    text = page.locator("body").inner_text(timeout=5000).lower()
-    return any(word.lower() in text for word in CHALLENGES) or "nid.naver.com" in page.url
-
-
-def first_visible(page, selectors: list[str]):
-    for selector in selectors:
-        locator = page.locator(selector).first
+    for start, _end, raw in reversed(code_groups):
         try:
-            if locator.is_visible(timeout=1200):
-                return locator
-        except Exception:
-            pass
-    raise AttentionRequired("네이버 편집기 구조가 바뀌었습니다. 화면 확인이 필요합니다.")
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(data, dict):
+            continue
+        generated = data.get("generated", data)
+        if not isinstance(generated, dict):
+            continue
+        qa = data.get("qa") or {}
+        if not isinstance(qa, dict):
+            raise HandoffValidationFailed('Naver handoff QA record is malformed')
+        handoff = data.get('handoff') or {}
+        if not isinstance(handoff, dict) or handoff.get('schema_version') != 2:
+            raise HandoffValidationFailed('STALE_QA: legacy handoff has no run-bound QA receipt')
+        ownership = data.get('ownership') or {}
+        if qa.get('pass') is not True:
+            raise HandoffValidationFailed('Naver handoff QA is not PASS')
+        current_hash = manuscript_hash(generated)
+        page_id = str(handoff.get('page_id') or '')
+        run_id = str(handoff.get('run_id') or '')
+        qa_run_id = str(handoff.get('qa_run_id') or '')
+        content_version = str(handoff.get('content_version') or '')
+        content_hash = str(handoff.get('content_sha256') or '')
+        card_hashes = handoff.get('card_sha256s')
+        if (
+            not expected_page_id or page_id != expected_page_id
+            or not run_id or not qa_run_id
+        ):
+            raise HandoffValidationFailed('STALE_QA: page or run identity is missing or mismatched')
+        if current_hash != content_hash or current_hash != content_version:
+            raise HandoffValidationFailed('HASH_MISMATCH: final manuscript differs from its QA handoff')
+        if (
+            qa.get('source_page_id') != page_id
+            or qa.get('source_run_id') != qa_run_id
+            or qa.get('source_content_sha256') != current_hash
+            or qa.get('source_card_sha256s') != card_hashes
+        ):
+            raise HandoffValidationFailed('STALE_QA: QA receipt does not match this page, run, manuscript, and cards')
+        if not isinstance(card_hashes, list) or len(card_hashes) != 5 or any(
+            not isinstance(value, str) or not re.fullmatch(r'[0-9a-f]{64}', value)
+            for value in card_hashes
+        ):
+            raise HandoffValidationFailed('STALE_QA: five valid QA card hashes are required')
+        if not isinstance(ownership, dict) or not (
+            ownership.get('document_id') == expected_page_id
+            and ownership.get('source_version') == current_hash
+            and ownership.get('stage') == 'HANDOFF_READY'
+            and ownership.get('channel') == 'naver_blog'
+        ):
+            raise HandoffValidationFailed('STALE_QA: ownership receipt does not match the final manuscript')
+        marker_positions = [i for i, text in enumerate(texts[:start]) if text == f'저장 준비 완료: {MARKER}']
+        if not marker_positions:
+            raise HandoffValidationFailed('Naver handoff marker missing')
+        marker = marker_positions[-1]
+        handoff_text = texts[marker:start]
+        page_lines = [x.partition(':')[2].strip() for x in handoff_text if x.startswith('원고 ID:')]
+        version_lines = [x.partition(':')[2].strip() for x in handoff_text if x.startswith('버전:')]
+        run_lines = [x.partition(':')[2].strip() for x in handoff_text if x.startswith('실행 ID:')]
+        qa_run_lines = [x.partition(':')[2].strip() for x in handoff_text if x.startswith('QA 실행 ID:')]
+        if (
+            page_lines != [page_id] or version_lines != [current_hash]
+            or run_lines != [run_id] or qa_run_lines != [qa_run_id]
+        ):
+            raise HandoffValidationFailed('STALE_QA: visible handoff header and JSON snapshot differ')
+        title = str(generated.get("title") or data.get("title") or "").strip()
+        body = str(generated.get("body_markdown") or generated.get("body") or "").strip()
+        if title and body:
+            return VerifiedNaverPayload(
+                title, body, page_id, run_id, qa_run_id, current_hash, tuple(card_hashes),
+            )
+        raise HandoffValidationFailed('Naver QA snapshot did not contain a title and full body')
+    raise HandoffValidationFailed('STALE_QA: current page has no run-bound QA snapshot')
 
 
-def save_one(page, blog_id: str, title: str, body: str, cards: list[Path]) -> str:
-    page.goto(f"https://blog.naver.com/PostWriteForm.naver?blogId={blog_id}", wait_until="domcontentloaded")
-    page.wait_for_timeout(2500)
-    if challenge_visible(page):
-        raise AttentionRequired("네이버 보안 확인·재로그인·캡차를 완료한 뒤 다시 실행해 주세요.")
-    title_box = first_visible(page, [
-        "[contenteditable=true][data-placeholder*='제목']", ".se-title-text p", ".se-title-text",
-    ])
-    body_box = first_visible(page, [
-        ".se-section-text [contenteditable=true]", ".se-text-paragraph", "[contenteditable=true][data-placeholder*='본문']",
-    ])
-    title_box.click()
-    title_box.fill(title)
-    body_box.click()
-    body_box.fill(body)
-    if len(cards) != 5:
-        raise RuntimeError("five cards are required before draft save")
-    upload = page.locator("input[type=file]").first
-    if upload.count():
-        upload.set_input_files([str(path.resolve()) for path in cards])
-    else:
-        photo = page.get_by_text("사진", exact=True).first
-        if not photo.is_visible(timeout=2000):
-            raise AttentionRequired("카드뉴스 첨부 버튼을 찾지 못했습니다. 자동 작업을 중단했습니다.")
-        with page.expect_file_chooser() as chooser:
-            photo.click()
-        chooser.value.set_files([str(path.resolve()) for path in cards])
-    page.wait_for_timeout(5000)
-    # Safety invariant: only an exact temporary-save label is eligible.
-    save = page.get_by_text("임시저장", exact=True).first
-    if not save.is_visible(timeout=3000):
-        raise AttentionRequired("정확한 '임시저장' 버튼을 찾지 못했습니다. 자동 작업을 중단했습니다.")
-    if save.inner_text().strip() in FORBIDDEN:
-        raise RuntimeError("publication action blocked")
-    save.click()
-    page.wait_for_timeout(2500)
-    draft_url = page.url
-    page.reload(wait_until="domcontentloaded")
-    page.wait_for_timeout(2000)
-    if challenge_visible(page):
-        raise AttentionRequired("저장 확인 중 네이버 보안 확인·재로그인·캡차가 나타났습니다.")
-    verify = first_visible(page, [
-        "[contenteditable=true][data-placeholder*='제목']", ".se-title-text p", ".se-title-text",
-    ]).inner_text().strip()
-    if title not in verify and verify not in title:
-        raise RuntimeError("draft reopen verification failed")
-    return draft_url
+def process_jobs(
+    queue: NotionQueue, browser: DraftSaveAdapter, jobs: list[dict[str, Any]],
+    blog_id: str, state_dir: Path,
+) -> int:
+    for job in jobs:
+        stage = 'handoff_readback'
+        expected_page_edit = None
+        try:
+            page_id = job['id']
+            page = queue.page(page_id)
+            expected_page_edit = page.get('last_edited_time')
+            payload = payload_from_blocks(queue.blocks(page_id), page_id)
+            properties = page.get('properties') or {}
+            status = properties.get('상태', {}).get('select', {}).get('name')
+            page_title = ''.join(x.get('plain_text', '') for x in properties.get('제목', {}).get('title', []))
+            if status != READY or page_title != payload.title:
+                raise HandoffValidationFailed('STALE_QA: page status or title changed after the QA handoff')
+            original_edit = job.get('last_edited_time')
+            if original_edit and page.get('last_edited_time') != original_edit:
+                raise HandoffValidationFailed('STALE_QA: Notion page changed after it entered the save queue')
+            stage = 'card_download'
+            cards = queue.download_cards(page_id, state_dir / page_id / payload.run_id / "cards")
+            if len(cards) != 5 or tuple(file_sha256(path) for path in cards) != payload.card_sha256s:
+                raise HandoffValidationFailed('HASH_MISMATCH: downloaded card bytes differ from the QA receipt')
+            # Re-read both page state and handoff immediately before the browser write.
+            latest_page = queue.page(page_id)
+            latest_blocks = queue.blocks(page_id)
+            latest_payload = payload_from_blocks(latest_blocks, page_id)
+            if (
+                latest_page.get('last_edited_time') != page.get('last_edited_time')
+                or (latest_page.get('properties') or {}).get('상태', {}).get('select', {}).get('name') != READY
+                or latest_payload != payload
+            ):
+                raise HandoffValidationFailed('STALE_QA: Notion page or handoff changed before the save')
+            stage = 'browser_adapter'
+            url = browser.save_and_verify(blog_id, payload.title, payload.body, cards)
+            stage = 'notion_completion_write'
+            queue.update_done(page_id, url)
+        except HandoffValidationFailed as exc:
+            try:
+                safe_fail = getattr(queue, 'update_failed_if_unchanged', None)
+                if safe_fail:
+                    safe_fail(job['id'], expected_page_edit)
+                else:
+                    queue.update_failed(job['id'])
+            except Exception as write_exc:
+                raise WorkerStepFailed(
+                    f"Notion page {job['id']}: QA handoff failed and failure status write failed ({type(write_exc).__name__})"
+                ) from write_exc
+            raise HandoffValidationFailed(f"Notion page {job['id']}: {exc}") from exc
+        except Exception as exc:
+            try:
+                safe_fail = getattr(queue, 'update_failed_if_unchanged', None)
+                if safe_fail:
+                    safe_fail(job['id'], expected_page_edit)
+                else:
+                    queue.update_failed(job['id'])
+            except Exception as write_exc:
+                raise WorkerStepFailed(
+                    f"Notion page {job['id']}: {stage} failed and failure status write failed ({type(write_exc).__name__})"
+                ) from write_exc
+            if isinstance(exc, DraftVerificationFailed):
+                raise DraftVerificationFailed(f"Notion page {job['id']}: {exc}") from exc
+            raise WorkerStepFailed(
+                f"Notion page {job['id']}: {stage} failed ({type(exc).__name__})"
+            ) from exc
+    return len(jobs)
 
 
-def run_once(headless: bool = False) -> int:
+def run_once(
+    headless: bool = False,
+    browser_adapter: DraftSaveAdapter | None = None,
+    page_id: str | None = None,
+) -> int:
     token = os.getenv("NOTION_ACCESS_TOKEN", "")
     ds = os.getenv("BLOG_DATA_SOURCE_ID", "21a60556-f086-4b7a-96b3-81995c77edef")
     blog_id = os.getenv("NAVER_BLOG_ID", "himemi0412")
@@ -194,25 +317,31 @@ def run_once(headless: bool = False) -> int:
         raise RuntimeError("NOTION_ACCESS_TOKEN is required")
     state_dir = Path(os.getenv("NAVER_LOCAL_STATE_DIR", "output/naver-local"))
     profile = Path(os.getenv("NAVER_EDGE_PROFILE", str(Path(os.getenv("LOCALAPPDATA", ".")) / "Hamjju" / "NaverEdgeProfile")))
-    from playwright.sync_api import sync_playwright
     queue = NotionQueue(token, ds)
-    jobs = queue.waiting()
-    if not jobs:
-        return 0
-    with sync_playwright() as pw:
-        context = pw.chromium.launch_persistent_context(
-            str(profile), channel="msedge", headless=headless, viewport={"width": 1440, "height": 1000}
-        )
-        try:
-            page = context.pages[0] if context.pages else context.new_page()
-            for job in jobs:
-                title, body = payload_from_blocks(queue.blocks(job["id"]))
-                cards = queue.download_cards(job["id"], state_dir / job["id"] / "cards")
-                url = save_one(page, blog_id, title, body, cards)
-                queue.update_done(job["id"], url)
-        finally:
-            context.close()
-    return len(jobs)
+    try:
+        if page_id is not None:
+            if not re.fullmatch(r'[0-9a-fA-F-]{32,36}', page_id):
+                raise ValueError('A single exact Notion page ID is required')
+            jobs = [queue.page(page_id)]
+        else:
+            jobs = queue.waiting()
+        if not jobs:
+            return 0
+        if browser_adapter is not None:
+            return process_jobs(queue, browser_adapter, jobs, blog_id, state_dir)
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as pw:
+            context = pw.chromium.launch_persistent_context(
+                str(profile), channel="msedge", headless=headless, viewport={"width": 1440, "height": 1000}
+            )
+            try:
+                page = context.pages[0] if context.pages else context.new_page()
+                browser = PlaywrightNaverAdapter(page)
+                return process_jobs(queue, browser, jobs, blog_id, state_dir)
+            finally:
+                context.close()
+    finally:
+        queue.close()
 
 
 def main() -> None:
@@ -221,7 +350,10 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("once", "watch", "login"), default="once", nargs="?")
     parser.add_argument("--interval", type=int, default=300)
+    parser.add_argument("--page-id", help="Process exactly one Notion page once")
     args = parser.parse_args()
+    if args.page_id and args.mode != 'once':
+        parser.error('--page-id can only be used with once')
     state_dir = Path(os.getenv("NAVER_LOCAL_STATE_DIR", "output/naver-local"))
     if args.mode == "login":
         from playwright.sync_api import sync_playwright
@@ -234,11 +366,17 @@ def main() -> None:
         return
     while True:
         try:
-            run_once()
-        except AttentionRequired as exc:
-            notify(str(exc), state_dir)
+            run_once(page_id=args.page_id)
         except Exception as exc:
-            notify(f"자동 임시저장을 중단했습니다: {exc}", state_dir)
+            if isinstance(exc, DraftVerificationFailed):
+                message = f"네이버 임시저장 목록 확인 실패: {exc}"
+            elif isinstance(exc, HandoffValidationFailed):
+                message = f"네이버 검수 전달 자료 확인 실패: {exc}"
+            elif isinstance(exc, WorkerStepFailed):
+                message = f"네이버 자동화 실패: {exc}"
+            else:
+                message = f"네이버 작업 실패 ({type(exc).__name__}). 자세한 내용은 로그를 확인해 주세요."
+            notify(message, state_dir)
         if args.mode == "once":
             return
         time.sleep(max(args.interval, 60))

@@ -1,6 +1,7 @@
 import pytest
+from pathlib import Path
 
-from app.main import validate_results
+from app.main import validate_results, verify_short_notion_result
 
 
 def test_require_item_rejects_empty_queue():
@@ -68,9 +69,27 @@ def test_blog_requires_output_readback():
 def test_shorts_requires_output_readback():
     with pytest.raises(RuntimeError, match='read-back'):
         validate_results([{
-            'channel': 'japan_shorts', 'status': '비공개 업로드 완료',
+            'channel': 'japan_shorts', 'status': '검토 대기',
             'qa_pass': True, 'notion_page_updated': True, 'output_verified': False,
         }])
+
+
+def test_repaired_shorts_success_needs_notion_status_and_mp4_readback():
+    video = Path('short.mp4')
+    page = {'properties': {
+        '제목': {'type': 'title', 'title': [{'plain_text': '검수 영상'}]},
+        '상태': {'type': 'select', 'select': {'name': '검토 대기'}},
+        '최종 영상': {'type': 'files', 'files': [{'name': video.name}]},
+    }}
+
+    class Notion:
+        def retrieve_page(self, _page_id):
+            return page
+
+    verify_short_notion_result(Notion(), 'page-id', '검수 영상', '검토 대기', video)
+    page['properties']['최종 영상']['files'] = []
+    with pytest.raises(RuntimeError, match='MP4 was not found'):
+        verify_short_notion_result(Notion(), 'page-id', '검수 영상', '검토 대기', video)
 
 
 def test_batch_with_fewer_than_requested_outputs_is_incomplete():

@@ -9,6 +9,10 @@ from openai import OpenAI
 from .budget import BudgetGuard
 
 
+class QAResponseParseError(ValueError):
+    """A QA provider returned text that could not be parsed as a JSON object."""
+
+
 class AIClient:
     def __init__(
         self,
@@ -83,7 +87,11 @@ class AIClient:
                 {'role': 'user', 'content': content},
             ],
         }, 'rendered_card_qa' if image_paths else 'qa', False)
-        return parse_json(response.output_text), usage_dict(response)
+        try:
+            parsed = parse_json(response.output_text)
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise QAResponseParseError('QA response was not valid JSON') from exc
+        return parsed, usage_dict(response)
 
     def _create_response(self, kwargs: dict[str, Any], category: str, uses_web: bool):
         reservation_id = None

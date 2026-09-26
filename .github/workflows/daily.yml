@@ -11,9 +11,6 @@ env:
   # This one-time baseline is ignored automatically after September 2026.
   OPENAI_BUDGET_BASELINE_MONTH: '2026-09'
   OPENAI_BUDGET_BASELINE_USD: '0.64'
-  # Public upload also requires the Notion page's 공개 승인 checkbox.
-  # Keep false until both Shorts channels pass end-to-end private review.
-  ALLOW_PUBLIC_YOUTUBE_UPLOAD: 'false'
 
 on:
   schedule:
@@ -134,7 +131,7 @@ jobs:
           test -n "$CARD_SUBTITLE"
           python -m app.main explore-card-design --title "$CARD_TITLE" --subtitle "$CARD_SUBTITLE" --output output/card-design-exploration
       - name: Materialize YouTube OAuth files
-        if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 12 * * *') || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'execute_media' || inputs.mode == 'produce_daily_shorts' || inputs.mode == 'retry_revision' || inputs.mode == 'repair_av_sync' || inputs.mode == 'verify_youtube_auth')) }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'verify_youtube_auth' }}
         env:
           YOUTUBE_CLIENT_SECRET_JSON_B64: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON_B64 }}
           YOUTUBE_PPOJJUGI_TOKEN_JSON_B64: ${{ secrets.YOUTUBE_PPOJJUGI_TOKEN_JSON_B64 }}
@@ -172,7 +169,6 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ENABLE_WEB_RESEARCH: 'false'
           ENABLE_MEDIA_GENERATION: 'true'
-          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
         run: python -m app.main verify-blog-card-style-live
 
       - name: Research and save one topic for the selected channel
@@ -182,7 +178,6 @@ jobs:
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'false'
-          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
         run: |
           case "${{ inputs.channel }}" in
             naver_blog)
@@ -206,7 +201,6 @@ jobs:
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'false'
-          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
         run: python -m app.main plan-month --blog-count 90 --ppojjugi-count 30 --japan-count 30 --batch-size 10
       - name: Read one Notion item without modifying it
         if: ${{ inputs.mode == 'dry_run' }}
@@ -215,7 +209,6 @@ jobs:
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'false'
-          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
         run: python -m app.main channel "${{ inputs.channel }}" --dry-run --limit 1 --require-item
       - name: Process one text item after review
         if: ${{ inputs.mode == 'execute_text' }}
@@ -224,7 +217,6 @@ jobs:
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'false'
-          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
         run: python -m app.main channel "${{ inputs.channel }}" --limit 1 --require-item
       - name: Generate one reviewed Shorts MP4
         if: ${{ inputs.mode == 'execute_media' && inputs.channel != 'naver_blog' }}
@@ -234,7 +226,6 @@ jobs:
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'true'
-          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'true'
           MEDIA_PAGE_ID: ${{ inputs.page_id }}
         run: |
           if [ -n "$MEDIA_PAGE_ID" ]; then
@@ -251,7 +242,6 @@ jobs:
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'false'
-          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
           RECOVERY_PAGE_ID: ${{ inputs.page_id }}
         run: |
           test -n "$RECOVERY_PAGE_ID"
@@ -265,7 +255,6 @@ jobs:
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'false'
-          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
           SOURCE_RUN_ID: ${{ inputs.source_run_id }}
           REVIEWED_RUN_ID: ${{ inputs.reviewed_run_id }}
           RESUME_PAGE_ID: ${{ inputs.page_id }}
@@ -296,7 +285,6 @@ jobs:
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'true'
-          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'true'
         run: |
           result=0
           python -m app.main channel ppojjugi_shorts --limit 1 || result=1
@@ -311,7 +299,6 @@ jobs:
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'true'
-          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'true'
           REVISION_PAGE_ID: ${{ inputs.page_id }}
         run: |
           if [ -n "$REVISION_PAGE_ID" ]; then
@@ -328,7 +315,6 @@ jobs:
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'false'
-          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
           REVISION_PAGE_ID: ${{ inputs.page_id }}
         run: |
           [[ "$REVISION_PAGE_ID" =~ ^[0-9a-fA-F-]{32,36}$ ]]
@@ -341,7 +327,6 @@ jobs:
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
           ENABLE_WEB_RESEARCH: 'false'
           ENABLE_MEDIA_GENERATION: 'false'
-          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
           RERENDER_PAGE_ID: ${{ inputs.page_id }}
         run: |
           IFS=',' read -ra PAGE_IDS <<< "$RERENDER_PAGE_ID"
@@ -367,14 +352,13 @@ jobs:
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
           ENABLE_WEB_RESEARCH: 'true'
           ENABLE_MEDIA_GENERATION: 'true'
-          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
         run: |
           test -n "${{ inputs.page_id }}"
           python -m app.main page "${{ inputs.channel }}" "${{ inputs.page_id }}" --retry-revision
 
-      - name: Verify both YouTube OAuth channel identities without uploading
+      - name: Verify selected YouTube OAuth channel identity without uploading
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'verify_youtube_auth' }}
-        run: python -m app.main verify-youtube-auth
+        run: python -m app.main verify-youtube-auth "${{ inputs.channel }}"
 
       - name: Repair and reattach one existing review video
         if: ${{ inputs.mode == 'repair_video' && inputs.channel != 'naver_blog' }}
@@ -382,7 +366,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
-          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
         run: |
           test -n "${{ inputs.source_run_id }}"
           test -n "${{ inputs.page_id }}"
@@ -399,7 +382,6 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           FAL_KEY: ${{ secrets.FAL_KEY }}
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
-          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'true'
         run: |
           [[ "${{ inputs.source_run_id }}" =~ ^[0-9]+$ ]]
           [[ "${{ inputs.page_id }}" =~ ^[0-9a-fA-F-]{32,36}$ ]]
@@ -416,22 +398,21 @@ jobs:
           FAL_KEY: ${{ secrets.FAL_KEY }}
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
           ENABLE_WEB_RESEARCH: 'true'
-          AUTO_PRIVATE_YOUTUBE_UPLOAD: 'false'
         run: |
           result=0
           schedule_expr="${{ github.event.schedule }}"
           if [ "$schedule_expr" = "45 0 * * *" ]; then
             # Fill only queue gaps. If enough reviewed topics already exist,
             # seed-topics exits before paying for web research or AI analysis.
-            ENABLE_MEDIA_GENERATION=false AUTO_PRIVATE_YOUTUBE_UPLOAD=false python -m app.main seed-topics --blog-count 3 --ppojjugi-count 1 --japan-count 1 || result=1
+            ENABLE_MEDIA_GENERATION=false python -m app.main seed-topics --blog-count 3 --ppojjugi-count 1 --japan-count 1 || result=1
           elif [ "$schedule_expr" = "0 1 * * *" ]; then
             # A rejected blog can cost five fresh images. Preserve its artifact
             # for reviewed resume/rerender instead of automatically paying for
             # another full manuscript and card set.
             ENABLE_MEDIA_GENERATION=false python -m app.main channel naver_blog --limit 3 || result=1
           elif [ "$schedule_expr" = "0 12 * * *" ]; then
-            ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=true python -m app.main channel ppojjugi_shorts --limit 1 --auto-retry || result=1
-            ENABLE_MEDIA_GENERATION=true AUTO_PRIVATE_YOUTUBE_UPLOAD=true python -m app.main channel japan_shorts --limit 1 --auto-retry || result=1
+            ENABLE_MEDIA_GENERATION=true python -m app.main channel ppojjugi_shorts --limit 1 --auto-retry || result=1
+            ENABLE_MEDIA_GENERATION=true python -m app.main channel japan_shorts --limit 1 --auto-retry || result=1
           else
             echo "Unsupported schedule expression: $schedule_expr"
             result=1
@@ -456,6 +437,7 @@ jobs:
         if: ${{ always() && ((github.event_name == 'schedule' && github.event.schedule != '45 0 * * *') || (github.event_name == 'workflow_dispatch' && inputs.mode != 'plan_month' && inputs.mode != 'prepare_topic' && inputs.mode != 'dry_run' && inputs.mode != 'verify_youtube_auth' && inputs.mode != 'explore_card_design' && inputs.mode != 'verify_blog_card_style_live')) }}
         env:
           RUN_STATUS: ${{ job.status }}
+          NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
           EVENT_NAME: ${{ github.event_name }}
           SCHEDULE_EXPR: ${{ github.event.schedule }}
           DISPATCH_MODE: ${{ inputs.mode }}
