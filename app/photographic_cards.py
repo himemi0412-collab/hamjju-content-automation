@@ -55,12 +55,19 @@ def production_design_language(name: str | None) -> str:
     return name
 
 
-def _font(path: str | None, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+def _font(path: str | None, size: int, weight: int = 450) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     candidates = [path, '/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc',
                   '/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf']
     for candidate in candidates:
         if candidate and Path(candidate).exists():
-            return ImageFont.truetype(candidate, size=size)
+            font = ImageFont.truetype(candidate, size=size)
+            try:
+                axes = font.get_variation_axes()
+                if axes:
+                    font.set_variation_by_axes([weight] + [axis['default'] for axis in axes[1:]])
+            except (AttributeError, OSError, ValueError):
+                pass
+            return font
     return ImageFont.load_default()
 
 
@@ -77,12 +84,12 @@ def _fit(draw: ImageDraw.ImageDraw, text: str, path: str | None, maximum: int,
 
 def _fit_wrapped(
     draw: ImageDraw.ImageDraw, text: str, path: str | None, maximum: int,
-    box: tuple[int, int, int, int], *, minimum: int = 18,
+    box: tuple[int, int, int, int], *, minimum: int = 18, weight: int = 420,
 ) -> tuple[ImageFont.ImageFont, str]:
     """Fit supporting copy by wrapping at word/character boundaries, never clipping."""
     x1, y1, x2, y2 = box
     for size in range(maximum, minimum - 1, -1):
-        font = _font(path, size)
+        font = _font(path, size, weight)
         wrapped = _wrap_to_width(draw, text, font, x2 - x1)
         left, top, right, bottom = draw.multiline_textbbox(
             (0, 0), wrapped, font=font, spacing=7,
@@ -106,6 +113,163 @@ def _wrap_to_width(draw: ImageDraw.ImageDraw, value: str,
     if line:
         lines.append(line)
     return '\n'.join(lines)
+
+
+def _wrap_title(draw: ImageDraw.ImageDraw, value: str,
+                font: ImageFont.ImageFont, width: int) -> str:
+    """Preserve authored breaks; otherwise split at a balanced word boundary."""
+    if '\n' in value:
+        return value
+    if draw.textbbox((0, 0), value, font=font)[2] <= width:
+        return value
+    words = value.split()
+    candidates = []
+    for split in range(1, len(words)):
+        lines = (' '.join(words[:split]), ' '.join(words[split:]))
+        widths = [draw.textbbox((0, 0), line, font=font)[2] for line in lines]
+        if max(widths) <= width:
+            candidates.append(((max(widths), abs(widths[0] - widths[1])), lines))
+    if candidates:
+        return '\n'.join(min(candidates, key=lambda item: item[0])[1])
+    return _wrap_to_width(draw, value, font, width)
+
+
+def _fit_title(draw: ImageDraw.ImageDraw, value: str, path: str | None,
+               box: tuple[int, int, int, int]) -> tuple[ImageFont.ImageFont, str]:
+    x1, y1, x2, y2 = box
+    for size in range(60, 57, -1):
+        font = _font(path, size, 700)
+        wrapped = _wrap_title(draw, value, font, x2 - x1)
+        bounds = draw.multiline_textbbox((0, 0), wrapped, font=font, spacing=5)
+        if bounds[2] - bounds[0] <= x2 - x1 and bounds[3] - bounds[1] <= y2 - y1:
+            return font, wrapped
+    raise ValueError('Korean card title does not fit the v7 title region at 58-60px')
+
+
+def _paste_scene(canvas: Image.Image, background: Image.Image,
+                 box: tuple[int, int, int, int]) -> None:
+    x1, y1, x2, y2 = box
+    scene = ImageOps.fit(background, (x2 - x1, y2 - y1), method=Image.Resampling.LANCZOS)
+    canvas.paste(scene, (x1, y1))
+
+
+def _draw_v7_text(canvas: Image.Image, background: Image.Image,
+                   card: dict[str, Any], index: int, title_font_path: str | None,
+                   body_font_path: str | None) -> None:
+    """Apply the v7 five-role editorial grid to a generated photo layer."""
+    colors = {
+        'white': '#FFFFFF', 'paper': '#F5F6F8', 'ink': '#171A22',
+        'muted': '#646C78', 'rule': '#C8CED8', 'blue': '#3158D8',
+        'blue_pale': '#EAF0FF', 'lilac': '#C9B8E8', 'mint': '#A7DDCE',
+        'soft': '#F0F2F5',
+    }
+    draw = ImageDraw.Draw(canvas)
+    text_path = body_font_path or title_font_path
+    title = str(card.get('headline') or '').strip()
+    copy = str(card.get('copy') or '').strip()
+    items = card.get('items') or []
+    if not title or not copy or not items or any(
+        not isinstance(item, dict) or not str(item.get('label') or '').strip()
+        or not str(item.get('detail') or '').strip() for item in items
+    ):
+        raise ValueError(f'Blog card {index} has incomplete v7 copy')
+
+    # Role-specific image and text rectangles follow the confirmed v7 hierarchy.
+    if index == 1:
+        canvas.paste(colors['white'], (0, 0, 1080, 1080))
+        spec = {'title': (68, 132, 1010, 298), 'copy': (72, 310, 1008, 360),
+                'scene': (62, 398, 1018, 770), 'items': (64, 812, 1016, 1000),
+                'surface': colors['white'], 'title_align': 'left'}
+    elif index == 2:
+        canvas.paste(colors['white'], (0, 0, 1080, 1080))
+        draw.rectangle((0, 0, 1080, 295), fill=colors['blue_pale'])
+        spec = {'title': (64, 92, 1010, 245), 'copy': (64, 250, 1010, 292),
+                'scene': (48, 342, 494, 906), 'items': (548, 354, 1016, 900),
+                'surface': colors['soft'], 'title_align': 'left'}
+    elif index == 3:
+        canvas.paste(colors['paper'], (0, 0, 1080, 1080))
+        spec = {'title': (64, 98, 1010, 254), 'copy': (64, 258, 1016, 302),
+                'scene': (64, 326, 1016, 610), 'items': (64, 646, 1016, 842),
+                'surface': colors['paper'], 'title_align': 'left'}
+    elif index == 4:
+        canvas.paste(colors['white'], (0, 0, 1080, 1080))
+        spec = {'title': (64, 112, 654, 292), 'copy': (64, 312, 654, 438),
+                'scene': (698, 76, 1016, 458), 'items': (64, 540, 1016, 938),
+                'surface': colors['mint'], 'title_align': 'left'}
+    else:
+        canvas.paste(colors['white'], (0, 0, 1080, 1080))
+        spec = {'title': (64, 98, 1010, 250), 'copy': (68, 270, 1012, 326),
+                'scene': (48, 350, 1032, 600), 'items': (68, 648, 1012, 1010),
+                'surface': colors['blue_pale'], 'title_align': 'left'}
+
+    _paste_scene(canvas, background, spec['scene'])
+    draw = ImageDraw.Draw(canvas)
+    # Place one quiet folio in the shared top-right corner, as in v7.
+    number_font = _font(text_path, 22, 500)
+    draw.text((1012, 48), f'{index:02d}', font=number_font,
+              fill=colors['blue'], anchor='ra')
+
+    title_box = spec['title']
+    title_font, title_render = _fit_title(draw, title, title_font_path, title_box)
+    draw.multiline_text((title_box[0], title_box[1]), title_render,
+                        font=title_font, fill=colors['ink'], spacing=5)
+
+    copy_box = spec['copy']
+    copy_max = 32 if index != 5 else 30
+    copy_font, copy_render = _fit_wrapped(
+        draw, copy, text_path, copy_max, copy_box, minimum=27, weight=420,
+    )
+    draw.multiline_text((copy_box[0], copy_box[1]), copy_render,
+                        font=copy_font, fill=colors['muted'], spacing=8)
+
+    item_box = spec['items']
+    if index in {1, 2, 5}:
+        columns = 1 if index == 2 else len(items)
+        rows = len(items) if columns == 1 else 1
+        gap = 24 if columns > 1 else 0
+        cell_w = (item_box[2] - item_box[0] - gap * (columns - 1)) // columns
+        cell_h = (item_box[3] - item_box[1]) // rows
+        positions = [
+            (item_box[0] + (i % columns) * (cell_w + gap),
+             item_box[1] + (i // columns) * cell_h, cell_w, cell_h)
+            for i in range(len(items))
+        ]
+    elif index == 3:
+        gap = 28
+        cell_w = (item_box[2] - item_box[0] - gap) // 2
+        positions = [(item_box[0] + i * (cell_w + gap), item_box[1], cell_w,
+                      item_box[3] - item_box[1]) for i in range(len(items))]
+    else:
+        columns = 2
+        gap_x, gap_y = 48, 28
+        cell_w = (item_box[2] - item_box[0] - gap_x) // 2
+        cell_h = (item_box[3] - item_box[1] - gap_y) // 2
+        positions = [
+            (item_box[0] + (i % columns) * (cell_w + gap_x),
+             item_box[1] + (i // columns) * (cell_h + gap_y), cell_w, cell_h)
+            for i in range(len(items))
+        ]
+
+    for item_index, (item, (x, y, width, height)) in enumerate(zip(items, positions)):
+        label = str(item['label']).strip()
+        detail = str(item['detail']).strip()
+        label_font, label_render = _fit_wrapped(
+            draw, label, text_path, 30 if index not in {4, 5} else 28,
+            (x, y, x + width, y + min(58, height // 2)), minimum=26, weight=650,
+        )
+        label_bounds = draw.multiline_textbbox((0, 0), label_render, font=label_font, spacing=3)
+        label_height = label_bounds[3] - label_bounds[1]
+        detail_top = y + label_height + 14
+        detail_font, detail_render = _fit_wrapped(
+            draw, detail, text_path, 28, (x, detail_top, x + width, y + height), minimum=25, weight=420,
+        )
+        draw.multiline_text((x, y), label_render, font=label_font,
+                            fill=colors['ink'], spacing=3)
+        draw.multiline_text((x, detail_top), detail_render, font=detail_font,
+                            fill=colors['muted'], spacing=6)
+        if index == 2 and item_index < len(items) - 1:
+            draw.line((x, y + height - 10, x + width, y + height - 10),
+                      fill=colors['rule'], width=1)
 
 
 def _subject_lock(card: dict[str, Any], index: int | None = None) -> str:
@@ -308,124 +472,8 @@ def generate_and_typeset_blog_cards(
 
         background = Image.open(raw_path).convert('RGB')
         background = ImageOps.fit(background, (1080, 1080), method=Image.Resampling.LANCZOS)
-        canvas = background.convert('RGBA')
-        veil = Image.new('RGBA', canvas.size, (0, 0, 0, 0))
-        vd = ImageDraw.Draw(veil)
-        # Five intentionally different editorial structures. Typography is local and exact,
-        # but no repeated bottom panel, badge row, callout circle, arrow or decorative icon is used.
-        panel_rgb = tuple(int(style['surface'][i:i + 2], 16) for i in (1, 3, 5))
-        accent_rgb = tuple(int(accent[i:i + 2], 16) for i in (1, 3, 5))
-        layouts = {
-            1: {'panel': (42, 510, 770, 1040), 'role': (70, 534), 'number': (640, 534),
-                'title': (70, 584, 730, 682), 'copy': (70, 700, 730, 770),
-                'items': (70, 800, 730, 1020), 'align': 'left'},
-            2: {'panel': (36, 82, 462, 998), 'role': (68, 108), 'number': (366, 108),
-                'title': (68, 168, 430, 302), 'copy': (68, 326, 430, 426),
-                'items': (68, 468, 430, 962), 'align': 'left'},
-            3: {'panel': (72, 42, 1008, 490), 'role': (104, 65), 'number': (866, 65),
-                'title': (104, 116, 976, 205), 'copy': (104, 218, 976, 275),
-                'items': (104, 310, 976, 470), 'align': 'center'},
-            4: {'panel': (532, 102, 1042, 1008), 'role': (562, 127), 'number': (910, 127),
-                'title': (562, 182, 1002, 304), 'copy': (562, 322, 1002, 430),
-                'items': (562, 464, 1002, 974), 'align': 'left'},
-            5: {'panel': (350, 530, 1038, 1038), 'role': (380, 555), 'number': (906, 555),
-                'title': (380, 608, 1000, 702), 'copy': (380, 714, 1000, 775),
-                'items': (380, 800, 1000, 1010), 'align': 'left'},
-        }
-        spec = layouts[index]
-        x1, y1, x2, y2 = spec['panel']
-        # Role-specific surfaces prevent a mechanically repeated white-card template.
-        # These are flat cool tints, never gradients or decorative devices.
-        role_surfaces = {
-            1: (247, 248, 252, 255),  # compact cool-white note
-            2: (232, 228, 247, 255),  # lavender vertical field
-            3: (224, 239, 246, 255),  # powder-blue top band
-            4: (222, 241, 235, 255),  # mint right column
-            5: (247, 230, 232, 255),  # restrained coral decision block
-        }
-        if index in {1, 5}:
-            vd.rounded_rectangle((x1, y1, x2, y2), radius=18, fill=role_surfaces[index])
-        elif index == 3:
-            vd.rectangle((0, y1, 1080, y2), fill=role_surfaces[index])
-        else:
-            vd.rectangle((x1, y1, x2, y2), fill=role_surfaces[index])
-        # Leave the scene unobscured outside the text area. No repeated accent
-        # rule, wave, badge, icon or ornamental underline is added.
-        canvas = Image.alpha_composite(canvas, veil)
-        draw = ImageDraw.Draw(canvas)
-
-        headline = str(card.get('headline') or '').strip()
-        copy = str(card.get('copy') or '').strip()
-        # Omit the redundant role label. It was read as clipped helper copy in visual QA
-        # and added a template-like accent without carrying article information.
-        title_font = _fit(draw, headline, font_path, 54, spec['title'], minimum=32)
-        text_font_path = body_font_path or font_path
-        copy_font, copy_render = _fit_wrapped(
-            draw, copy, text_font_path, 27, spec['copy'], minimum=20,
-        )
-        anchor = 'ma' if spec['align'] == 'center' else ('ra' if spec['align'] == 'right' else None)
-        title_x = (spec['title'][0] + spec['title'][2]) // 2 if anchor == 'ma' else (spec['title'][2] if anchor == 'ra' else spec['title'][0])
-        copy_x = (spec['copy'][0] + spec['copy'][2]) // 2 if anchor == 'ma' else (spec['copy'][2] if anchor == 'ra' else spec['copy'][0])
-        draw.multiline_text((title_x, spec['title'][1]), headline, font=title_font, fill='#202329', spacing=8, anchor=anchor)
-        draw.multiline_text((copy_x, spec['copy'][1]), copy_render, font=copy_font, fill='#343741', spacing=7, anchor=anchor)
-
-        # Every item contains distinct information from the approved five-card
-        # plan. The former renderer dropped label/detail entirely, leaving an
-        # empty white panel and making comparison/checklist cards unusable.
-        item_box = spec['items']
-        items = card.get('items') or []
-        if not items or any(not isinstance(item, dict) or
-                            not str(item.get('label') or '').strip() or
-                            not str(item.get('detail') or '').strip() for item in items):
-            raise ValueError(f'Blog card {index} has incomplete items')
-        slot_height = (item_box[3] - item_box[1]) // len(items)
-        for item_index, item in enumerate(items):
-            if index == 3:
-                # Comparison items map left-to-right to the two photographed conditions.
-                gap = 28
-                column_width = (item_box[2] - item_box[0] - gap) // 2
-                item_left = item_box[0] + item_index * (column_width + gap)
-                item_right = item_left + column_width
-                top = item_box[1]
-                current_slot_height = item_box[3] - item_box[1]
-            else:
-                item_left, item_right = item_box[0], item_box[2]
-                top = item_box[1] + item_index * slot_height
-                current_slot_height = slot_height
-            label = str(item['label']).strip()
-            detail = str(item['detail']).strip()
-            label_box = (item_left, top, item_right,
-                         top + min(38, current_slot_height // 2))
-            detail_box = (item_left, top + min(38, current_slot_height // 2),
-                          item_right, top + current_slot_height - 4)
-            label_font = _fit(draw, label, text_font_path, 24, label_box, minimum=16)
-            detail_font = None
-            wrapped = ''
-            for font_size in range(19, 12, -1):
-                candidate_font = _font(text_font_path, font_size)
-                candidate = _wrap_to_width(
-                    draw, detail, candidate_font, detail_box[2] - detail_box[0]
-                )
-                bounds = draw.multiline_textbbox((0, 0), candidate,
-                                                  font=candidate_font, spacing=3)
-                if bounds[3] - bounds[1] <= detail_box[3] - detail_box[1]:
-                    detail_font, wrapped = candidate_font, candidate
-                    break
-            if detail_font is None:
-                raise ValueError(f'Blog card {index} item {item_index + 1} does not fit')
-            item_anchor = (
-                'ma' if index == 3 else ('ra' if spec['align'] == 'right' else None)
-            )
-            item_x = (
-                (item_left + item_right) // 2 if item_anchor == 'ma'
-                else (item_right if item_anchor == 'ra' else item_left)
-            )
-            draw.text((item_x, top), label, font=label_font,
-                      fill='#202329', anchor=item_anchor)
-            draw.multiline_text((item_x, detail_box[1]), wrapped,
-                                font=detail_font, fill='#343741',
-                                spacing=3, anchor=item_anchor)
-
-        canvas.convert('RGB').save(final_path, quality=95)
+        canvas = Image.new('RGB', (1080, 1080), '#FFFFFF')
+        _draw_v7_text(canvas, background, card, index, font_path, body_font_path)
+        canvas.save(final_path, quality=95)
         results.append(final_path)
     return results

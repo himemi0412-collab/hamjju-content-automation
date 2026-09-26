@@ -1,9 +1,12 @@
 from pathlib import Path
 
+from PIL import Image
+
 from app.blog_reference import VISUAL_FAMILIES, validate_generated_reference_contract
 from app.pipeline import _card_numbers_from_qa_issue
 from app.photographic_cards import (
-    _scene_prompt, _subject_lock, load_production_style_bundle, production_design_language,
+    _draw_v7_text, _scene_prompt, _subject_lock, load_production_style_bundle,
+    production_design_language,
 )
 
 
@@ -127,12 +130,51 @@ def test_live_card_verification_is_no_save_and_workflow_isolated():
 
 def test_five_card_typesetting_uses_distinct_spatial_structures():
     source = Path('app/photographic_cards.py').read_text(encoding='utf-8')
-    assert "1: {'panel': (42, 510, 770, 1040)" in source
-    assert "2: {'panel': (36, 82, 462, 998)" in source
-    assert "3: {'panel': (72, 42, 1008, 490)" in source
-    assert "4: {'panel': (532, 102, 1042, 1008)" in source
-    assert "5: {'panel': (350, 530, 1038, 1038)" in source
+    assert "'scene': (62, 398, 1018, 770)" in source
+    assert "'scene': (48, 342, 494, 906)" in source
+    assert "'scene': (64, 326, 1016, 610)" in source
+    assert "'scene': (698, 76, 1016, 458)" in source
+    assert "'scene': (48, 350, 1032, 600)" in source
+    assert "_fit_title(draw, title, title_font_path, title_box)" in source
+    assert "range(60, 57, -1)" in source
     assert "AI 생성 설명 장면" not in source
+
+
+def test_v7_renderer_is_deterministic_and_keeps_photo_and_type_separate():
+    font = r'C:\Windows\Fonts\NotoSansKR-VF.ttf'
+    cards = [
+        {'headline': '설치 전 먼저 확인', 'copy': '제품 크기와 설치 공간을 함께 봐요.',
+         'items': [{'label': '제품 규격', 'detail': '두 제품의 폭과 깊이를 확인해요.'},
+                   {'label': '설치 공간', 'detail': '문을 열고 닫을 여유를 확인해요.'}]},
+        {'headline': '호환 여부는\n키트부터 확인', 'copy': '제품 조합마다 기준이 달라요.',
+         'items': [{'label': '모델명 확인', 'detail': '두 제품의 정확한 모델명을 확인해요.'},
+                   {'label': '호환 키트', 'detail': '제조사 안내에서 조합을 찾아요.'},
+                   {'label': '설치 조건', 'detail': '공식 설치 안내를 확인해요.'}]},
+        {'headline': '비슷해 보여도\n조건은 달라요', 'copy': '같은 항목을 놓고 각각 비교해요.',
+         'items': [{'label': '제품 조합', 'detail': '모델명과 지원 범위를 확인해요.'},
+                   {'label': '설치 환경', 'detail': '공간과 주변 조건을 함께 봐요.'}]},
+        {'headline': '설치 전 네 가지', 'copy': '모델과 공간 조건을 먼저 맞춰보세요.',
+         'items': [{'label': '모델명', 'detail': '두 제품의 정확한 이름을 확인해요.'},
+                   {'label': '키트', 'detail': '호환되는 키트인지 확인해요.'},
+                   {'label': '공간', 'detail': '주변 간격과 문 여는 방향을 봐요.'},
+                   {'label': '설치 안내', 'detail': '제조사 기준을 확인해요.'}]},
+        {'headline': '구매 전 기준을\n문자로 확인해요', 'copy': '모델 조합과 설치 조건을 남겨두세요.',
+         'items': [{'label': '모델 조합', 'detail': '두 제품의 모델명을 함께 적어요.'},
+                   {'label': '필요한 키트', 'detail': '호환 여부를 공식 안내로 확인해요.'},
+                   {'label': '설치 조건', 'detail': '공간과 작업 범위를 물어봐요.'}]},
+    ]
+    outputs = []
+    for card_index, card in enumerate(cards, 1):
+        renders = []
+        for _ in range(2):
+            canvas = Image.new('RGB', (1080, 1080), 'white')
+            _draw_v7_text(canvas, Image.new('RGB', (1080, 1080), '#7a8b9c'),
+                          card, card_index, font, font)
+            renders.append(canvas)
+        assert renders[0].size == (1080, 1080)
+        assert renders[0].tobytes() == renders[1].tobytes()
+        outputs.append(renders[0])
+    assert len(outputs) == 5
 
 
 def test_scene_prompt_requires_lived_in_photography_and_bans_callouts():
@@ -197,9 +239,9 @@ def test_background_generation_is_photo_only_and_editorial_layers_are_local():
     assert 'zero printed material' in prompt
     assert 'pale lavender, muted mint' not in prompt
     renderer = Path('app/photographic_cards.py').read_text(encoding='utf-8')
-    assert '(222, 241, 235, 255)' in renderer
-    assert "if index == 3:" in renderer
-    assert "item_anchor = (" in renderer
+    assert "'mint': '#A7DDCE'" in renderer
+    assert "elif index == 3:" in renderer
+    assert "_draw_v7_text(canvas, background, card, index, font_path, body_font_path)" in renderer
 
 
 
@@ -216,5 +258,5 @@ def test_comparison_scene_uses_visible_refrigerator_anchors_not_round_washer_par
 
 def test_flow_panel_preserves_more_than_half_the_frame_for_the_photograph():
     renderer = Path('app/photographic_cards.py').read_text(encoding='utf-8')
-    assert "2: {'panel': (36, 82, 462, 998)" in renderer
-    assert "2: {'panel': (36, 82, 550, 998)" not in renderer
+    assert "'scene': (48, 342, 494, 906)" in renderer
+    assert "'items': (548, 354, 1016, 900)" in renderer
