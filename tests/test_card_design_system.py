@@ -7,9 +7,11 @@ from app.card_design_system import (
     FIXED_RULES,
     FIXED_RULES_SHA256,
     LAYOUTS,
+    PALETTES,
     CardQAResult,
     DesignContractError,
     build_manifest,
+    fixed_contract_sha256,
     layout_geometry,
     plan_targeted_retries,
     validate_manifest,
@@ -86,6 +88,15 @@ def test_manifest_rejects_stale_fixed_rules_fingerprint():
 
     with pytest.raises(DesignContractError, match="fixed design rules changed"):
         validate_manifest(data)
+
+
+def test_fixed_fingerprint_covers_layout_geometry_and_palette_bank():
+    changed_layouts = deepcopy(LAYOUTS)
+    changed_layouts["cover"]["lower_left_story"]["panel"] = (42, 500, 770, 1040)
+    changed_palettes = {**PALETTES, "extra": ("#FFFFFF",)}
+
+    assert fixed_contract_sha256(layouts=changed_layouts) != FIXED_RULES_SHA256
+    assert fixed_contract_sha256(palettes=changed_palettes) != FIXED_RULES_SHA256
 
 
 def test_fixed_rules_are_independent_of_model_selection():

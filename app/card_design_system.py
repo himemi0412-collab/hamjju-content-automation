@@ -74,8 +74,8 @@ LAYOUTS: dict[str, dict[str, dict[str, tuple[int, int, int, int]]]] = {
             "copy": (104, 218, 976, 275), "items": (104, 310, 976, 470),
         },
         "lower_comparison_band": {
-            "panel": (72, 590, 1008, 1038), "title": (104, 664, 976, 753),
-            "copy": (104, 766, 976, 823), "items": (104, 858, 976, 1018),
+            "panel": (72, 590, 1008, 1038), "title": (104, 648, 976, 785),
+            "copy": (104, 793, 976, 850), "items": (104, 870, 976, 1020),
         },
     },
     "checklist": {
@@ -91,11 +91,11 @@ LAYOUTS: dict[str, dict[str, dict[str, tuple[int, int, int, int]]]] = {
     "decision": {
         "lower_right_verdict": {
             "panel": (350, 530, 1038, 1038), "title": (380, 608, 1000, 702),
-            "copy": (380, 714, 1000, 775), "items": (380, 800, 1000, 1010),
+            "copy": (380, 714, 1000, 790), "items": (380, 800, 1000, 1010),
         },
         "lower_left_verdict": {
             "panel": (42, 530, 730, 1038), "title": (72, 608, 700, 702),
-            "copy": (72, 714, 700, 775), "items": (72, 800, 700, 1010),
+            "copy": (72, 714, 700, 790), "items": (72, 800, 700, 1010),
         },
     },
 }
@@ -119,7 +119,25 @@ def _canonical_json(value: Any) -> bytes:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
-FIXED_RULES_SHA256 = hashlib.sha256(_canonical_json(FIXED_RULES)).hexdigest()
+def fixed_contract_sha256(
+    *, rules: Mapping[str, Any] = FIXED_RULES,
+    layouts: Mapping[str, Any] = LAYOUTS,
+    palettes: Mapping[str, Any] = PALETTES,
+) -> str:
+    """Fingerprint the renderer rules and the complete approved option bank."""
+    contract = {
+        "rules": rules,
+        "layouts": layouts,
+        "palettes": palettes,
+        "media": sorted(MEDIA),
+        "crops": sorted(CROPS),
+        "emphasis": sorted(EMPHASIS),
+        "max_targeted_retries": MAX_TARGETED_RETRIES,
+    }
+    return hashlib.sha256(_canonical_json(contract)).hexdigest()
+
+
+FIXED_RULES_SHA256 = fixed_contract_sha256()
 
 
 def validate_layout_library() -> None:
