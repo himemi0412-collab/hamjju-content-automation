@@ -25,5 +25,6 @@ jobs:
         env:
           NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
           LIFEOS_SYNC_TOKEN: ${{ secrets.LIFEOS_SYNC_TOKEN }}
+          SITES_SIWC_BYPASS_TOKEN: ${{ secrets.SITES_SIWC_BYPASS_TOKEN }}
         run: python -m app.lifeos_sync
 
