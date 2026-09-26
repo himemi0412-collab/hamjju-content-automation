@@ -194,7 +194,7 @@ def _draw_v7_text(canvas: Image.Image, background: Image.Image,
     elif index == 4:
         canvas.paste(colors['white'], (0, 0, 1080, 1080))
         spec = {'title': (64, 112, 654, 292), 'copy': (64, 312, 654, 438),
-                'scene': (698, 76, 1016, 458), 'items': (64, 540, 1016, 938),
+                'scene': (626, 76, 1016, 520), 'items': (64, 540, 1016, 938),
                 'surface': colors['mint'], 'title_align': 'left'}
     else:
         canvas.paste(colors['white'], (0, 0, 1080, 1080))
@@ -284,6 +284,53 @@ def _subject_lock(card: dict[str, Any], index: int | None = None) -> str:
     # The article topic wins over incidental words in individual card items.
     # In particular, a dishwasher water-tank comparison must not become a
     # dehumidifier or an air-conditioner drain-hose photograph.
+    stacking_terms = ('직렬설치', '직렬 설치', '스태킹', '세탁기 위', '상단 설치', '올림비')
+    stacking_context = any(term in source for term in stacking_terms) or (
+        '키트' in source and any(term in source for term in ('세탁기', '건조기', '설치'))
+    )
+    if stacking_context and index == 1:
+        return (
+            'Show one ordinary Korean laundry-room installation with a front-loading washer below '
+            'and a tumble dryer directly above it. Make the physical stacking frame or side brackets '
+            'at the join between the two appliances clearly visible and large enough to recognize. '
+            'Keep both full appliance fronts in view so the vertical arrangement is unmistakable. '
+            'Do not show a lint filter, detergent drawer, unrelated appliance, brand logo or readable label.'
+        )
+    if stacking_context and index == 2:
+        return (
+            'Show a technician checking a front-loading washer and dryer as a vertical pair in a real '
+            'laundry alcove. The appliance model plates must be turned away and contain no readable text; '
+            'make the joining frame, side clearance and floor-level fit visible together. Include one '
+            'plain metal stacking kit rail beside the pair as the object being checked. Do not focus on '
+            'the dryer drum interior, lint filter, detergent drawer or a generic appliance close-up.'
+        )
+    if stacking_context and index == 3:
+        return (
+            'Create a clear like-for-like two-condition comparison of the same washer and tumble dryer '
+            'installed as a vertical pair, at the same camera height, distance, scale and ordinary light. '
+            'In BOTH halves show the full washer and dryer fronts and their joining area. LEFT: a complete '
+            'new compatible metal stacking frame is fitted between them. RIGHT: an older existing frame '
+            'is visibly different at that same joining area, with its rails and support points in view. '
+            'Keep the physical kit difference unmistakable. Never show a lint filter, dryer interior, '
+            'two crops of the same appliance part, labels, logos, arrows or text.'
+        )
+    if stacking_context and index == 4:
+        return (
+            'Show one clear washer-and-dryer vertical installation in a real laundry alcove. A hand '
+            'uses a tape measure to check the available alcove width and side clearance while the full '
+            'stack and joining frame remain visible; include enough surrounding wall, floor and doorway '
+            'to show the installation space. Keep the tape measure and appliances large and legible in '
+            'the photograph. No lint filter, tiny inset scene, labels or unrelated appliances.'
+        )
+    if stacking_context and index == 5:
+        return (
+            'Use a wider lived-in Korean laundry-room view showing the washer below the dryer, the '
+            'joining frame at their contact point, and a separate plain metal stacking-kit rail on the '
+            'floor beside the appliances. One person checks the available space before deciding whether '
+            'the kit and installation fit; show this single next action clearly. Keep the appliances and '
+            'kit recognizable together, with ordinary household context. No close crop, lint filter, '
+            'detergent drawer, brand, labels, text or staged product-ad lighting.'
+        )
     if '식기세척기' in source:
         return ('Show an unmistakable compact kitchen dishwasher with its open '
                 'dish rack and plates. For water-tank supply, show the dishwasher '

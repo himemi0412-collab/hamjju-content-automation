@@ -41,6 +41,26 @@ def test_subject_locks_name_the_exact_failed_appliance_parts():
     assert 'moving-day bathroom scene' in bidet_move
 
 
+def test_stacking_article_cards_do_not_inherit_dryer_lint_filter_scenes():
+    cards = [
+        {'headline': '세탁기 위에 건조기 올려도 될까?', 'copy': '키트 호환부터 확인해요', 'items': []},
+        {'headline': '직렬설치 전 확인 순서', 'copy': '모델명과 키트를 봐요', 'items': []},
+        {'headline': '새 키트와 기존 키트', 'copy': '직렬설치 조건이 달라요', 'items': []},
+        {'headline': '설치 전 네 가지 체크', 'copy': '건조기 설치 공간',
+         'items': [{'label': '키트 종류', 'detail': '직렬설치 호환을 확인해요'}]},
+        {'headline': '이 경우엔 이렇게 확인', 'copy': '제품을 받기 전 조건을 확정해요',
+         'items': [{'label': '건조기만 새로 구매', 'detail': '기존 세탁기와 키트 호환을 확인해요'}]},
+    ]
+    scenes = [_subject_lock(card, index) for index, card in enumerate(cards, 1)]
+    assert all(any(phrase in scene for phrase in (
+        'stacking frame', 'stacking kit rail', 'stacking-kit rail', 'joining frame',
+    )) for scene in scenes)
+    cover_filter = _subject_lock({'headline': '건조기 보풀 필터 확인'}, 1)
+    comparison_filter = _subject_lock({'headline': '건조기 보풀 필터 비교'}, 3)
+    assert 'lint-filter seat or lower filter opening clearly visible' in cover_filter
+    assert 'lower lint-filter opening' in comparison_filter
+
+
 def test_daily_blog_route_uses_generated_scene_then_local_korean_typesetting():
     pipeline = Path('app/pipeline.py').read_text(encoding='utf-8')
     assert "generated['visual_family'] = 'photographic_lifestyle'" in pipeline
@@ -133,7 +153,7 @@ def test_five_card_typesetting_uses_distinct_spatial_structures():
     assert "'scene': (62, 398, 1018, 770)" in source
     assert "'scene': (48, 342, 494, 906)" in source
     assert "'scene': (64, 326, 1016, 610)" in source
-    assert "'scene': (698, 76, 1016, 458)" in source
+    assert "'scene': (626, 76, 1016, 520)" in source
     assert "'scene': (48, 350, 1032, 600)" in source
     assert "_fit_title(draw, title, title_font_path, title_box)" in source
     assert "range(60, 57, -1)" in source
