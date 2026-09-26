@@ -1,0 +1,29 @@
+name: Sync Notion Shorts status to Life OS
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lifeos-notion-status-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Read Notion status and synchronize Life OS
+        env:
+          NOTION_ACCESS_TOKEN: ${{ secrets.NOTION_ACCESS_TOKEN }}
+          LIFEOS_SYNC_TOKEN: ${{ secrets.LIFEOS_SYNC_TOKEN }}
+        run: python -m app.lifeos_sync
+
