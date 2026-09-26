@@ -14,8 +14,10 @@ SITE_ENDPOINT = "https://hamjji-life-os.himemi0412.chatgpt.site/api/notion-sync"
 MAX_ITEMS = 500
 
 
-def request_json(url: str, token: str, payload: dict | None = None, *, notion: bool = False) -> dict:
+def request_json(url: str, token: str, payload: dict | None = None, *, notion: bool = False, site_bypass_token: str | None = None) -> dict:
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    if site_bypass_token:
+        headers["OAI-Sites-Authorization"] = f"Bearer {site_bypass_token}"
     if notion:
         headers.update({"Notion-Version": NOTION_VERSION, "Content-Type": "application/json"})
     if payload is not None:
@@ -80,7 +82,8 @@ def normalize(page: dict) -> dict:
 def main() -> int:
     notion_token = os.environ.get("NOTION_ACCESS_TOKEN", "")
     sync_token = os.environ.get("LIFEOS_SYNC_TOKEN", "")
-    if not notion_token or not sync_token:
+    site_bypass_token = os.environ.get("SITES_SIWC_BYPASS_TOKEN", "")
+    if not notion_token or not sync_token or not site_bypass_token:
         print("Life OS sync credentials are not configured", file=sys.stderr)
         return 2
 
@@ -109,7 +112,7 @@ def main() -> int:
         raise RuntimeError("Notion returned an empty queue; keeping the previous Life OS snapshot")
 
     payload = {"syncedAt": datetime.now(timezone.utc).isoformat(), "items": rows}
-    result = request_json(SITE_ENDPOINT, sync_token, payload)
+    result = request_json(SITE_ENDPOINT, sync_token, payload, site_bypass_token=site_bypass_token)
     print(f"Life OS Notion sync completed: {result.get('itemCount', 0)} records")
     return 0
 
