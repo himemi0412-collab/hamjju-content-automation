@@ -10,6 +10,7 @@ from app.card_design_system import (
     CardQAResult,
     DesignContractError,
     build_manifest,
+    layout_geometry,
     plan_targeted_retries,
     validate_manifest,
     validate_layout_library,
@@ -35,6 +36,22 @@ def test_manifest_binds_only_allowed_variants_to_fixed_rules():
     assert manifest.fixed_rules_sha256 == FIXED_RULES_SHA256
     assert tuple(card.role for card in manifest.cards) == CARD_ROLES
     assert validate_manifest(data) == manifest
+
+
+def test_layout_geometry_is_deterministic_and_renderer_owned():
+    manifest = build_manifest(selection())
+    first = layout_geometry(manifest, 1)
+    second = layout_geometry(manifest.to_dict(), 1)
+
+    assert first == second
+    assert first["panel"] == (42, 510, 770, 1040)
+    assert set(first) == {"panel", "title", "copy", "items"}
+
+
+def test_layout_geometry_rejects_invalid_card_number():
+    manifest = build_manifest(selection())
+    with pytest.raises(DesignContractError, match="between 1 and 5"):
+        layout_geometry(manifest, 6)
 
 
 def test_ai_selection_cannot_override_fixed_rules_or_geometry():

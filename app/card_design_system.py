@@ -235,6 +235,17 @@ def validate_manifest(value: Mapping[str, Any]) -> DesignManifest:
     return build_manifest({"palette": value.get("palette"), "cards": value.get("cards")})
 
 
+def layout_geometry(manifest: DesignManifest | Mapping[str, Any], card_number: int) -> dict[str, tuple[int, int, int, int]]:
+    """Resolve a validated choice to renderer-owned pixel regions."""
+    if not isinstance(card_number, int) or not 1 <= card_number <= len(CARD_ROLES):
+        raise DesignContractError("card number must be between 1 and 5")
+    checked = validate_manifest(manifest.to_dict() if isinstance(manifest, DesignManifest) else manifest)
+    choice = checked.cards[card_number - 1]
+    if choice.role != CARD_ROLES[card_number - 1]:
+        raise DesignContractError("manifest role order changed")
+    return dict(LAYOUTS[choice.role][choice.layout])
+
+
 @dataclass(frozen=True)
 class CardQAResult:
     card: int
